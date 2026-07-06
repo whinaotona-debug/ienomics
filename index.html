@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chibiz</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; color: #1f2937; }
+    .app-container { max-width: 420px; margin: 0 auto; background: #ffffff; min-height: 100vh; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb; }
+  </style>
+</head>
+<body>
+
+  <div class="app-container relative flex flex-col">
+    <header class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+      <h1 class="text-xl font-extrabold tracking-tight text-gray-900">Chibiz</h1>
+      <div id="header-actions"></div>
+    </header>
+    
+    <main class="flex-1 p-6 overflow-y-auto" id="app">
+      <div class="text-center py-10 text-gray-400 text-sm">Loading...</div>
+    </main>
+  </div>
+
+  <script type="module">
+    // Firebaseのインポート（incrementを追加して、ポイントの安全な足し算ができるようにしました）
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyA57yXg46NjGVue3WUK-jbZ68hwQwdLA-g",
+      authDomain: "tibiz-a395e.firebaseapp.com",
+      projectId: "tibiz-a395e",
+      storageBucket: "tibiz-a395e.firebasestorage.app",
+      messagingSenderId: "347209039114",
+      appId: "1:347209039114:web:0d3ff0477e7bb812210ef3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let state = {
+      role: localStorage.getItem('chibiz_role'),
+      familyCode: localStorage.getItem('chibiz_familyCode'),
+      points: 0,
+      tasks: []
+    };
+
+    const appDiv = document.getElementById('app');
+    const headerActions = document.getElementById('header-actions');
+
+    function render() {
+      if (!state.role || !state.familyCode) {
+        renderSetup();
+      } else if (state.role === 'parent') {
+        renderParent();
+      } else if (state.role === 'child') {
+        renderChild();
+      }
+    }
+
+    // ==========================================
+    // 1. セットアップ画面
+    // ==========================================
+    function renderSetup() {
+      headerActions.innerHTML = '';
+      appDiv.innerHTML = `
+        <div class="fade-in space-y-8 mt-6">
+          <div class="text-center">
+            <h2 class="text-2xl font-bold text-gray-900">Welcome</h2>
+            <p class="text-sm text-gray-500 mt-1">アカウントを設定してください</p>
+          </div>
+          <div class="space-y-5">
+            <div class="p-6 border border-gray-200 rounded-xl bg-gray-50">
+              <h3 class="font-bold text-gray-800 mb-1">親としてスタート</h3>
+              <p class="text-xs text-gray-500 mb-4">新しく同期コードを発行して管理を始めます。</p>
+              <button id="btn-create-parent" class="w-full bg-gray-900 text-white py-3 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-sm">同期コードを発行する</button>
+            </div>
+            <div class="p-6 border border-gray-200 rounded-xl bg-gray-50">
+              <h3 class="font-bold text-gray-800 mb-1">子供としてスタート</h3>
+              <p class="text-xs text-gray-500 mb-4">親から教わった同期コードを入力してください。</p>
+              <input type="text" id="input-family-code" placeholder="コードを入力 (例: AB12CD)" class="w-full p-3 border border-gray-300 rounded-lg mb-3 uppercase tracking-wider text-center font-mono" />
+              <button id="btn-join-child" class="w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm">連携して開始する</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('btn-create-parent').addEventListener('click', async () => {
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        await setDoc(doc(db, "families", code), { points: 0 });
+        localStorage.setItem('chibiz_role', 'parent');
+        localStorage.setItem('chibiz_familyCode', code);
+        state.role = 'parent'; state.familyCode = code;
+        setupListeners();
+      });
+
+      document.getElementById('btn-join-child').addEventListener('click', async () => {
+        const code = document.getElementById('input-family-code').value.toUpperCase().trim();
+        if (!code) return alert("コードを入力してください");
+        const docSnap = await getDoc(doc(db, "families", code));
+        if (docSnap.exists()) {
+          localStorage.setItem('chibiz_role', 'child');
+          localStorage.setItem('chibiz_familyCode', code);
+          state.role = 'child'; state.familyCode = code;
+          setupListeners();
+        } else {
+          alert("正しいコードが見つかりません。");
+        }
+      });
+    }
+
+    // ==========================================
+    // 2. 親の画面
+    // ==========================================
+    function renderParent() {
+      headerActions.innerHTML = `<button id="btn-unlink" class="text-xs text-red-600 font-medium px-3 py-1.5 border border-red-200 rounded-md hover:bg-red-50 transition">連携を解除</button>`;
+
+      // 承認済み(approved)の仕事はリストから隠す
+      const activeTasks = state.tasks.filter(t => t.status !== 'approved');
+      
+      let tasksHtml = activeTasks.length === 0 
+        ? `<p class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">管理する仕事はありません</p>` 
+        : activeTasks.map(t => `
+          <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-white shadow-sm mb-2">
+            <div>
+              <p class="font-medium text-gray-900">${t.title}</p>
+              <p class="text-xs text-gray-500 mt-1">報酬: <span class="font-semibold text-gray-700">${t.points} pt</span></p>
+            </div>
+            <div>
+              ${t.status === 'open' 
+                ? '<span class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded font-medium">未受注</span>'
+                : t.status === 'accepted'
+                ? '<span class="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-3 py-1.5 rounded font-medium">作業中</span>'
+                : `<button onclick="approveTask('${t.id}', ${t.points})" class="text-xs bg-pink-600 text-white px-4 py-2 rounded-md font-medium hover:bg-pink-700 transition shadow-sm animate-pulse">承認する</button>`}
+            </div>
+          </div>
+        `).join('');
+
+      appDiv.innerHTML = `
+        <div class="fade-in space-y-6">
+          <div class="bg-gray-900 text-white rounded-xl p-5 shadow-md flex justify-between items-center">
+            <div>
+              <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">現在のポイント</p>
+              <p class="text-3xl font-bold">${state.points.toLocaleString()} <span class="text-sm font-normal text-gray-400">pt</span></p>
+            </div>
+            <div class="text-right border-l border-gray-700 pl-4">
+              <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">同期コード</p>
+              <p class="text-lg font-mono font-bold tracking-widest text-blue-400">${state.familyCode}</p>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-gray-900 mb-3">新しい仕事を依頼</h3>
+            <div class="flex gap-2 mb-3">
+              <input type="text" id="task-title" placeholder="仕事のタイトル" class="flex-1 p-3 text-sm border border-gray-300 rounded-lg bg-gray-50" />
+              <input type="number" id="task-points" placeholder="pt" class="w-20 p-3 text-sm border border-gray-300 rounded-lg bg-gray-50 text-center" />
+            </div>
+            <button id="btn-add-task" class="w-full bg-black text-white py-3 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-sm">依頼を追加する</button>
+          </div>
+          <div class="pt-4 border-t border-gray-100">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">管理リスト</h3>
+            <div id="task-list">${tasksHtml}</div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('btn-unlink').addEventListener('click', () => {
+        if(confirm("連携を解除しますか？")) {
+          localStorage.clear(); window.location.reload();
+        }
+      });
+
+      document.getElementById('btn-add-task').addEventListener('click', async () => {
+        const title = document.getElementById('task-title').value.trim();
+        const points = parseInt(document.getElementById('task-points').value);
+        if (!title || isNaN(points) || points <= 0) return alert("入力が正しくありません");
+        
+        await addDoc(collection(db, "tasks"), {
+          familyCode: state.familyCode,
+          title: title,
+          points: points,
+          status: 'open',
+          createdAt: new Date().getTime()
+        });
+      });
+    }
+
+    // ==========================================
+    // 3. 子供の画面
+    // ==========================================
+    function renderChild() {
+      headerActions.innerHTML = ''; 
+
+      const activeTasks = state.tasks.filter(t => t.status !== 'approved');
+      
+      let tasksHtml = activeTasks.length === 0 
+        ? `<p class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">現在募集中の仕事はありません</p>` 
+        : activeTasks.map(t => `
+          <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-white shadow-sm mb-2 transition hover:shadow-md">
+            <div>
+              <p class="font-medium text-gray-900">${t.title}</p>
+              <p class="text-xs font-bold text-blue-600 mt-1">${t.points} pt</p>
+            </div>
+            <div>
+              ${t.status === 'open' 
+                ? `<button onclick="acceptTask('${t.id}')" class="bg-gray-900 text-white text-xs px-4 py-2 rounded-md font-medium hover:bg-gray-700 transition shadow-sm">受注する</button>`
+                : t.status === 'accepted'
+                ? `<button onclick="completeTask('${t.id}')" class="bg-green-600 text-white text-xs px-4 py-2 rounded-md font-medium hover:bg-green-700 transition shadow-sm">完了を報告</button>`
+                : `<span class="text-xs text-gray-400 px-3 py-2 font-medium">承認待ち</span>`}
+            </div>
+          </div>
+        `).join('');
+
+      appDiv.innerHTML = `
+        <div class="fade-in space-y-6">
+          <div class="bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-xl p-6 shadow-lg text-center">
+            <p class="text-[10px] text-blue-200 uppercase tracking-widest mb-1">現在のポイント</p>
+            <p class="text-4xl font-bold">${state.points.toLocaleString()} <span class="text-lg font-normal text-blue-200">pt</span></p>
+          </div>
+          <div class="pt-2">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">仕事リスト</h3>
+            <div id="task-list">${tasksHtml}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ==========================================
+    // 状態更新関数群（クリックされた時に動く処理）
+    // ==========================================
+    
+    // 子供：仕事を受注する
+    window.acceptTask = async (taskId) => {
+      await updateDoc(doc(db, "tasks", taskId), { status: 'accepted' });
+    }
+
+    // 子供：仕事を完了して報告する
+    window.completeTask = async (taskId) => {
+      await updateDoc(doc(db, "tasks", taskId), { status: 'completed' });
+    }
+
+    // 親：報告を承認して、ポイントを付与する
+    window.approveTask = async (taskId, points) => {
+      // 1. タスクを「承認済み」にしてリストから消す
+      await updateDoc(doc(db, "tasks", taskId), { status: 'approved' });
+      
+      // 2. 家族の合計ポイントを安全に増やす (incrementを使用)
+      await updateDoc(doc(db, "families", state.familyCode), {
+        points: increment(points)
+      });
+    }
+
+    // ==========================================
+    // 4. リアルタイム通信
+    // ==========================================
+    function setupListeners() {
+      if (!state.familyCode) return;
+
+      onSnapshot(doc(db, "families", state.familyCode), (doc) => {
+        if (doc.exists()) {
+          state.points = doc.data().points || 0;
+          render();
+        }
+      });
+
+      const q = query(collection(db, "tasks"), where("familyCode", "==", state.familyCode));
+      onSnapshot(q, (snapshot) => {
+        const loadedTasks = [];
+        snapshot.forEach((doc) => loadedTasks.push({ id: doc.id, ...doc.data() }));
+        loadedTasks.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        state.tasks = loadedTasks;
+        render();
+      });
+    }
+
+    if (state.familyCode) {
+      setupListeners();
+    } else {
+      render();
+    }
+  </script>
+</body>
+</html>
