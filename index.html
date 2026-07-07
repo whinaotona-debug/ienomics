@@ -11,12 +11,18 @@
     .fade-in { animation: fadeIn 0.3s ease-out forwards; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 1px #2563eb; }
+    .section-title { font-size: 0.85rem; font-weight: 700; color: #4b5563; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; margin-top: 2rem; }
+    
+    /* スクロールバーを少しおしゃれにする設定 */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
   </style>
 </head>
 <body>
 
   <div class="app-container relative flex flex-col">
-    <header class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
+    <header class="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
       <h1 class="text-xl font-extrabold tracking-tight text-gray-900">Chibiz</h1>
       <div id="header-actions"></div>
     </header>
@@ -27,9 +33,8 @@
   </div>
 
   <script type="module">
-    // Firebaseのインポート（incrementを追加して、ポイントの安全な足し算ができるようにしました）
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyA57yXg46NjGVue3WUK-jbZ68hwQwdLA-g",
@@ -43,19 +48,29 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 状態管理（viewプロパティを追加）
     let state = {
       role: localStorage.getItem('chibiz_role'),
       familyCode: localStorage.getItem('chibiz_familyCode'),
+      view: 'main', // 'main' か 'settings'
       points: 0,
-      tasks: []
+      tasks: [],
+      tickets: [],
+      bills: []
     };
 
     const appDiv = document.getElementById('app');
     const headerActions = document.getElementById('header-actions');
 
+    // 歯車と閉じるアイコンのSVG定義
+    const gearIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>`;
+    const closeIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
+
     function render() {
       if (!state.role || !state.familyCode) {
         renderSetup();
+      } else if (state.view === 'settings') {
+        renderSettings();
       } else if (state.role === 'parent') {
         renderParent();
       } else if (state.role === 'child') {
@@ -70,21 +85,16 @@
       headerActions.innerHTML = '';
       appDiv.innerHTML = `
         <div class="fade-in space-y-8 mt-6">
-          <div class="text-center">
-            <h2 class="text-2xl font-bold text-gray-900">Welcome</h2>
-            <p class="text-sm text-gray-500 mt-1">アカウントを設定してください</p>
-          </div>
+          <div class="text-center"><h2 class="text-2xl font-bold">Welcome</h2></div>
           <div class="space-y-5">
-            <div class="p-6 border border-gray-200 rounded-xl bg-gray-50">
-              <h3 class="font-bold text-gray-800 mb-1">親としてスタート</h3>
-              <p class="text-xs text-gray-500 mb-4">新しく同期コードを発行して管理を始めます。</p>
-              <button id="btn-create-parent" class="w-full bg-gray-900 text-white py-3 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-sm">同期コードを発行する</button>
+            <div class="p-6 border rounded-xl bg-gray-50">
+              <h3 class="font-bold mb-1">親としてスタート</h3>
+              <button id="btn-create-parent" class="w-full bg-gray-900 text-white py-3 rounded-lg text-sm font-medium mt-2">同期コードを発行</button>
             </div>
-            <div class="p-6 border border-gray-200 rounded-xl bg-gray-50">
-              <h3 class="font-bold text-gray-800 mb-1">子供としてスタート</h3>
-              <p class="text-xs text-gray-500 mb-4">親から教わった同期コードを入力してください。</p>
-              <input type="text" id="input-family-code" placeholder="コードを入力 (例: AB12CD)" class="w-full p-3 border border-gray-300 rounded-lg mb-3 uppercase tracking-wider text-center font-mono" />
-              <button id="btn-join-child" class="w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition shadow-sm">連携して開始する</button>
+            <div class="p-6 border rounded-xl bg-gray-50">
+              <h3 class="font-bold mb-1">子供としてスタート</h3>
+              <input type="text" id="input-family-code" placeholder="コードを入力" class="w-full p-3 border rounded-lg mb-3 mt-2 text-center uppercase" />
+              <button id="btn-join-child" class="w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-medium">連携して開始</button>
             </div>
           </div>
         </div>
@@ -104,154 +114,270 @@
         if (!code) return alert("コードを入力してください");
         const docSnap = await getDoc(doc(db, "families", code));
         if (docSnap.exists()) {
-          localStorage.setItem('chibiz_role', 'child');
-          localStorage.setItem('chibiz_familyCode', code);
-          state.role = 'child'; state.familyCode = code;
-          setupListeners();
-        } else {
-          alert("正しいコードが見つかりません。");
-        }
+          localStorage.setItem('chibiz_role', 'child'); localStorage.setItem('chibiz_familyCode', code);
+          state.role = 'child'; state.familyCode = code; setupListeners();
+        } else alert("正しいコードが見つかりません。");
       });
+    }
+
+    // ==========================================
+    // 新機能: 設定画面
+    // ==========================================
+    function renderSettings() {
+      headerActions.innerHTML = closeIcon;
+      
+      if (state.role === 'child') {
+        // 完了した仕事を抽出して累計ポイントを計算
+        const approvedTasks = state.tasks.filter(t => t.status === 'approved');
+        const totalEarned = approvedTasks.reduce((sum, t) => sum + t.points, 0);
+
+        appDiv.innerHTML = `
+          <div class="fade-in space-y-6">
+            <h2 class="text-xl font-bold text-gray-800">設定</h2>
+            
+            <!-- これまでの記録 -->
+            <div class="p-5 border border-gray-100 rounded-xl bg-gray-50 shadow-sm">
+              <h3 class="text-sm font-bold text-gray-500 mb-1">これまでの記録</h3>
+              <p class="text-2xl font-extrabold text-blue-600 mb-4">累計獲得: ${totalEarned.toLocaleString()} pt</p>
+              
+              <h4 class="text-xs font-bold text-gray-500 border-b border-gray-200 pb-2 mb-3">完了したおてつだい</h4>
+              <div class="max-h-48 overflow-y-auto space-y-2 pr-1">
+                ${approvedTasks.length > 0 ? approvedTasks.map(t => `
+                  <div class="flex justify-between items-center text-sm p-3 bg-white border border-gray-100 rounded shadow-sm">
+                    <span class="font-medium text-gray-800">${t.title}</span>
+                    <span class="text-blue-600 font-bold">+${t.points} pt</span>
+                  </div>
+                `).join('') : '<p class="text-xs text-gray-400 text-center py-2">まだ完了したおてつだいはありません</p>'}
+              </div>
+            </div>
+
+            <!-- 通知設定 -->
+            <div class="p-5 border border-gray-100 rounded-xl bg-gray-50 shadow-sm">
+              <h3 class="text-sm font-bold text-gray-500 mb-3">通知設定</h3>
+              <div class="flex justify-between items-center bg-white p-3 border border-gray-100 rounded shadow-sm">
+                <span class="text-sm font-medium text-gray-800">プッシュ通知を受け取る</span>
+                <input type="checkbox" class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500" disabled />
+              </div>
+              <p class="text-[10px] text-gray-400 mt-2 text-right">※通知機能は準備中です</p>
+            </div>
+
+            <!-- アカウント連携解除 -->
+            <div class="pt-4">
+              <button onclick="unlinkAccount()" class="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-red-50 transition">アカウント連携解除</button>
+            </div>
+          </div>
+        `;
+      } else {
+        // 親の設定画面
+        appDiv.innerHTML = `
+          <div class="fade-in space-y-6">
+            <h2 class="text-xl font-bold text-gray-800">設定</h2>
+            
+            <div class="p-5 border border-gray-100 rounded-xl bg-gray-50 shadow-sm">
+              <h3 class="text-sm font-bold text-gray-500 mb-2">アカウント情報</h3>
+              <p class="text-sm text-gray-700 mt-2">同期コード:<span class="font-mono font-bold text-blue-600 text-lg ml-3 tracking-widest">${state.familyCode}</span></p>
+            </div>
+            
+            <div class="pt-4">
+              <button onclick="unlinkAccount()" class="w-full bg-white border border-red-200 text-red-600 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-red-50 transition">アカウント連携解除</button>
+            </div>
+          </div>
+        `;
+      }
     }
 
     // ==========================================
     // 2. 親の画面
     // ==========================================
     function renderParent() {
-      headerActions.innerHTML = `<button id="btn-unlink" class="text-xs text-red-600 font-medium px-3 py-1.5 border border-red-200 rounded-md hover:bg-red-50 transition">連携を解除</button>`;
+      headerActions.innerHTML = gearIcon; // 歯車アイコンに変更
 
-      // 承認済み(approved)の仕事はリストから隠す
       const activeTasks = state.tasks.filter(t => t.status !== 'approved');
-      
-      let tasksHtml = activeTasks.length === 0 
-        ? `<p class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">管理する仕事はありません</p>` 
-        : activeTasks.map(t => `
-          <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-white shadow-sm mb-2">
-            <div>
-              <p class="font-medium text-gray-900">${t.title}</p>
-              <p class="text-xs text-gray-500 mt-1">報酬: <span class="font-semibold text-gray-700">${t.points} pt</span></p>
-            </div>
-            <div>
-              ${t.status === 'open' 
-                ? '<span class="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded font-medium">未受注</span>'
-                : t.status === 'accepted'
-                ? '<span class="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-3 py-1.5 rounded font-medium">作業中</span>'
-                : `<button onclick="approveTask('${t.id}', ${t.points})" class="text-xs bg-pink-600 text-white px-4 py-2 rounded-md font-medium hover:bg-pink-700 transition shadow-sm animate-pulse">承認する</button>`}
-            </div>
-          </div>
-        `).join('');
+      const activeTickets = state.tickets.filter(t => t.status !== 'used');
+      const pendingBills = state.bills.filter(b => b.status === 'pending');
 
       appDiv.innerHTML = `
-        <div class="fade-in space-y-6">
-          <div class="bg-gray-900 text-white rounded-xl p-5 shadow-md flex justify-between items-center">
-            <div>
-              <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">現在のポイント</p>
-              <p class="text-3xl font-bold">${state.points.toLocaleString()} <span class="text-sm font-normal text-gray-400">pt</span></p>
-            </div>
-            <div class="text-right border-l border-gray-700 pl-4">
-              <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-1">同期コード</p>
-              <p class="text-lg font-mono font-bold tracking-widest text-blue-400">${state.familyCode}</p>
-            </div>
+        <div class="fade-in space-y-2">
+          <!-- ポイント表示 -->
+          <div class="bg-gray-900 text-white rounded-xl p-5 shadow flex justify-between items-center mb-6">
+            <div><p class="text-[10px] text-gray-400">子供のポイント</p><p class="text-3xl font-bold">${state.points.toLocaleString()} pt</p></div>
+            <div class="text-right border-l border-gray-700 pl-4"><p class="text-[10px] text-gray-400">同期コード</p><p class="text-lg font-mono tracking-widest text-blue-400">${state.familyCode}</p></div>
           </div>
-          <div>
-            <h3 class="text-sm font-bold text-gray-900 mb-3">新しい仕事を依頼</h3>
-            <div class="flex gap-2 mb-3">
-              <input type="text" id="task-title" placeholder="仕事のタイトル" class="flex-1 p-3 text-sm border border-gray-300 rounded-lg bg-gray-50" />
-              <input type="number" id="task-points" placeholder="pt" class="w-20 p-3 text-sm border border-gray-300 rounded-lg bg-gray-50 text-center" />
+
+          <!-- アラート通知（換金リクエストなど） -->
+          ${pendingBills.map(b => b.type === 'cashout' ? `
+            <div class="bg-yellow-50 border border-yellow-200 p-4 rounded-lg flex justify-between items-center">
+              <div><p class="font-bold text-yellow-800">100円への換金リクエスト</p><p class="text-xs text-yellow-600">子供が1000ptを消費しました</p></div>
+              <button onclick="completeCashout('${b.id}')" class="bg-yellow-500 text-white text-xs px-3 py-2 rounded">100円渡した</button>
             </div>
-            <button id="btn-add-task" class="w-full bg-black text-white py-3 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-sm">依頼を追加する</button>
+          ` : '').join('')}
+
+          <!-- セクション: 仕事 -->
+          <h2 class="section-title">💼 仕事の発注と管理</h2>
+          <div class="flex gap-2 mb-3">
+            <input type="text" id="task-title" placeholder="仕事名" class="flex-1 p-2 text-sm border rounded bg-gray-50" />
+            <input type="number" id="task-points" placeholder="pt" class="w-20 p-2 text-sm border rounded bg-gray-50 text-center" />
+            <button id="btn-add-task" class="bg-black text-white px-4 rounded text-sm">追加</button>
           </div>
-          <div class="pt-4 border-t border-gray-100">
-            <h3 class="text-sm font-bold text-gray-900 mb-3">管理リスト</h3>
-            <div id="task-list">${tasksHtml}</div>
+          ${activeTasks.map(t => `
+            <div class="flex justify-between items-center p-3 border border-gray-100 rounded bg-white shadow-sm mb-2">
+              <div><p class="text-sm font-medium">${t.title}</p><p class="text-xs text-gray-500">${t.points} pt</p></div>
+              ${t.status === 'open' ? '<span class="text-xs text-gray-400">未受注</span>' : t.status === 'accepted' ? '<span class="text-xs text-blue-600">作業中</span>' : `<button onclick="approveTask('${t.id}', ${t.points})" class="text-xs bg-pink-600 text-white px-3 py-1.5 rounded animate-pulse">承認</button>`}
+            </div>
+          `).join('') || '<p class="text-xs text-gray-400">仕事はありません</p>'}
+
+          <!-- セクション: チケット -->
+          <h2 class="section-title">🎟️ チケット販売</h2>
+          <div class="flex gap-2 mb-3">
+            <input type="text" id="ticket-title" placeholder="チケット名 (例: ゲーム30分)" class="flex-1 p-2 text-sm border rounded bg-gray-50" />
+            <input type="number" id="ticket-points" placeholder="pt" class="w-20 p-2 text-sm border rounded bg-gray-50 text-center" />
+            <button id="btn-add-ticket" class="bg-green-600 text-white px-4 rounded text-sm">販売</button>
           </div>
+          ${activeTickets.map(t => `
+            <div class="flex justify-between items-center p-3 border border-gray-100 rounded bg-white shadow-sm mb-2">
+              <div><p class="text-sm font-medium">${t.title}</p><p class="text-xs text-gray-500">${t.price} pt</p></div>
+              ${t.status === 'available' ? `<button onclick="deleteTicket('${t.id}')" class="text-xs text-red-500 underline">販売中止</button>` : `<button onclick="useTicket('${t.id}')" class="text-xs bg-purple-600 text-white px-3 py-1.5 rounded">利用を許可 (回収)</button>`}
+            </div>
+          `).join('') || '<p class="text-xs text-gray-400">販売中のチケットはありません</p>'}
+
+          <!-- セクション: 家賃の請求 -->
+          <h2 class="section-title">🏠 家賃の請求</h2>
+          <div class="flex gap-2 mb-3">
+            <input type="number" id="rent-points" placeholder="請求額 (pt)" class="flex-1 p-2 text-sm border rounded bg-gray-50" />
+            <button id="btn-add-rent" class="bg-red-600 text-white px-4 rounded text-sm font-bold">請求する</button>
+          </div>
+          ${pendingBills.map(b => b.type === 'rent' ? `
+            <div class="p-3 border border-red-100 bg-red-50 text-red-700 text-sm rounded mb-2 flex justify-between">
+              <span>家賃の請求中: ${b.amount}pt</span><span class="text-xs opacity-70">未払い</span>
+            </div>
+          ` : '').join('')}
         </div>
       `;
 
-      document.getElementById('btn-unlink').addEventListener('click', () => {
-        if(confirm("連携を解除しますか？")) {
-          localStorage.clear(); window.location.reload();
-        }
+      document.getElementById('btn-add-task').addEventListener('click', () => addItem("tasks", 'task-title', 'task-points'));
+      document.getElementById('btn-add-ticket').addEventListener('click', () => addItem("tickets", 'ticket-title', 'ticket-points', { status: 'available' }));
+      document.getElementById('btn-add-rent').addEventListener('click', () => {
+        const amt = parseInt(document.getElementById('rent-points').value);
+        if(amt > 0) addDoc(collection(db, "bills"), { familyCode: state.familyCode, type: 'rent', amount: amt, status: 'pending', createdAt: Date.now() });
       });
+    }
 
-      document.getElementById('btn-add-task').addEventListener('click', async () => {
-        const title = document.getElementById('task-title').value.trim();
-        const points = parseInt(document.getElementById('task-points').value);
-        if (!title || isNaN(points) || points <= 0) return alert("入力が正しくありません");
-        
-        await addDoc(collection(db, "tasks"), {
-          familyCode: state.familyCode,
-          title: title,
-          points: points,
-          status: 'open',
-          createdAt: new Date().getTime()
-        });
-      });
+    // 汎用アイテム追加関数
+    async function addItem(col, titleId, pointsId, extra = { status: 'open' }) {
+      const title = document.getElementById(titleId).value.trim();
+      const points = parseInt(document.getElementById(pointsId).value);
+      if (title && points > 0) {
+        await addDoc(collection(db, col), { familyCode: state.familyCode, title, [col==='tasks'?'points':'price']: points, createdAt: Date.now(), ...extra });
+      }
     }
 
     // ==========================================
     // 3. 子供の画面
     // ==========================================
     function renderChild() {
-      headerActions.innerHTML = ''; 
+      headerActions.innerHTML = gearIcon; // 歯車アイコンを追加
 
       const activeTasks = state.tasks.filter(t => t.status !== 'approved');
-      
-      let tasksHtml = activeTasks.length === 0 
-        ? `<p class="text-sm text-gray-400 text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">現在募集中の仕事はありません</p>` 
-        : activeTasks.map(t => `
-          <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-white shadow-sm mb-2 transition hover:shadow-md">
-            <div>
-              <p class="font-medium text-gray-900">${t.title}</p>
-              <p class="text-xs font-bold text-blue-600 mt-1">${t.points} pt</p>
-            </div>
-            <div>
-              ${t.status === 'open' 
-                ? `<button onclick="acceptTask('${t.id}')" class="bg-gray-900 text-white text-xs px-4 py-2 rounded-md font-medium hover:bg-gray-700 transition shadow-sm">受注する</button>`
-                : t.status === 'accepted'
-                ? `<button onclick="completeTask('${t.id}')" class="bg-green-600 text-white text-xs px-4 py-2 rounded-md font-medium hover:bg-green-700 transition shadow-sm">完了を報告</button>`
-                : `<span class="text-xs text-gray-400 px-3 py-2 font-medium">承認待ち</span>`}
-            </div>
-          </div>
-        `).join('');
+      const activeTickets = state.tickets.filter(t => t.status !== 'used');
+      const pendingBills = state.bills.filter(b => b.status === 'pending');
 
       appDiv.innerHTML = `
-        <div class="fade-in space-y-6">
-          <div class="bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-xl p-6 shadow-lg text-center">
+        <div class="fade-in space-y-2">
+          <!-- ポイント表示 -->
+          <div class="bg-gradient-to-br from-blue-600 to-blue-800 text-white rounded-xl p-6 shadow-lg text-center mb-6 relative">
             <p class="text-[10px] text-blue-200 uppercase tracking-widest mb-1">現在のポイント</p>
-            <p class="text-4xl font-bold">${state.points.toLocaleString()} <span class="text-lg font-normal text-blue-200">pt</span></p>
+            <p class="text-4xl font-bold">${state.points.toLocaleString()} <span class="text-lg text-blue-200 font-normal">pt</span></p>
           </div>
-          <div class="pt-2">
-            <h3 class="text-sm font-bold text-gray-900 mb-3">仕事リスト</h3>
-            <div id="task-list">${tasksHtml}</div>
+
+          <!-- 警告（家賃の請求） -->
+          ${pendingBills.map(b => b.type === 'rent' ? `
+            <div class="bg-red-100 border border-red-300 p-4 rounded-lg flex justify-between items-center animate-pulse">
+              <div><p class="font-bold text-red-800">⚠️ 家賃の請求</p><p class="text-xs text-red-600">${b.amount} pt 払ってください</p></div>
+              <button onclick="payRent('${b.id}', ${b.amount})" class="bg-red-600 text-white text-xs px-4 py-2 rounded shadow">支払う</button>
+            </div>
+          ` : '').join('')}
+
+          <!-- セクション: 仕事 -->
+          <h2 class="section-title">💼 おてつだい</h2>
+          ${activeTasks.map(t => `
+            <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-white shadow-sm mb-2">
+              <div><p class="font-medium text-gray-900">${t.title}</p><p class="text-xs font-bold text-blue-600 mt-1">${t.points} pt</p></div>
+              <div>
+                ${t.status === 'open' ? `<button onclick="acceptTask('${t.id}')" class="bg-gray-900 text-white text-xs px-4 py-2 rounded-md">受注する</button>` : t.status === 'accepted' ? `<button onclick="completeTask('${t.id}')" class="bg-green-600 text-white text-xs px-4 py-2 rounded-md">完了報告</button>` : `<span class="text-xs text-gray-400">承認待ち</span>`}
+              </div>
+            </div>
+          `).join('') || '<p class="text-xs text-gray-400">仕事はありません</p>'}
+
+          <!-- セクション: ショップ（お金・チケット交換） -->
+          <h2 class="section-title">🛒 ショップ・交換</h2>
+          <div class="grid grid-cols-1 gap-2">
+            <!-- 現金交換ボタン -->
+            <div class="flex justify-between items-center p-4 border border-yellow-200 bg-yellow-50 rounded-lg shadow-sm">
+              <div><p class="font-bold text-yellow-900">リアル100円と交換</p><p class="text-xs text-yellow-700">1000 pt 消費します</p></div>
+              <button onclick="requestCashout()" class="bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold px-4 py-2 rounded-md transition shadow ${state.points < 1000 ? 'opacity-50 cursor-not-allowed' : ''}">交換する</button>
+            </div>
+
+            <!-- チケットリスト -->
+            ${activeTickets.map(t => `
+              <div class="flex justify-between items-center p-4 border border-green-100 bg-green-50 rounded-lg shadow-sm">
+                <div><p class="font-bold text-green-900">${t.title}</p><p class="text-xs text-green-700">${t.price} pt</p></div>
+                ${t.status === 'available' ? `<button onclick="buyTicket('${t.id}', ${t.price})" class="bg-green-600 text-white text-xs px-4 py-2 rounded-md shadow ${state.points < t.price ? 'opacity-50' : ''}">買う</button>` : `<span class="text-xs font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded">親に見せる</span>`}
+              </div>
+            `).join('')}
           </div>
         </div>
       `;
     }
 
     // ==========================================
-    // 状態更新関数群（クリックされた時に動く処理）
+    // 状態更新・画面切り替え関数群
     // ==========================================
     
-    // 子供：仕事を受注する
-    window.acceptTask = async (taskId) => {
-      await updateDoc(doc(db, "tasks", taskId), { status: 'accepted' });
+    // 【画面切り替え】
+    window.toggleSettings = () => {
+      state.view = state.view === 'settings' ? 'main' : 'settings';
+      render();
+    };
+
+    // 【連携解除】
+    window.unlinkAccount = () => {
+      if (confirm("本当に連携解除しますか？今までのデータは消えませんが、再度コードを入力する必要があります。")) {
+        localStorage.clear();
+        window.location.reload();
+      }
+    };
+
+    // 【タスク関連】
+    window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
+    window.completeTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'completed' });
+    window.approveTask = async (id, points) => {
+      await updateDoc(doc(db, "tasks", id), { status: 'approved' });
+      await updateDoc(doc(db, "families", state.familyCode), { points: increment(points) });
     }
 
-    // 子供：仕事を完了して報告する
-    window.completeTask = async (taskId) => {
-      await updateDoc(doc(db, "tasks", taskId), { status: 'completed' });
+    // 【チケット関連】
+    window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
+    window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' }); // 親が回収
+    window.buyTicket = async (id, price) => {
+      if (state.points < price) return alert("ポイントが足りません！");
+      await updateDoc(doc(db, "tickets", id), { status: 'bought' });
+      await updateDoc(doc(db, "families", state.familyCode), { points: increment(-price) }); // ポイントを減らす
     }
 
-    // 親：報告を承認して、ポイントを付与する
-    window.approveTask = async (taskId, points) => {
-      // 1. タスクを「承認済み」にしてリストから消す
-      await updateDoc(doc(db, "tasks", taskId), { status: 'approved' });
-      
-      // 2. 家族の合計ポイントを安全に増やす (incrementを使用)
-      await updateDoc(doc(db, "families", state.familyCode), {
-        points: increment(points)
-      });
+    // 【換金・家賃関連】
+    window.requestCashout = async () => {
+      if (state.points < 1000) return alert("1000pt以上必要です！");
+      await updateDoc(doc(db, "families", state.familyCode), { points: increment(-1000) });
+      await addDoc(collection(db, "bills"), { familyCode: state.familyCode, type: 'cashout', status: 'pending', createdAt: Date.now() });
+      alert("親に100円ちょうだい！と言いに行きましょう");
+    }
+    window.completeCashout = async (id) => updateDoc(doc(db, "bills", id), { status: 'completed' }); // 親が100円渡した
+    
+    window.payRent = async (id, amount) => {
+      if (state.points < amount) return alert("ポイントが足りなくて家賃が払えません！おてつだいして稼ぎましょう。");
+      await updateDoc(doc(db, "families", state.familyCode), { points: increment(-amount) });
+      await updateDoc(doc(db, "bills", id), { status: 'paid' });
+      alert("家賃を支払いました！えらい！");
     }
 
     // ==========================================
@@ -261,27 +387,25 @@
       if (!state.familyCode) return;
 
       onSnapshot(doc(db, "families", state.familyCode), (doc) => {
-        if (doc.exists()) {
-          state.points = doc.data().points || 0;
-          render();
-        }
+        if (doc.exists()) { state.points = doc.data().points || 0; render(); }
       });
 
-      const q = query(collection(db, "tasks"), where("familyCode", "==", state.familyCode));
-      onSnapshot(q, (snapshot) => {
-        const loadedTasks = [];
-        snapshot.forEach((doc) => loadedTasks.push({ id: doc.id, ...doc.data() }));
-        loadedTasks.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-        state.tasks = loadedTasks;
-        render();
-      });
+      // コレクションを監視する汎用関数
+      const watch = (colName, stateKey) => {
+        const q = query(collection(db, colName), where("familyCode", "==", state.familyCode));
+        onSnapshot(q, (snapshot) => {
+          const arr = []; snapshot.forEach(d => arr.push({ id: d.id, ...d.data() }));
+          arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); // 新しいものを上に表示
+          state[stateKey] = arr; render();
+        });
+      };
+
+      watch("tasks", "tasks");
+      watch("tickets", "tickets");
+      watch("bills", "bills");
     }
 
-    if (state.familyCode) {
-      setupListeners();
-    } else {
-      render();
-    }
+    if (state.familyCode) setupListeners(); else render();
   </script>
 </body>
 </html>
