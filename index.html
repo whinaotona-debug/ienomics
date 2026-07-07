@@ -16,6 +16,9 @@
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+    
+    /* トグルスイッチ風チェックボックス用 */
+    input[type="checkbox"].accent-black { accent-color: #111827; }
   </style>
 </head>
 <body>
@@ -50,6 +53,7 @@
     let state = {
       role: localStorage.getItem('chibiz_role'),
       familyCode: localStorage.getItem('chibiz_familyCode'),
+      notify: localStorage.getItem('chibiz_notify') === 'true', // 通知設定の保存
       view: 'main', 
       points: 0,
       tasks: [],
@@ -59,6 +63,7 @@
 
     const appDiv = document.getElementById('app');
     const headerActions = document.getElementById('header-actions');
+    const days = ["日", "月", "火", "水", "木", "金", "土"];
 
     const gearIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>`;
     const closeIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
@@ -84,7 +89,7 @@
     }
 
     // ==========================================
-    // セットアップ & 設定画面
+    // セットアップ画面
     // ==========================================
     function renderSetup() {
       headerActions.innerHTML = '';
@@ -122,6 +127,9 @@
       });
     }
 
+    // ==========================================
+    // 設定画面
+    // ==========================================
     function renderSettings() {
       headerActions.innerHTML = closeIcon;
       const approvedTasks = state.tasks.filter(t => t.status === 'approved');
@@ -131,6 +139,7 @@
         appDiv.innerHTML = `
           <div class="fade-in space-y-6 mt-2">
             <h2 class="text-lg font-bold text-gray-900 border-b pb-2">設定</h2>
+            
             <div class="p-5 border border-gray-100 rounded-xl bg-gray-50">
               <p class="text-xs text-gray-500 mb-1">これまでの累計獲得</p>
               <p class="text-2xl font-bold text-gray-900 mb-4">${totalEarned.toLocaleString()} pt</p>
@@ -139,44 +148,36 @@
                 ${approvedTasks.length > 0 ? approvedTasks.map(t => `<div class="flex justify-between text-sm py-2 border-b border-gray-100"><span class="text-gray-700">${t.title}</span><span class="text-gray-500">${t.points}pt</span></div>`).join('') : '<p class="text-xs text-gray-400">まだありません</p>'}
               </div>
             </div>
+
+            <!-- 通知設定 (チェック可能に修正) -->
             <div class="flex justify-between items-center p-4 border border-gray-100 rounded-xl bg-gray-50">
-              <span class="text-sm font-bold text-gray-700">プッシュ通知</span>
-              <input type="checkbox" class="w-4 h-4 rounded text-black focus:ring-black" disabled />
+              <span class="text-sm font-bold text-gray-700">プッシュ通知を受け取る</span>
+              <input type="checkbox" onchange="toggleNotify(this.checked)" class="w-5 h-5 rounded accent-black cursor-pointer" ${state.notify ? 'checked' : ''} />
             </div>
+
             <div class="pt-4">
               <button onclick="unlinkAccount()" class="w-full bg-white border border-red-200 text-red-500 py-3 rounded-lg text-sm font-bold">連携を解除</button>
             </div>
           </div>
         `;
       } else {
-        const days = ["日", "月", "火", "水", "木", "金", "土"];
         appDiv.innerHTML = `
           <div class="fade-in space-y-6 mt-2">
             <h2 class="text-lg font-bold text-gray-900 border-b pb-2">設定</h2>
             
             <div class="p-5 border border-gray-100 rounded-xl bg-gray-50">
               <h3 class="text-sm font-bold text-gray-800 mb-3">スケジュール管理 (定期的な仕事)</h3>
-              <div class="flex flex-col gap-2 mb-3">
-                <input type="text" id="sch-title" placeholder="仕事のタイトル" class="p-3 text-sm border border-gray-200 rounded-lg" />
-                <div class="flex gap-2">
-                  <select id="sch-day" class="flex-1 p-3 text-sm border border-gray-200 rounded-lg bg-white">
-                    ${days.map((d, i) => `<option value="${i}">${d}曜日</option>`).join('')}
-                  </select>
-                  <input type="time" id="sch-time" class="flex-1 p-3 text-sm border border-gray-200 rounded-lg" />
-                  <input type="number" id="sch-points" placeholder="pt" class="w-20 p-3 text-sm border border-gray-200 rounded-lg text-center" />
-                </div>
-                <button onclick="addSchedule()" class="bg-black text-white py-3 rounded-lg text-sm font-bold mt-1">毎週のスケジュールに追加</button>
-              </div>
+              <p class="text-xs text-gray-500 mb-3">新しいスケジュールはメイン画面から「毎週繰り返す」で追加できます。</p>
               <div class="space-y-2 mt-4">
-                ${state.scheduledTasks.map(st => `
+                ${state.scheduledTasks.length > 0 ? state.scheduledTasks.map(st => `
                   <div class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded text-sm">
                     <div>
                       <span class="font-bold text-gray-800">${st.title}</span> <span class="text-gray-500 ml-2">${st.points}pt</span>
                       <p class="text-xs text-blue-600 font-bold mt-1">毎週 ${days[st.dayOfWeek]}曜日 ${st.time}</p>
                     </div>
-                    <button onclick="deleteSchedule('${st.id}')" class="text-xs text-red-500">削除</button>
+                    <button onclick="deleteSchedule('${st.id}')" class="text-xs text-red-500 bg-red-50 px-3 py-1 rounded">削除</button>
                   </div>
-                `).join('')}
+                `).join('') : '<p class="text-xs text-gray-400 text-center">登録されたスケジュールはありません</p>'}
               </div>
             </div>
 
@@ -194,7 +195,7 @@
     }
 
     // ==========================================
-    // 親の画面
+    // 親のメイン画面
     // ==========================================
     function renderParent() {
       headerActions.innerHTML = gearIcon;
@@ -225,12 +226,26 @@
             </div>
           ` : ''}
 
+          <!-- 新しい仕事を依頼 ＋ 毎週する(スケジュール) -->
           <h2 class="section-title">新しい仕事を依頼</h2>
           <div class="flex gap-2 mb-3">
             <input type="text" id="task-title" placeholder="仕事のタイトル" class="flex-1 p-3 text-sm border border-gray-200 rounded-lg" />
             <input type="number" id="task-points" placeholder="pt" class="w-20 p-3 text-sm border border-gray-200 rounded-lg text-center" />
           </div>
-          <button onclick="addTask()" class="w-full bg-black text-white py-3 rounded-lg text-sm font-bold mb-8">依頼を追加する</button>
+          
+          <div class="flex items-center gap-2 mb-3 px-1">
+            <input type="checkbox" id="task-is-weekly" onchange="toggleWeeklyOptions()" class="w-4 h-4 accent-black cursor-pointer" />
+            <label for="task-is-weekly" class="text-sm font-medium text-gray-700 cursor-pointer">毎週繰り返す (スケジュールに追加)</label>
+          </div>
+
+          <div id="weekly-options" class="hidden flex gap-2 mb-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <select id="task-day" class="flex-1 p-2 text-sm border border-gray-200 rounded-lg bg-white">
+              ${days.map((d, i) => `<option value="${i}">${d}曜日</option>`).join('')}
+            </select>
+            <input type="time" id="task-time" class="flex-1 p-2 text-sm border border-gray-200 rounded-lg bg-white" />
+          </div>
+
+          <button onclick="addTask()" class="w-full bg-black text-white py-3 rounded-lg text-sm font-bold mb-8 shadow">依頼を追加する</button>
 
           <h2 class="section-title">管理リスト</h2>
           <div class="space-y-2 mb-8">
@@ -266,13 +281,13 @@
             <input type="text" id="ticket-title" placeholder="チケット名 (例: ゲーム30分)" class="flex-1 p-3 text-sm border border-gray-200 rounded-lg" />
             <input type="number" id="ticket-points" placeholder="pt" class="w-20 p-3 text-sm border border-gray-200 rounded-lg text-center" />
           </div>
-          <button onclick="addTicket()" class="w-full border border-gray-300 bg-white text-gray-800 py-3 rounded-lg text-sm font-bold mb-4">販売リストに追加</button>
+          <button onclick="addTicket()" class="w-full border border-gray-300 bg-white text-gray-800 py-3 rounded-lg text-sm font-bold mb-4 shadow-sm">販売リストに追加</button>
           
           <div class="space-y-2">
             ${activeTickets.filter(t => t.status === 'available').map(t => `
               <div class="flex justify-between items-center p-4 border border-gray-100 rounded-lg bg-gray-50">
                 <span class="text-sm font-bold text-gray-800">${t.title} <span class="text-xs text-gray-500 font-normal ml-2">${t.price} pt</span></span>
-                <button onclick="deleteTicket('${t.id}')" class="text-xs text-red-500">販売やめる</button>
+                <button onclick="deleteTicket('${t.id}')" class="text-xs text-red-500 font-medium">販売やめる</button>
               </div>
             `).join('')}
           </div>
@@ -310,8 +325,8 @@
                 <div>
                   ${t.status === 'open' ? `<button onclick="acceptTask('${t.id}')" class="bg-black text-white text-xs px-4 py-2 rounded font-bold">受注する</button>` : 
                     t.status === 'accepted' ? `<button onclick="completeTask('${t.id}')" class="border border-black text-black text-xs px-4 py-2 rounded font-bold">完了報告</button>` : 
-                    t.status === 'proposed' ? `<span class="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded">提案中(親の確認待ち)</span>` :
-                    `<span class="text-xs text-gray-400">親の確認待ち</span>`}
+                    t.status === 'proposed' ? `<span class="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded font-bold">親の確認待ち</span>` :
+                    `<span class="text-xs text-gray-400 font-bold">親の確認待ち</span>`}
                 </div>
               </div>
             `).join('') : `<div class="border border-dashed border-gray-200 rounded-lg p-6 text-center text-xs text-gray-400">いまできる仕事はありません</div>`}
@@ -326,8 +341,8 @@
                   <p class="text-xs ${t.status === 'bought' ? 'text-gray-400' : 'text-gray-500'} mt-1">${t.price} pt</p>
                 </div>
                 <div>
-                  ${t.status === 'available' ? `<button onclick="buyTicket('${t.id}', ${t.price})" class="bg-gray-100 text-gray-800 text-xs px-4 py-2 rounded font-bold">交換する</button>` : 
-                    `<span class="text-xs font-bold px-3 py-1 bg-white text-black rounded">親に見せて使う</span>`}
+                  ${t.status === 'available' ? `<button onclick="buyTicket('${t.id}', ${t.price})" class="bg-gray-100 text-gray-800 text-xs px-4 py-2 rounded font-bold shadow-sm">交換する</button>` : 
+                    `<span class="text-xs font-bold px-3 py-1 bg-white text-black rounded shadow-sm">親に見せて使う</span>`}
                 </div>
               </div>
             `).join('') : `<div class="border border-dashed border-gray-200 rounded-lg p-6 text-center text-xs text-gray-400">販売中のチケットはありません</div>`}
@@ -341,23 +356,46 @@
     // ==========================================
     window.toggleSettings = () => { state.view = state.view === 'settings' ? 'main' : 'settings'; render(); };
     window.unlinkAccount = () => { if (confirm("連携を解除しますか？")) { localStorage.clear(); window.location.reload(); } };
+    window.toggleNotify = (val) => { state.notify = val; localStorage.setItem('chibiz_notify', val); };
+    window.toggleWeeklyOptions = () => { document.getElementById('weekly-options').classList.toggle('hidden'); };
 
+    // 【タスク追加 (1回 or スケジュール)】
     window.addTask = async () => {
       const title = document.getElementById('task-title').value.trim();
       const points = parseInt(document.getElementById('task-points').value);
-      if (title && points > 0) await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title, points, status: 'open', createdAt: Date.now() });
-    };
-    window.approveTask = async (id, points) => {
-      await updateDoc(doc(db, "tasks", id), { status: 'approved' });
-      await updateDoc(doc(db, "families", state.familyCode), { points: increment(points) });
+      const isWeekly = document.getElementById('task-is-weekly').checked;
+      
+      if (!title || !points || points <= 0) return alert("タイトルとポイントを正しく入力してください");
+
+      if (isWeekly) {
+        const day = document.getElementById('task-day').value;
+        const time = document.getElementById('task-time').value;
+        if (!time) return alert("時間を設定してください");
+        await addDoc(collection(db, "scheduledTasks"), { familyCode: state.familyCode, title, points, dayOfWeek: day, time, createdAt: Date.now() });
+        alert("毎週のスケジュールに追加しました！\n（管理や削除は右上の設定画面から行えます）");
+      } else {
+        await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title, points, status: 'open', createdAt: Date.now() });
+      }
+      
+      // 入力欄リセット
+      document.getElementById('task-title').value = '';
+      document.getElementById('task-points').value = '';
+      document.getElementById('task-is-weekly').checked = false;
+      document.getElementById('weekly-options').classList.add('hidden');
     };
 
+    window.deleteSchedule = async (id) => deleteDoc(doc(db, "scheduledTasks", id));
+    window.approveTask = async (id, points) => { await updateDoc(doc(db, "tasks", id), { status: 'approved' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(points) }); };
+    
+    // 【提案・見積り】
     window.proposeTask = async () => {
       const title = document.getElementById('prop-title').value.trim();
       const points = parseInt(document.getElementById('prop-points').value);
       if (title && points > 0) {
         await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title, points, status: 'proposed', createdAt: Date.now() });
         alert("親に見積り・提案を送りました！");
+        document.getElementById('prop-title').value = '';
+        document.getElementById('prop-points').value = '';
       }
     };
     window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status: 'open' });
@@ -366,10 +404,15 @@
     window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
     window.completeTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'completed' });
 
+    // 【チケット】
     window.addTicket = async () => {
       const title = document.getElementById('ticket-title').value.trim();
       const price = parseInt(document.getElementById('ticket-points').value);
-      if (title && price > 0) await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title, price, status: 'available', createdAt: Date.now() });
+      if (title && price > 0) {
+        await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title, price, status: 'available', createdAt: Date.now() });
+        document.getElementById('ticket-title').value = '';
+        document.getElementById('ticket-points').value = '';
+      }
     };
     window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
     window.buyTicket = async (id, price) => {
@@ -379,19 +422,7 @@
     };
     window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 
-    // 【定期スケジュール管理】
-    window.addSchedule = async () => {
-      const title = document.getElementById('sch-title').value.trim();
-      const day = document.getElementById('sch-day').value;
-      const time = document.getElementById('sch-time').value;
-      const points = parseInt(document.getElementById('sch-points').value);
-      if (title && time && points > 0) {
-        await addDoc(collection(db, "scheduledTasks"), { familyCode: state.familyCode, title, dayOfWeek: day, time, points, createdAt: Date.now() });
-        alert("スケジュールに追加しました");
-      } else alert("すべての項目を入力してください");
-    };
-    window.deleteSchedule = async (id) => deleteDoc(doc(db, "scheduledTasks", id));
-
+    // 【スケジュール自動生成機能】
     function checkScheduledTasks() {
       if (!state.familyCode || state.scheduledTasks.length === 0) return;
       const now = new Date();
@@ -408,13 +439,13 @@
             if (!isGeneratedToday) {
               await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: st.title, points: st.points, status: 'open', createdAt: Date.now() });
               await updateDoc(doc(db, "scheduledTasks", st.id), { lastGenerated: Date.now() });
-              alert(`通知: 定期タスク「${st.title}」が自動で追加されました！`);
+              if (state.role === 'child' && state.notify) alert(`プッシュ通知: 定期タスク「${st.title}」がリストに追加されました！`);
             }
           }
         }
       });
     }
-    setInterval(checkScheduledTasks, 60000); // 1分ごとにチェック
+    setInterval(checkScheduledTasks, 60000);
 
     // ==========================================
     // リアルタイム通信セットアップ
@@ -430,7 +461,7 @@
           const arr = []; snapshot.forEach(d => arr.push({ id: d.id, ...d.data() }));
           arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           state[stateKey] = arr; render();
-          if (colName === 'scheduledTasks') checkScheduledTasks(); // 読み込み時にもチェック
+          if (colName === 'scheduledTasks') checkScheduledTasks();
         });
       };
       watch("tasks", "tasks");
