@@ -1,3 +1,5 @@
+--- START OF FILE Paste July 08, 2026 - 6:02PM ---
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -36,7 +38,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // いただいたスプレッドシートのCSV公開URL
     const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUuPPXrZqVyGtri1HT6L7Uaow3-0OgXLzVsxkWRPSp12tqCFhPW8yIuJDpFNgWwNHlrKWemte6Kfqt/pub?output=csv";
 
     const firebaseConfig = {
@@ -60,8 +61,8 @@
       tasks: [],
       tickets: [],
       scheduledTasks: [],
-      funds: [],        // スプレッドシートから取得した投資先(ファンド)データ
-      investments: []   // 子供が投資しているデータ
+      funds: [],
+      investments: []
     };
 
     const appDiv = document.getElementById('app');
@@ -100,9 +101,6 @@
       else if (state.role === 'child') renderChild();
     }
 
-    // ==========================================
-    // セットアップ & 設定画面
-    // ==========================================
     function renderSetup() {
       headerActions.innerHTML = '';
       appDiv.innerHTML = `
@@ -202,9 +200,6 @@
       }
     }
 
-    // ==========================================
-    // 親のメイン画面
-    // ==========================================
     function renderParent() {
       headerActions.innerHTML = gearIcon;
       const proposedTasks = state.tasks.filter(t => t.status === 'proposed');
@@ -234,7 +229,6 @@
             </div>
           ` : ''}
 
-          <!-- ★親が見る子供の投資状況 -->
           ${state.investments.length > 0 ? `
             <h2 class="section-title">子供の投資状況</h2>
             <div class="space-y-2 mb-8">
@@ -333,9 +327,6 @@
       `;
     }
 
-    // ==========================================
-    // 子供の画面
-    // ==========================================
     function renderChild() {
       headerActions.innerHTML = gearIcon;
       const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed'].includes(t.status));
@@ -370,7 +361,6 @@
             `).join('') : `<div class="border border-dashed border-gray-200 rounded-lg p-6 text-center text-xs text-gray-400">いまできる仕事はありません</div>`}
           </div>
 
-          <!-- ★投資セクション -->
           <h2 class="section-title border-t-2 pt-6 border-gray-100">📈 投資（現実の市場に連動）</h2>
           
           <div class="mb-6">
@@ -378,12 +368,8 @@
             ${state.investments.length > 0 ? state.investments.map(inv => {
               const fundData = state.funds.find(f => f.name === inv.name);
               const changePct = fundData ? fundData.changePct : 0;
-              
-              // 投資額 × (1 + 変動率/100) で現在の価値を計算し、四捨五入
               const currentValue = Math.round(inv.investedPoints * (1 + changePct / 100));
               const diff = currentValue - inv.investedPoints;
-              
-              // 赤字・青字の判定 (上がったら赤▲、下がったら青▼)
               const isUp = diff >= 0;
               const sign = isUp ? "▲" : "▼";
               const color = isUp ? "text-red-500" : "text-blue-500";
@@ -448,7 +434,15 @@
     // ==========================================
     window.toggleSettings = () => { state.view = state.view === 'settings' ? 'main' : 'settings'; render(); };
     window.unlinkAccount = () => { if (confirm("連携を解除しますか？")) { localStorage.clear(); window.location.reload(); } };
-    window.toggleNotify = (val) => { state.notify = val; localStorage.setItem('chibiz_notify', val); };
+    
+    window.toggleNotify = (val) => { 
+      state.notify = val; 
+      localStorage.setItem('chibiz_notify', val);
+      if (val && Notification.permission !== "granted") {
+        Notification.requestPermission();
+      }
+    };
+
     window.toggleWeeklyOptions = () => { document.getElementById('weekly-options').classList.toggle('hidden'); document.getElementById('weekly-options').classList.toggle('flex'); };
     window.toggleDayBtn = (btn) => {
       btn.classList.toggle('selected');
@@ -471,7 +465,7 @@
         if (!time) return alert("時間を設定してください");
         
         await addDoc(collection(db, "scheduledTasks"), { familyCode: state.familyCode, title, points, dayOfWeek: selectedDays, time, createdAt: Date.now() });
-        alert("毎週のスケジュールに追加しました！\n（管理や削除は右上の設定画面から行えます）");
+        alert("毎週のスケジュールに追加しました！");
       } else {
         await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title, points, status: 'open', createdAt: Date.now() });
       }
@@ -518,21 +512,14 @@
     };
     window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 
-    // ==========================================
-    // ★投資ロジック（市場連動型）
-    // ==========================================
     window.investFund = async (name, amount) => {
       if (state.points < amount) return alert("ポイントが足りません！\n（100pt必要です）");
-      if (confirm(`【${name}】の市場に ${amount}pt を投資しますか？\n（ポイントが減り、投資に回ります）`)) {
-        
+      if (confirm(`【${name}】の市場に ${amount}pt を投資しますか？`)) {
         await updateDoc(doc(db, "families", state.familyCode), { points: increment(-amount) });
-        
         const existingInv = state.investments.find(inv => inv.name === name);
         if (existingInv) {
-          // すでに同じ市場に投資していれば、投資額（元本）を足す
           await updateDoc(doc(db, "investments", existingInv.id), { investedPoints: increment(amount) });
         } else {
-          // 初めての投資
           await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: name, investedPoints: amount, createdAt: Date.now() });
         }
         alert("投資が完了しました！");
@@ -542,17 +529,12 @@
     window.sellFund = async (id, name, currentValue) => {
       if (currentValue === 0) return alert("市場データが読み込めていません");
       if (confirm(`【${name}】の投資を終了し、\n今の価値である『${currentValue}pt』を受け取りますか？`)) {
-        
-        // 現在の価値分、ポイントを付与する
         await updateDoc(doc(db, "families", state.familyCode), { points: increment(currentValue) });
-        // 投資データを削除
         await deleteDoc(doc(db, "investments", id));
-        
         alert(`投資を終了し、${currentValue}pt を受け取りました！`);
       }
     };
 
-    // CSVデータを取得してパースする関数
     async function fetchFunds() {
       if (!SPREADSHEET_CSV_URL) return;
       try {
@@ -560,54 +542,67 @@
         const csvText = await response.text();
         const lines = csvText.split('\n').filter(line => line.trim() !== '');
         const parsedFunds = [];
-        
         lines.forEach(line => {
           const cols = line.split(',');
           if (cols.length >= 2) {
             const name = cols[0].trim();
-            // B列をパーセンテージ（変動率）として数値化
             const changePct = parseFloat(cols[1].trim());
-            if (!isNaN(changePct) && name) {
-              parsedFunds.push({ name, changePct });
-            }
+            if (!isNaN(changePct) && name) parsedFunds.push({ name, changePct });
           }
         });
         state.funds = parsedFunds;
         render();
-      } catch(e) {
-        console.error("市場データの取得に失敗しました", e);
-      }
+      } catch(e) { console.error("市場データの取得に失敗しました", e); }
     }
 
     // ==========================================
-    // 定期実行とリスナー
+    // 定期実行と通知ロジック (修正ポイント)
     // ==========================================
-    function checkScheduledTasks() {
+    function sendNotification(title, body) {
+      if (state.notify && Notification.permission === "granted") {
+        new Notification(title, { body: body });
+      }
+    }
+
+    async function checkScheduledTasks() {
       if (!state.familyCode || state.scheduledTasks.length === 0) return;
       const now = new Date();
       const currentDay = now.getDay();
       const currentHour = now.getHours();
       const currentMin = now.getMinutes();
 
-      state.scheduledTasks.forEach(async (st) => {
+      for (const st of state.scheduledTasks) {
         const daysArr = Array.isArray(st.dayOfWeek) ? st.dayOfWeek : [parseInt(st.dayOfWeek)];
         if (daysArr.includes(currentDay)) {
           const [h, m] = st.time.split(':').map(Number);
+          // 指定時間以降かチェック
           if (currentHour > h || (currentHour === h && currentMin >= m)) {
-            const lastGen = st.lastGenerated ? new Date(st.lastGenerated) : null;
-            const isGeneratedToday = lastGen && lastGen.toDateString() === now.toDateString();
-            if (!isGeneratedToday) {
-              await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: st.title, points: st.points, status: 'open', createdAt: Date.now() });
+            const lastGenDate = st.lastGenerated ? new Date(st.lastGenerated).toDateString() : null;
+            const todayDate = now.toDateString();
+            
+            if (lastGenDate !== todayDate) {
+              // タスク追加
+              await addDoc(collection(db, "tasks"), { 
+                familyCode: state.familyCode, 
+                title: st.title, 
+                points: st.points, 
+                status: 'open', 
+                createdAt: Date.now() 
+              });
+              // 生成済みフラグ更新
               await updateDoc(doc(db, "scheduledTasks", st.id), { lastGenerated: Date.now() });
-              if (state.role === 'child' && state.notify) alert(`プッシュ通知: 定期タスク「${st.title}」が追加されました！`);
+              
+              if (state.role === 'child') {
+                sendNotification("新しいお仕事！", `定期タスク「${st.title}」が追加されました。`);
+              }
             }
           }
         }
-      });
+      }
     }
 
-    setInterval(checkScheduledTasks, 60000);
-    setInterval(fetchFunds, 60000); // 1分ごとに市場データを最新に更新
+    setInterval(checkScheduledTasks, 30000); // 30秒ごとにチェック
+    setInterval(fetchFunds, 60000);
 
     function setupListeners() {
       if (!state.familyCode) return;
@@ -620,14 +615,15 @@
           const arr = []; snapshot.forEach(d => arr.push({ id: d.id, ...d.data() }));
           arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           state[stateKey] = arr; render();
-          if (colName === 'scheduledTasks') checkScheduledTasks();
+          if (colName === 'scheduledTasks') checkScheduledTasks(); // データ更新時にも即座にチェック
         });
       };
       watch("tasks", "tasks");
       watch("tickets", "tickets");
-      watch("investments", "investments"); // 投資データの監視
+      watch("investments", "investments");
+      watch("scheduledTasks", "scheduledTasks");
       
-      fetchFunds(); // 初回起動時に市場データを取得
+      fetchFunds();
     }
 
     if (state.familyCode) setupListeners(); else render();
