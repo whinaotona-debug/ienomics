@@ -52,6 +52,9 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 二重追加防止用のメモリキャッシュ
+    const generatedTodayCache = new Set();
+
     let state = {
       role: localStorage.getItem('chibiz_role'),
       familyCode: localStorage.getItem('chibiz_familyCode'),
@@ -68,6 +71,27 @@
     const appDiv = document.getElementById('app');
     const headerActions = document.getElementById('header-actions');
     const days = ["日", "月", "火", "水", "木", "金", "土"];
+
+    // ＝＝＝＝＝ あなたが作成した時間取得関数 ＝＝＝＝＝
+    function getCurrentTime() {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      const paddedMinutes = minutes.toString().padStart(2, '0');
+      const dayOfWeekList = ['日', '月', '火', '水', '木', '金', '土'];
+      const dayIndex = now.getDay();
+      const dayOfWeek = dayOfWeekList[dayIndex];
+
+      return {
+        hours: hours,
+        minutes: minutes,
+        dayIndex: dayIndex, // スケジュール判定用に数値も保持
+        paddedMinutes: paddedMinutes,
+        day: `${dayOfWeek}曜日`,
+        text: `${hours}時${minutes}分${dayOfWeek}曜日`,
+        textPadded: `${hours}時${paddedMinutes}分${dayOfWeek}曜日`
+      };
+    }
 
     const gearIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>`;
     const closeIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button>`;
@@ -566,34 +590,51 @@
 
     async function checkScheduledTasks() {
       if (!state.familyCode || state.scheduledTasks.length === 0) return;
-      const now = new Date();
-      const currentDay = now.getDay();
-      const currentHour = now.getHours();
-      const currentMin = now.getMinutes();
+      
+      // あなたが作成した関数で現在の時間を取得
+      const timeInfo = getCurrentTime();
+      const currentDay = timeInfo.dayIndex;
+      const currentHour = timeInfo.hours;
+      const currentMin = timeInfo.minutes;
+      const todayString = new Date().toDateString();
 
       for (const st of state.scheduledTasks) {
         const daysArr = Array.isArray(st.dayOfWeek) ? st.dayOfWeek : [parseInt(st.dayOfWeek)];
+        
+        // 曜日が一致するか
         if (daysArr.includes(currentDay)) {
           const [h, m] = st.time.split(':').map(Number);
-          // 指定時間以降かチェック
+          
+          // 指定時間以降か
           if (currentHour > h || (currentHour === h && currentMin >= m)) {
             const lastGenDate = st.lastGenerated ? new Date(st.lastGenerated).toDateString() : null;
-            const todayDate = now.toDateString();
             
-            if (lastGenDate !== todayDate) {
-              // タスク追加
-              await addDoc(collection(db, "tasks"), { 
-                familyCode: state.familyCode, 
-                title: st.title, 
-                points: st.points, 
-                status: 'open', 
-                createdAt: Date.now() 
-              });
-              // 生成済みフラグ更新
-              await updateDoc(doc(db, "scheduledTasks", st.id), { lastGenerated: Date.now() });
+            // 重要：DBの記録が今日以外、かつ「このアプリを開いている間にまだ追加してない(メモリ)」場合に実行
+            const cacheKey = `${st.id}-${todayString}`;
+            if (lastGenDate !== todayString && !generatedTodayCache.has(cacheKey)) {
               
-              if (state.role === 'child') {
-                sendNotification("新しいお仕事！", `定期タスク「${st.title}」が追加されました。`);
+              // メモリに保存（二重追加を即座にブロック）
+              generatedTodayCache.add(cacheKey);
+
+              try {
+                // タスク追加
+                await addDoc(collection(db, "tasks"), { 
+                  familyCode: state.familyCode, 
+                  title: st.title, 
+                  points: st.points, 
+                  status: 'open', 
+                  createdAt: Date.now() 
+                });
+                // 生成済みフラグをDBに更新
+                await updateDoc(doc(db, "scheduledTasks", st.id), { lastGenerated: Date.now() });
+                
+                if (state.role === 'child') {
+                  sendNotification("新しいお仕事！", `定期タスク「${st.title}」が追加されました。(${timeInfo.textPadded})`);
+                }
+              } catch (err) {
+                console.error("タスク追加エラー:", err);
+                // 失敗した場合はメモリから消して再試行できるようにする
+                generatedTodayCache.delete(cacheKey);
               }
             }
           }
@@ -601,7 +642,7 @@
       }
     }
 
-    setInterval(checkScheduledTasks, 30000); // 30秒ごとにチェック
+    setInterval(checkScheduledTasks, 30000); 
     setInterval(fetchFunds, 60000);
 
     function setupListeners() {
@@ -615,7 +656,7 @@
           const arr = []; snapshot.forEach(d => arr.push({ id: d.id, ...d.data() }));
           arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           state[stateKey] = arr; render();
-          if (colName === 'scheduledTasks') checkScheduledTasks(); // データ更新時にも即座にチェック
+          if (colName === 'scheduledTasks') checkScheduledTasks(); 
         });
       };
       watch("tasks", "tasks");
