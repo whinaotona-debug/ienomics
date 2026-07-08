@@ -7,6 +7,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Chibiz</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- ★グラフを描くためのライブラリを追加 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #fafafa; color: #1f2937; }
     .app-container { max-width: 420px; margin: 0 auto; background: #ffffff; min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
@@ -38,8 +40,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    const SPREADSHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUuPPXrZqVyGtri1HT6L7Uaow3-0OgXLzVsxkWRPSp12tqCFhPW8yIuJDpFNgWwNHlrKWemte6Kfqt/pub?output=csv";
-
     const firebaseConfig = {
       apiKey: "AIzaSyA57yXg46NjGVue3WUK-jbZ68hwQwdLA-g",
       authDomain: "tibiz-a395e.firebaseapp.com",
@@ -52,8 +52,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 二重追加防止用のメモリキャッシュ
     const generatedTodayCache = new Set();
+    let investChartInstance = null; 
 
     let state = {
       role: localStorage.getItem('chibiz_role'),
@@ -64,15 +64,14 @@
       tasks: [],
       tickets: [],
       scheduledTasks: [],
-      funds: [],
-      investments: []
+      investments: [],
+      exchanges: [] // ★おこづかい交換用のデータを追加
     };
 
     const appDiv = document.getElementById('app');
     const headerActions = document.getElementById('header-actions');
     const days = ["日", "月", "火", "水", "木", "金", "土"];
 
-    // ＝＝＝＝＝ あなたが作成した時間取得関数 ＝＝＝＝＝
     function getCurrentTime() {
       const now = new Date();
       const hours = now.getHours();
@@ -83,14 +82,27 @@
       const dayOfWeek = dayOfWeekList[dayIndex];
 
       return {
-        hours: hours,
-        minutes: minutes,
-        dayIndex: dayIndex, // スケジュール判定用に数値も保持
-        paddedMinutes: paddedMinutes,
-        day: `${dayOfWeek}曜日`,
+        hours, minutes, dayIndex, paddedMinutes, day: `${dayOfWeek}曜日`,
         text: `${hours}時${minutes}分${dayOfWeek}曜日`,
         textPadded: `${hours}時${paddedMinutes}分${dayOfWeek}曜日`
       };
+    }
+
+    function getMarketRates() {
+      const today = new Date();
+      const rates = { 日本: [], アメリカ: [], labels: [] };
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(today.getTime() - i * 86400000);
+        rates.labels.push(`${d.getMonth()+1}/${d.getDate()}`);
+        
+        const day = Math.floor(d.getTime() / 86400000);
+        const rateJp = 1.0 + Math.sin(day * 0.3) * 0.2 + Math.sin(day * 0.05) * 0.3; 
+        const rateAm = 1.0 + Math.cos(day * 0.4) * 0.2 + Math.sin(day * 0.07) * 0.4;
+        
+        rates.日本.push(Math.max(0.1, rateJp)); 
+        rates.アメリカ.push(Math.max(0.1, rateAm));
+      }
+      return rates;
     }
 
     const gearIcon = `<button onclick="toggleSettings()" class="text-gray-400 hover:text-gray-800 transition"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>`;
@@ -109,20 +121,13 @@
       </div>
     `;
 
-    function formatDays(daysData) {
-      let arr = Array.isArray(daysData) ? daysData : [parseInt(daysData)];
-      arr.sort((a, b) => a - b);
-      if (arr.length === 7) return "毎日";
-      if (arr.length === 5 && arr.join(',') === "1,2,3,4,5") return "平日(月-金)";
-      if (arr.length === 2 && arr.join(',') === "0,6") return "土日";
-      return arr.map(d => days[d]).join('・');
-    }
-
     function render() {
       if (!state.role || !state.familyCode) renderSetup();
       else if (state.view === 'settings') renderSettings();
       else if (state.role === 'parent') renderParent();
       else if (state.role === 'child') renderChild();
+      
+      setTimeout(drawInvestChart, 100);
     }
 
     function renderSetup() {
@@ -159,6 +164,15 @@
           state.role = 'child'; state.familyCode = code; setupListeners();
         } else alert("正しいコードが見つかりません。");
       });
+    }
+
+    function formatDays(daysData) {
+      let arr = Array.isArray(daysData) ? daysData : [parseInt(daysData)];
+      arr.sort((a, b) => a - b);
+      if (arr.length === 7) return "毎日";
+      if (arr.length === 5 && arr.join(',') === "1,2,3,4,5") return "平日(月-金)";
+      if (arr.length === 2 && arr.join(',') === "0,6") return "土日";
+      return arr.map(d => days[d]).join('・');
     }
 
     function renderSettings() {
@@ -230,10 +244,31 @@
       const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed'].includes(t.status));
       const activeTickets = state.tickets.filter(t => t.status !== 'used');
       const boughtTickets = activeTickets.filter(t => t.status === 'bought');
+      const pendingExchanges = state.exchanges.filter(e => e.status === 'pending'); // ★おこづかい申請
+      const rates = getMarketRates();
 
       appDiv.innerHTML = `
         <div class="fade-in">
           ${renderPointCard()}
+
+          <!-- ★親が見るおこづかいの交換申請 -->
+          ${pendingExchanges.length > 0 ? `
+            <div class="mb-8 p-4 border border-yellow-300 bg-yellow-50 rounded-xl shadow-sm">
+              <h2 class="text-xs font-bold text-yellow-800 mb-3">💴 リアルおこづかいの交換申請</h2>
+              ${pendingExchanges.map(e => `
+                <div class="flex flex-col gap-2 bg-white p-3 rounded-lg shadow-sm mb-2 border border-yellow-200">
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm font-bold text-gray-800">子供が ${e.yen}円 を求めています</span>
+                    <span class="text-sm font-bold text-yellow-600">消費: ${e.points} pt</span>
+                  </div>
+                  <div class="flex gap-2 mt-1">
+                    <button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 bg-yellow-500 text-white text-xs py-2 rounded font-bold shadow-sm">承認して100円渡す</button>
+                    <button onclick="rejectExchange('${e.id}')" class="flex-1 bg-gray-100 text-gray-600 text-xs py-2 rounded font-bold">却下</button>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          ` : ''}
 
           ${proposedTasks.length > 0 ? `
             <div class="mb-8 p-4 border border-blue-200 bg-blue-50 rounded-xl shadow-sm">
@@ -257,19 +292,20 @@
             <h2 class="section-title">子供の投資状況</h2>
             <div class="space-y-2 mb-8">
               ${state.investments.map(inv => {
-                const fundData = state.funds.find(f => f.name === inv.name);
-                const changePct = fundData ? fundData.changePct : 0;
-                const currentValue = Math.round(inv.investedPoints * (1 + changePct / 100));
-                const isUp = changePct >= 0;
+                const currentRate = inv.name === '日本' ? rates.日本[6] : rates.アメリカ[6];
+                const shares = inv.shares || (inv.investedPoints / currentRate);
+                const currentValue = Math.round(shares * currentRate);
+                const diff = currentValue - inv.investedPoints;
+                const isUp = diff >= 0;
                 return `
                   <div class="flex justify-between items-center p-4 border border-gray-200 rounded-lg bg-white shadow-sm">
                     <div>
                       <p class="text-sm font-bold text-gray-800">${inv.name}</p>
-                      <p class="text-xs text-gray-500 mt-1">投資額: ${inv.investedPoints} pt</p>
+                      <p class="text-xs text-gray-500 mt-1">入れた額: ${inv.investedPoints} pt</p>
                     </div>
                     <div class="text-right">
                       <p class="text-sm font-bold text-gray-800">現在値: ${currentValue.toLocaleString()} pt</p>
-                      <p class="text-xs font-bold mt-1 ${isUp ? 'text-red-500' : 'text-blue-500'}">${isUp ? '▲' : '▼'} ${Math.abs(changePct)}%</p>
+                      <p class="text-xs font-bold mt-1 ${isUp ? 'text-red-500' : 'text-blue-500'}">${isUp ? '▲' : '▼'} ${Math.abs(diff)} pt</p>
                     </div>
                   </div>
                 `;
@@ -355,6 +391,8 @@
       headerActions.innerHTML = gearIcon;
       const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed'].includes(t.status));
       const activeTickets = state.tickets.filter(t => t.status !== 'used');
+      const pendingExchanges = state.exchanges.filter(e => e.status === 'pending'); // ★おこづかい申請
+      const rates = getMarketRates();
 
       appDiv.innerHTML = `
         <div class="fade-in">
@@ -385,14 +423,58 @@
             `).join('') : `<div class="border border-dashed border-gray-200 rounded-lg p-6 text-center text-xs text-gray-400">いまできる仕事はありません</div>`}
           </div>
 
-          <h2 class="section-title border-t-2 pt-6 border-gray-100">📈 投資（現実の市場に連動）</h2>
+          <!-- ★リアルおこづかい（現金）交換セクション -->
+          <h2 class="section-title border-t-2 pt-6 border-gray-100">💴 リアルおこづかい交換</h2>
+          <div class="mb-8">
+            <div class="bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-200 p-4 rounded-xl shadow-sm mb-4">
+              <div class="flex justify-between items-center">
+                <div>
+                  <p class="text-sm font-bold text-yellow-800">100円玉と交換する</p>
+                  <p class="text-xs text-yellow-700 mt-1">1000 pt 必要です</p>
+                </div>
+                <button onclick="requestExchange()" class="bg-yellow-500 text-white text-xs px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-yellow-600 transition">申請する</button>
+              </div>
+            </div>
+            
+            ${pendingExchanges.length > 0 ? `
+              <div class="space-y-2">
+                <p class="text-xs text-gray-500 font-bold mb-2">親の確認待ち</p>
+                ${pendingExchanges.map(e => `
+                  <div class="flex justify-between items-center p-3 bg-white border border-gray-100 rounded-lg shadow-sm">
+                    <span class="text-sm font-bold text-gray-800">${e.yen}円への交換</span>
+                    <span class="text-xs text-yellow-600 font-bold px-2 py-1 bg-yellow-50 rounded">承認待ち</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+
+          <h2 class="section-title border-t-2 pt-6 border-gray-100">📈 投資（日本とアメリカ）</h2>
           
+          <div class="mb-4 bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+            <canvas id="investChart" height="200"></canvas>
+            <p class="text-[10px] text-gray-400 mt-2 text-center">※現在投資している資産の価値（または100pt投資した時の参考）</p>
+          </div>
+
           <div class="mb-6">
-            <p class="text-xs text-gray-500 font-bold mb-2">運用中のファンド</p>
+            <p class="text-xs text-gray-500 font-bold mb-2">好きな額を投資する</p>
+            <div class="flex gap-2 mb-3">
+              <input type="number" id="invest-amount" placeholder="投資するpt (例: 500)" class="flex-1 p-3 text-sm border border-gray-200 rounded-lg" />
+              <span class="p-3 text-sm text-gray-500 font-bold">pt</span>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="investCustom('日本')" class="flex-1 bg-blue-50 text-blue-600 border border-blue-200 py-3 rounded-lg text-sm font-bold shadow-sm transition hover:bg-blue-100">日本に投資</button>
+              <button onclick="investCustom('アメリカ')" class="flex-1 bg-red-50 text-red-600 border border-red-200 py-3 rounded-lg text-sm font-bold shadow-sm transition hover:bg-red-100">アメリカに投資</button>
+            </div>
+          </div>
+
+          <div class="mb-8">
+            <p class="text-xs text-gray-500 font-bold mb-2">運用中の資産</p>
             ${state.investments.length > 0 ? state.investments.map(inv => {
-              const fundData = state.funds.find(f => f.name === inv.name);
-              const changePct = fundData ? fundData.changePct : 0;
-              const currentValue = Math.round(inv.investedPoints * (1 + changePct / 100));
+              const currentRate = inv.name === '日本' ? rates.日本[6] : rates.アメリカ[6];
+              const shares = inv.shares || (inv.investedPoints / currentRate);
+              const currentValue = Math.round(shares * currentRate);
+              
               const diff = currentValue - inv.investedPoints;
               const isUp = diff >= 0;
               const sign = isUp ? "▲" : "▼";
@@ -403,35 +485,13 @@
                 <div class="flex justify-between items-center p-4 bg-white border border-gray-100 rounded-lg mb-2 shadow-sm">
                   <div>
                     <p class="text-sm font-bold text-gray-800">${inv.name}</p>
-                    <p class="text-xs text-gray-500 mt-1">投資額: ${inv.investedPoints} pt</p>
+                    <p class="text-xs text-gray-500 mt-1">入れた額: ${inv.investedPoints} pt</p>
                     <p class="text-xs font-bold text-gray-800 mt-1">今の価値: ${currentValue.toLocaleString()} pt (${diffStr})</p>
                   </div>
-                  <button onclick="sellFund('${inv.id}', '${inv.name}', ${currentValue})" class="text-xs bg-gray-100 text-gray-800 px-4 py-2 rounded font-bold transition hover:bg-gray-200">売却してptに戻す</button>
+                  <button onclick="sellCustom('${inv.id}', '${inv.name}', ${currentValue})" class="text-xs bg-gray-100 text-gray-800 px-4 py-2 rounded font-bold transition hover:bg-gray-200">売却してptに戻す</button>
                 </div>
               `;
             }).join('') : '<p class="text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg p-4 text-center">まだ投資していません</p>'}
-          </div>
-
-          <div class="mb-8">
-            <p class="text-xs text-gray-500 font-bold mb-2">市場に投資する</p>
-            <div class="space-y-2">
-              ${state.funds.length > 0 ? state.funds.map(fund => {
-                const isUp = fund.changePct >= 0;
-                const sign = isUp ? "▲" : "▼";
-                const color = isUp ? "text-red-500" : "text-blue-500";
-                
-                return `
-                  <div class="flex justify-between items-center p-4 border border-gray-100 bg-white rounded-lg shadow-sm">
-                    <div>
-                      <span class="text-sm font-bold text-gray-800">${fund.name}</span>
-                      <span class="text-sm font-bold ${color} ml-2">${sign} ${Math.abs(fund.changePct)}%</span>
-                    </div>
-                    <button onclick="investFund('${fund.name}', 100)" class="bg-black text-white text-xs px-4 py-2 rounded font-bold shadow-sm">100pt 投資する</button>
-                  </div>
-                `;
-              }).join('') : '<p class="text-xs text-gray-400 p-4 text-center">市場データを読み込み中...</p>'}
-            </div>
-            <p class="text-[10px] text-gray-400 mt-2 text-right">※市場の変動（％）に応じて、投資したポイントが増減します。</p>
           </div>
 
           <h2 class="section-title border-t-2 pt-6 border-gray-100">チケット交換所</h2>
@@ -451,6 +511,61 @@
           </div>
         </div>
       `;
+    }
+
+    function drawInvestChart() {
+      const canvas = document.getElementById('investChart');
+      if (!canvas) return; 
+      
+      const rates = getMarketRates();
+      const ctx = canvas.getContext('2d');
+
+      const jpInv = state.investments.find(i => i.name === '日本');
+      const amInv = state.investments.find(i => i.name === 'アメリカ');
+
+      const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[6])) : 0;
+      const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[6])) : 0;
+
+      const jpData = rates.日本.map(rate => Math.round(jpShares * rate));
+      const amData = rates.アメリカ.map(rate => Math.round(amShares * rate));
+
+      const showDemo = (!jpInv && !amInv);
+      const datasetJp = showDemo ? rates.日本.map(r => Math.round(100 * r)) : jpData;
+      const datasetAm = showDemo ? rates.アメリカ.map(r => Math.round(100 * r)) : amData;
+
+      if (investChartInstance) investChartInstance.destroy(); 
+
+      investChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: rates.labels,
+          datasets: [
+            {
+              label: showDemo ? '日本 (参考:100pt投資時)' : '日本の資産価値 (pt)',
+              data: datasetJp,
+              backgroundColor: 'rgba(54, 162, 235, 0.7)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1,
+              borderRadius: 4
+            },
+            {
+              label: showDemo ? 'アメリカ (参考:100pt投資時)' : 'アメリカの資産価値 (pt)',
+              data: datasetAm,
+              backgroundColor: 'rgba(255, 99, 132, 0.7)',
+              borderColor: 'rgba(255, 99, 132, 1)',
+              borderWidth: 1,
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          animation: { duration: 500 },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
     }
 
     // ==========================================
@@ -536,22 +651,40 @@
     };
     window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 
-    window.investFund = async (name, amount) => {
-      if (state.points < amount) return alert("ポイントが足りません！\n（100pt必要です）");
-      if (confirm(`【${name}】の市場に ${amount}pt を投資しますか？`)) {
+    window.investCustom = async (name) => {
+      const amount = parseInt(document.getElementById('invest-amount').value);
+      if (!amount || amount <= 0) return alert("投資するポイントを正しく入力してください");
+      if (state.points < amount) return alert("ポイントが足りません！");
+      
+      const rates = getMarketRates();
+      const currentRate = name === '日本' ? rates.日本[6] : rates.アメリカ[6];
+
+      if (confirm(`【${name}】に ${amount}pt を投資しますか？\n（ポイントが減り、投資に回ります）`)) {
         await updateDoc(doc(db, "families", state.familyCode), { points: increment(-amount) });
+        
         const existingInv = state.investments.find(inv => inv.name === name);
         if (existingInv) {
-          await updateDoc(doc(db, "investments", existingInv.id), { investedPoints: increment(amount) });
+          const newShares = amount / currentRate;
+          await updateDoc(doc(db, "investments", existingInv.id), { 
+            investedPoints: increment(amount),
+            shares: increment(newShares)
+          });
         } else {
-          await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: name, investedPoints: amount, createdAt: Date.now() });
+          const shares = amount / currentRate;
+          await addDoc(collection(db, "investments"), { 
+            familyCode: state.familyCode, 
+            name: name, 
+            investedPoints: amount, 
+            shares: shares,
+            createdAt: Date.now() 
+          });
         }
         alert("投資が完了しました！");
+        document.getElementById('invest-amount').value = '';
       }
     };
 
-    window.sellFund = async (id, name, currentValue) => {
-      if (currentValue === 0) return alert("市場データが読み込めていません");
+    window.sellCustom = async (id, name, currentValue) => {
       if (confirm(`【${name}】の投資を終了し、\n今の価値である『${currentValue}pt』を受け取りますか？`)) {
         await updateDoc(doc(db, "families", state.familyCode), { points: increment(currentValue) });
         await deleteDoc(doc(db, "investments", id));
@@ -559,29 +692,41 @@
       }
     };
 
-    async function fetchFunds() {
-      if (!SPREADSHEET_CSV_URL) return;
-      try {
-        const response = await fetch(SPREADSHEET_CSV_URL);
-        const csvText = await response.text();
-        const lines = csvText.split('\n').filter(line => line.trim() !== '');
-        const parsedFunds = [];
-        lines.forEach(line => {
-          const cols = line.split(',');
-          if (cols.length >= 2) {
-            const name = cols[0].trim();
-            const changePct = parseFloat(cols[1].trim());
-            if (!isNaN(changePct) && name) parsedFunds.push({ name, changePct });
-          }
+    // ★おこづかい（現金）交換申請の処理（子供）
+    window.requestExchange = async () => {
+      if (state.points < 1000) return alert("ポイントが足りません！(1000pt必要です)");
+      if (confirm("1000ptを使って、親に100円の交換を申請しますか？\n（親が承認したタイミングでポイントが引かれます）")) {
+        await addDoc(collection(db, "exchanges"), {
+          familyCode: state.familyCode,
+          points: 1000,
+          yen: 100,
+          status: 'pending',
+          createdAt: Date.now()
         });
-        state.funds = parsedFunds;
-        render();
-      } catch(e) { console.error("市場データの取得に失敗しました", e); }
-    }
+        alert("親に申請を送りました！");
+      }
+    };
 
-    // ==========================================
-    // 定期実行と通知ロジック (修正ポイント)
-    // ==========================================
+    // ★おこづかい申請を承認する処理（親）
+    window.approveExchange = async (id, points) => {
+      if (state.points < points) {
+        alert(`子供のポイントが ${points}pt 未満になっています！\n（ポイント不足のため承認できません）`);
+        return;
+      }
+      if (confirm(`本当に100円を渡しますか？\n（子供のポイントが ${points}pt 引かれます）`)) {
+        await updateDoc(doc(db, "families", state.familyCode), { points: increment(-points) });
+        await updateDoc(doc(db, "exchanges", id), { status: 'approved' });
+        alert("承認しました！現実で100円を渡してあげてください。");
+      }
+    };
+
+    // ★おこづかい申請を却下する処理（親）
+    window.rejectExchange = async (id) => {
+      if (confirm("この申請を却下しますか？")) {
+        await updateDoc(doc(db, "exchanges", id), { status: 'rejected' });
+      }
+    };
+
     function sendNotification(title, body) {
       if (state.notify && Notification.permission === "granted") {
         new Notification(title, { body: body });
@@ -591,7 +736,6 @@
     async function checkScheduledTasks() {
       if (!state.familyCode || state.scheduledTasks.length === 0) return;
       
-      // あなたが作成した関数で現在の時間を取得
       const timeInfo = getCurrentTime();
       const currentDay = timeInfo.dayIndex;
       const currentHour = timeInfo.hours;
@@ -601,23 +745,17 @@
       for (const st of state.scheduledTasks) {
         const daysArr = Array.isArray(st.dayOfWeek) ? st.dayOfWeek : [parseInt(st.dayOfWeek)];
         
-        // 曜日が一致するか
         if (daysArr.includes(currentDay)) {
           const [h, m] = st.time.split(':').map(Number);
           
-          // 指定時間以降か
           if (currentHour > h || (currentHour === h && currentMin >= m)) {
             const lastGenDate = st.lastGenerated ? new Date(st.lastGenerated).toDateString() : null;
-            
-            // 重要：DBの記録が今日以外、かつ「このアプリを開いている間にまだ追加してない(メモリ)」場合に実行
             const cacheKey = `${st.id}-${todayString}`;
+            
             if (lastGenDate !== todayString && !generatedTodayCache.has(cacheKey)) {
-              
-              // メモリに保存（二重追加を即座にブロック）
               generatedTodayCache.add(cacheKey);
 
               try {
-                // タスク追加
                 await addDoc(collection(db, "tasks"), { 
                   familyCode: state.familyCode, 
                   title: st.title, 
@@ -625,7 +763,6 @@
                   status: 'open', 
                   createdAt: Date.now() 
                 });
-                // 生成済みフラグをDBに更新
                 await updateDoc(doc(db, "scheduledTasks", st.id), { lastGenerated: Date.now() });
                 
                 if (state.role === 'child') {
@@ -633,7 +770,6 @@
                 }
               } catch (err) {
                 console.error("タスク追加エラー:", err);
-                // 失敗した場合はメモリから消して再試行できるようにする
                 generatedTodayCache.delete(cacheKey);
               }
             }
@@ -643,7 +779,6 @@
     }
 
     setInterval(checkScheduledTasks, 30000); 
-    setInterval(fetchFunds, 60000);
 
     function setupListeners() {
       if (!state.familyCode) return;
@@ -663,8 +798,7 @@
       watch("tickets", "tickets");
       watch("investments", "investments");
       watch("scheduledTasks", "scheduledTasks");
-      
-      fetchFunds();
+      watch("exchanges", "exchanges"); // ★おこづかい交換用データの監視を追加
     }
 
     if (state.familyCode) setupListeners(); else render();
