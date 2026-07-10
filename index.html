@@ -71,22 +71,19 @@
     function getMarketRates() {
       const today = new Date();
       const rates = { 日本: [], アメリカ: [], labels: [] };
-      // 半年（約180日）を12分割して推移を作る
       for (let i = 12; i >= 0; i--) {
         const d = new Date(today.getTime() - i * 15 * 86400000);
         rates.labels.push(`${d.getMonth()+1}/${d.getDate()}`);
-        
         const day = Math.floor(d.getTime() / 86400000);
         const rateJp = 1.0 + Math.sin(day * 0.1) * 0.2 + Math.sin(day * 0.03) * 0.3; 
         const rateAm = 1.0 + Math.cos(day * 0.08) * 0.3 + Math.sin(day * 0.04) * 0.4;
-        
         rates.日本.push(Math.max(0.1, rateJp)); 
         rates.アメリカ.push(Math.max(0.1, rateAm));
       }
       return rates;
     }
 
-    // ★ 期日の計算関数 (あと何日、何時間、何分)
+    // ★ 期日の計算関数
     function formatTimeLeft(deadlineTime) {
       if (!deadlineTime) return '<span class="text-gray-400">期日なし</span>';
       const diff = deadlineTime - Date.now();
@@ -105,9 +102,6 @@
       render();
     };
 
-    // ==========================================
-    // 画面のレンダリング (HTML生成)
-    // ==========================================
     function render() {
       if (!state.role || !state.familyCode) {
         bottomNav.classList.add('hidden');
@@ -161,7 +155,6 @@
       `;
     }
 
-    // ★ ダッシュボード画面（モックアップを再現）
     function renderHome() {
       const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed'].includes(t.status));
       
@@ -179,7 +172,6 @@
 
       return `
         <div class="flex flex-col md:flex-row gap-6 items-stretch">
-          <!-- 左カラム：ボタンとグラフ -->
           <div class="flex-1 flex flex-col gap-6">
             <div class="grid grid-cols-2 gap-4">
               ${gridButtons}
@@ -190,7 +182,6 @@
             </div>
           </div>
 
-          <!-- 右カラム：タスクリスト -->
           <div class="flex-1 card-box p-4 relative flex flex-col min-h-[350px]">
             <div class="flex justify-between items-end border-b-2 border-black pb-2 mb-3">
               <h2 class="text-2xl font-black">タスク</h2>
@@ -229,7 +220,6 @@
               }).join('') : '<p class="text-center font-bold text-gray-400 mt-10">今できるタスクはないよ</p>'}
             </div>
 
-            <!-- モックの右下のバツ（追加ボタン） -->
             <button onclick="setView('${state.role === 'child' ? 'propose' : 'taskCreate'}')" class="absolute bottom-3 right-4 w-12 h-12 bg-blue-500 text-white rounded-full flex items-center justify-center text-3xl font-black shadow-lg hover:scale-110 transition-transform">
               ＋
             </button>
@@ -274,7 +264,6 @@
       `;
     }
 
-    // ★おこづかい交換 (1コイン＝1円)
     function renderExchange() {
       const pendingExchanges = state.exchanges.filter(e => e.status === 'pending');
       if (state.role === 'child') {
@@ -283,14 +272,11 @@
             <button onclick="setView('home')" class="absolute top-4 right-4 font-bold text-xl">✕</button>
             <h2 class="text-xl font-black mb-2 border-b-2 border-black pb-2">💴 リアルおこづかい交換</h2>
             <p class="font-bold text-sm text-gray-600 mb-6">1コイン ＝ 1円 で現実のお金と交換できるよ！</p>
-            
             <div class="flex items-center gap-3 mb-6">
               <input type="number" id="exchange-amount" placeholder="何円にする？" class="flex-1 p-4 border-2 border-black font-bold text-2xl rounded text-right" />
               <span class="font-black text-2xl">円</span>
             </div>
-            
             <button onclick="requestExchange()" class="btn-box btn-yellow w-full py-4 text-lg mb-8">親に交換申請する！</button>
-            
             ${pendingExchanges.length > 0 ? `
               <h3 class="font-bold mb-2">親の確認待ち</h3>
               <div class="space-y-2">
@@ -354,7 +340,6 @@
               <input type="number" id="ticket-points" placeholder="コイン" class="w-24 p-3 border-2 border-black font-bold rounded" />
             </div>
             <button onclick="addTicket()" class="btn-box w-full bg-black text-white py-3 mb-6">お店に並べる</button>
-            
             <h3 class="font-bold mb-2">販売中</h3>
             <div class="space-y-2">
               ${activeTickets.length > 0 ? activeTickets.map(t => `
@@ -402,34 +387,36 @@
       }
     }
 
+    // ★ 投資画面: 全体の余白を詰め、リストを横並び（グリッド）にして縦長になるのを防ぐ
     function renderInvest() {
       const rates = getMarketRates();
       return `
-        <div class="card-box p-6 max-w-2xl mx-auto relative">
+        <div class="card-box p-4 sm:p-6 max-w-2xl mx-auto relative">
           <button onclick="setView('home')" class="absolute top-4 right-4 font-bold text-xl">✕</button>
-          <h2 class="text-xl font-black mb-4 border-b-2 border-black pb-2">📈 かぶ (投資)</h2>
+          <h2 class="text-xl font-black mb-3 border-b-2 border-black pb-2">📈 かぶ (投資)</h2>
           
-          <div class="border-2 border-black p-2 mb-6 bg-gray-50 rounded">
+          <div class="border-2 border-black p-2 mb-4 bg-gray-50 rounded">
             <canvas id="investChart" height="150"></canvas>
-            <p class="text-xs text-gray-500 font-bold mt-2 text-center">※過去半年間の上がり下がり</p>
+            <p class="text-xs text-gray-500 font-bold mt-1 text-center">※過去半年間の上がり下がり</p>
           </div>
 
           ${state.role === 'child' ? `
-            <div class="mb-6 p-4 border-2 border-black rounded bg-white">
-              <p class="font-bold mb-2">コインを投資する</p>
-              <div class="flex gap-2 mb-3">
-                <input type="number" id="invest-amount" placeholder="何コイン？" class="flex-1 p-3 border-2 border-black font-bold rounded" />
-                <span class="p-3 font-bold">コイン</span>
+            <div class="mb-4 p-3 border-2 border-black rounded bg-white">
+              <p class="font-bold text-sm mb-2">コインを投資する</p>
+              <div class="flex gap-2 mb-2">
+                <input type="number" id="invest-amount" placeholder="何コイン？" class="flex-1 p-2 border-2 border-black font-bold rounded" />
+                <span class="p-2 font-bold text-sm flex items-center">コイン</span>
               </div>
-              <div class="flex gap-3">
-                <button onclick="investCustom('日本')" class="btn-box flex-1 py-3 text-blue-600 bg-blue-50">日本を買う</button>
-                <button onclick="investCustom('アメリカ')" class="btn-box flex-1 py-3 text-red-600 bg-red-50">アメリカを買う</button>
+              <div class="flex gap-2">
+                <button onclick="investCustom('日本')" class="btn-box flex-1 py-2 text-sm text-blue-600 bg-blue-50">日本を買う</button>
+                <button onclick="investCustom('アメリカ')" class="btn-box flex-1 py-2 text-sm text-red-600 bg-red-50">アメリカを買う</button>
               </div>
             </div>
           ` : ''}
 
-          <h3 class="font-bold mb-3">現在持っている かぶ</h3>
-          <div class="space-y-3">
+          <h3 class="font-bold mb-2">現在持っている かぶ</h3>
+          <!-- ★ リストを横並び (グリッド) にして高さを圧縮しました -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             ${state.investments.length > 0 ? state.investments.map(inv => {
               const currentRate = inv.name === '日本' ? rates.日本[12] : rates.アメリカ[12];
               const shares = inv.shares || (inv.investedPoints / currentRate);
@@ -437,16 +424,16 @@
               const diff = currentValue - inv.investedPoints;
               const isUp = diff >= 0;
               return `
-                <div class="flex justify-between items-center p-4 border-2 border-black rounded ${isUp ? 'bg-red-50' : 'bg-blue-50'}">
-                  <div>
-                    <p class="font-black text-lg">${inv.name}</p>
-                    <p class="text-sm font-bold">入れた額: ${inv.investedPoints} コイン</p>
-                    <p class="text-sm font-black mt-1">今の価値: ${currentValue} コイン <span class="${isUp ? 'text-red-600' : 'text-blue-600'}">(${isUp ? '▲' : '▼'}${Math.abs(diff)})</span></p>
+                <div class="flex flex-col p-3 border-2 border-black rounded ${isUp ? 'bg-red-50' : 'bg-blue-50'}">
+                  <div class="flex justify-between items-start mb-1">
+                    <p class="font-black text-lg leading-none">${inv.name}</p>
+                    <p class="text-xs font-bold text-gray-500">投資: ${inv.investedPoints}</p>
                   </div>
-                  ${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', '${inv.name}', ${currentValue})" class="btn-box bg-white px-4 py-2">売ってコインにする</button>` : ''}
+                  <p class="text-sm font-black mb-3">価値: ${currentValue} コイン <span class="${isUp ? 'text-red-600' : 'text-blue-600'}">(${isUp ? '▲' : '▼'}${Math.abs(diff)})</span></p>
+                  ${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', '${inv.name}', ${currentValue})" class="btn-box bg-white w-full py-1.5 text-sm mt-auto">売却してコインにする</button>` : ''}
                 </div>
               `;
-            }).join('') : '<p class="font-bold text-gray-400 border-2 border-black border-dashed p-4 text-center rounded">何も買っていません</p>'}
+            }).join('') : '<p class="font-bold text-gray-400 border-2 border-black border-dashed p-4 text-center rounded sm:col-span-2">何も買っていません</p>'}
           </div>
         </div>
       `;
@@ -548,7 +535,7 @@
       if (investChartInstance) investChartInstance.destroy(); 
 
       investChartInstance = new Chart(ctx, {
-        type: 'line', // 折れ線グラフに変更
+        type: 'line',
         data: {
           labels: rates.labels,
           datasets: [
@@ -587,12 +574,8 @@
       });
     }
 
-    // ==========================================
-    // アクション・ロジック
-    // ==========================================
     window.unlinkAccount = () => { if (confirm("連携を解除しますか？")) { localStorage.clear(); window.location.reload(); } };
 
-    // 親の仕事追加
     window.addTask = async () => {
       const title = document.getElementById('task-title').value.trim();
       const points = parseInt(document.getElementById('task-points').value);
@@ -604,7 +587,6 @@
       setView('home');
     };
 
-    // 子供の提案
     window.proposeTask = async () => {
       const title = document.getElementById('prop-title').value.trim();
       const points = parseInt(document.getElementById('prop-points').value);
@@ -674,7 +656,6 @@
       }
     };
 
-    // ★おこづかい（現金）交換申請 (1コイン=1円)
     window.requestExchange = async () => {
       const amount = parseInt(document.getElementById('exchange-amount').value);
       if (!amount || amount <= 0) return alert("正しく入力してね");
@@ -705,7 +686,6 @@
       if (confirm("この申請を却下しますか？")) { await updateDoc(doc(db, "exchanges", id), { status: 'rejected' }); }
     };
 
-    // Firebase リスナー設定
     function setupListeners() {
       if (!state.familyCode) return;
       onSnapshot(doc(db, "families", state.familyCode), (doc) => {
