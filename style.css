@@ -30,38 +30,43 @@ html, body {
   border: 2px solid #1e293b;
   background: #ffffff;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: all 0.1s ease;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   cursor: pointer;
 }
 .solid-btn:active { background: #1e293b; color: #ffffff; transform: scale(0.97); }
 
-/* ボトムナビの丸ボタン */
-.nav-circle {
-  width: 64px; height: 64px;
-  border: 2px solid #1e293b;
-  border-radius: 50%;
-  background: #ffffff;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 800; font-size: 0.75rem;
-  transition: all 0.2s;
+/* カッコいいボトムナビ（タブバー） */
+.nav-tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #94a3b8; font-weight: 700; font-size: 10px; gap: 4px;
+  transition: color 0.2s;
 }
-.nav-circle.active { background: #1e293b; color: #ffffff; }
+.nav-tab svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.nav-tab.active { color: #1e293b; }
 
 .fade-in { animation: fadeIn 0.2s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+
+/* 風船プカプカアニメーション */
+.float-balloon { animation: float 3s ease-in-out infinite; cursor: pointer; }
+@keyframes float {
+  0% { transform: translateY(0) rotate(-5deg); }
+  50% { transform: translateY(-15px) rotate(5deg); }
+  100% { transform: translateY(0) rotate(-5deg); }
+}
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-/* ★ フリガナ（ルビ）のコントロール ★ */
-/* デフォルトはフリガナ非表示 */
-ruby rt { display: none; }
-/* bodyに furigana-on クラスがある時だけフリガナを表示 */
-body.furigana-on ruby rt {
-  display: block;
+/* ★ フリガナ（ルビ）の修正版（横に崩れないように透明度でコントロール） */
+ruby rt {
+  opacity: 0;
   font-size: 0.6em;
   color: #64748b;
-  text-align: center;
+  transition: opacity 0.2s;
+}
+body.furigana-on ruby rt {
+  opacity: 1;
 }
