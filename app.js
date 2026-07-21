@@ -1,5 +1,9 @@
-import { db } from './firebase.js';
+import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"; 
+
+// ★ アプリのURLをGitHub Pagesに固定！
+const APP_URL = "https://whinaotona-debug.github.io/tibiz/"; 
 
 let investChartInstance = null; 
 
@@ -15,11 +19,9 @@ let state = {
   exchanges: [],
   banks: [],    
   balloons: [],
-  // ログイン画面用の状態管理
-  setupMode: null, // 'parent' or 'child'
-  setupStep: 1,    // 1:email, 2:code, 3:familyCode(子供のみ)
-  tempEmail: '',
-  tempAuthCode: ''
+  setupMode: null,
+  isSending: false,
+  message: '' 
 };
 
 const appDiv = document.getElementById('app');
@@ -27,6 +29,40 @@ const bottomNav = document.getElementById('bottom-nav');
 
 const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 if (state.furigana) document.body.classList.add('furigana-on');
+
+// ★ メールのリンクを踏んでアプリを開いた時の処理
+window.onload = async () => {
+  if (isSignInWithEmailLink(auth, window.location.href)) {
+    let email = window.localStorage.getItem('emailForSignIn');
+    if (!email) {
+      email = window.prompt('確認のため、もう一度メールアドレスを入力してください');
+    }
+    
+    try {
+      await signInWithEmailLink(auth, email, window.location.href);
+      window.localStorage.removeItem('emailForSignIn');
+      
+      const savedMode = window.localStorage.getItem('tempSetupMode');
+      if(savedMode === 'parent'){
+        const c = Math.random().toString(36).substring(2, 8).toUpperCase(); 
+        await setDoc(doc(db, "families", c), { points: 0 }); 
+        localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
+        state.role = 'parent'; state.familyCode = c; state.view = 'home'; 
+        alert("認証完了！イエノミクスを開始します。");
+        window.history.replaceState(null, null, window.location.pathname);
+        setupListeners();
+      } else {
+        state.setupMode = 'child_id_input';
+        window.history.replaceState(null, null, window.location.pathname);
+        render();
+      }
+    } catch (error) {
+      alert("ログインエラー: " + error.message);
+    }
+  } else {
+    if (state.familyCode) setupListeners(); else render();
+  }
+};
 
 window.toggleFurigana = () => {
   state.furigana = !state.furigana;
@@ -70,7 +106,8 @@ window.setView = (viewName) => { state.view = viewName; render(); };
 function render() {
   if (!state.role || !state.familyCode) {
     bottomNav.classList.add('hidden');
-    renderSetup(); return;
+    if(!isSignInWithEmailLink(auth, window.location.href)) renderSetup(); 
+    return;
   }
   bottomNav.classList.remove('hidden');
   bottomNav.innerHTML = `
@@ -152,7 +189,6 @@ function renderHome() {
   return `
     <div class="flex-1 min-h-0 p-3">
       <div class="h-full grid grid-cols-2 gap-3">
-        
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex-1 p-2.5 space-y-3 overflow-y-auto">
             <div>
@@ -161,7 +197,6 @@ function renderHome() {
                 <div class="w-5 h-5 mb-0.5">${getIcon('propose')}</div><span class="text-[9px] font-bold">${tJob.title}</span>
               </button>
             </div>
-            
             <div>
               <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1">${rb('管理','かんり')}</p>
               <div class="grid grid-cols-1 gap-2">
@@ -173,7 +208,6 @@ function renderHome() {
                 </button>
               </div>
             </div>
-
             <div>
               <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1">${rb('支出','ししゅつ')}</p>
               <div class="grid grid-cols-1 gap-2">
@@ -185,31 +219,26 @@ function renderHome() {
                 </button>
               </div>
             </div>
-
             ${state.role === 'parent' ? `
               <button onclick="setView('balloonSend')" class="solid-btn w-full py-2.5 bg-slate-800 text-white mt-2">
                 <div class="flex items-center gap-1"><div class="w-3 h-3">${getIcon('balloon')}</div><span class="text-[10px] font-bold">ギフト送信</span></div>
               </button>
             ` : ''}
           </div>
-
           <div class="solid-box h-[100px] relative p-1 cursor-pointer" onclick="setView('invest')">
             <canvas id="investChart"></canvas>
           </div>
         </div>
-
         <div class="solid-box flex flex-col min-h-0 relative overflow-hidden min-w-0">
           <div class="flex-none p-3 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
             <h2 class="text-xs font-bold text-slate-800 flex items-center gap-1.5"><div class="w-4 h-4 text-slate-400">${getIcon('task')}</div>JOB LIST</h2>
             <button onclick="setView('calendar')" class="w-5 h-5 text-slate-400 hover:text-blue-500 transition">${getIcon('calendar')}</button>
           </div>
-          
           <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1">
             ${activeTasks.length > 0 ? activeTasks.map(t => {
               const diff = t.deadline ? t.deadline - Date.now() : null;
               const days = diff ? Math.floor(diff / (1000 * 60 * 60 * 24)) : null;
               const timeTxt = diff === null ? '--' : (diff < 0 ? '終了' : (days > 0 ? `あと${days}日` : '今日'));
-              
               let btn = '';
               if (state.role === 'child') {
                 if (t.status === 'open') btn = `<button onclick="acceptTask('${t.id}')" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0 shadow-sm">受注</button>`;
@@ -365,11 +394,17 @@ function renderCalendar() {
   return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-5 h-5 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl shadow-sm flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-red-400':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-xs font-black bg-slate-50 px-2 py-1 rounded-md ${t.deadline<Date.now()?'text-red-500':'text-slate-500'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-50"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-xs font-bold text-slate-400">予定はありません</p></div>`}</div>`;
 }
 
-// ★ ここから新実装の「段階的メール認証フロー」 ★
 function renderSetup() {
   let content = '';
 
-  if (!state.setupMode) {
+  if (state.isSending) {
+    content = `
+      <div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center animate-pulse relative z-10">
+        <div class="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto mb-6"></div>
+        <p class="font-bold text-slate-600">認証メールを送信中...</p>
+      </div>
+    `;
+  } else if (!state.setupMode) {
     content = `
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 mb-6 relative z-10 text-center">
         <h3 class="font-black text-slate-800 mb-6 text-lg">どちらで始めますか？</h3>
@@ -383,22 +418,24 @@ function renderSetup() {
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
         <button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
         <h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">${roleText}のメールアドレス</h3>
-        <p class="text-xs font-bold text-slate-400 text-center mb-6 leading-relaxed">セキュリティ向上のため、<br>2段階認証を行います。</p>
+        <p class="text-xs font-bold text-slate-400 text-center mb-6 leading-relaxed">セキュリティのため、<br>入力したアドレスにログイン用URLを送信します。</p>
         <input type="email" id="setup-email" placeholder="example@email.com" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
-        <button onclick="sendAuthCode()" class="solid-btn w-full py-4 bg-blue-600 text-white font-bold shadow-lg shadow-blue-200">認証コードを送信</button>
+        <button onclick="sendRealEmailLink()" class="solid-btn w-full py-4 bg-blue-600 text-white font-bold shadow-lg shadow-blue-200">認証メールを送信する</button>
       </div>
     `;
   } else if (state.setupStep === 2) {
     content = `
-      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
-        <button onclick="state.setupStep=1; render();" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
-        <h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">認証コードの確認</h3>
-        <p class="text-[10px] font-bold text-slate-500 text-center mb-6 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">${state.tempEmail}<br>に届いた6桁のコードを入力してください。</p>
-        <input type="number" id="setup-code" placeholder="123456" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-3xl tracking-[0.2em] focus:outline-none focus:border-blue-400 focus:bg-white transition" />
-        <button onclick="verifyAuthCode()" class="solid-btn w-full py-4 bg-slate-800 text-white font-bold shadow-lg shadow-slate-200">認証する</button>
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center">
+        <div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+        <h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3>
+        <p class="text-xs font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+          「${state.message}」宛に<br>ログイン用のURLを送信しました。<br><br>メールアプリを開き、<br>リンクをクリックしてください。
+        </p>
+        <p class="text-[10px] text-slate-400">※この画面は閉じて構いません</p>
       </div>
     `;
   } else if (state.setupStep === 3) {
+    // 子供が認証を突破したあとの画面
     content = `
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
         <h3 class="font-black text-slate-800 mb-2 text-center text-lg">親の同期IDを入力</h3>
@@ -416,7 +453,7 @@ function renderSetup() {
       <div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] flex items-center justify-center relative z-10 border-4 border-white transition-transform transform hover:scale-105">
         <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
       </div>
-      
+      <h1 class="text-3xl font-black text-slate-800 mb-10 tracking-tighter relative z-10">イエノミクス</h1>
       ${content}
     </div>
   `;
@@ -425,26 +462,30 @@ function renderSetup() {
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
 
-window.sendAuthCode = () => {
+window.sendRealEmailLink = async () => {
   const email = document.getElementById('setup-email').value;
   if (!email.includes('@')) return alert('正しいメールアドレスを入力してください。');
-  state.tempEmail = email;
-  state.tempAuthCode = Math.floor(100000 + Math.random() * 900000).toString();
-  alert(`✉️ 【イエノミクス セキュリティ】\n\n「${email}」宛に認証コードを送信しました。\n\n※デモ用コード: ${state.tempAuthCode}`);
-  state.setupStep = 2; render();
-};
-
-window.verifyAuthCode = async () => {
-  const inputCode = document.getElementById('setup-code').value;
-  if (inputCode !== state.tempAuthCode) return alert('認証コードが違います。');
   
-  if (state.setupMode === 'parent') {
-    const c = Math.random().toString(36).substring(2, 8).toUpperCase(); 
-    await setDoc(doc(db, "families", c), { points: 0 }); 
-    localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
-    state.role = 'parent'; state.familyCode = c; state.view = 'home'; setupListeners();
-  } else {
-    state.setupStep = 3; render();
+  state.isSending = true; render();
+
+  const actionCodeSettings = {
+    url: APP_URL, 
+    handleCodeInApp: true,
+  };
+
+  try {
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    window.localStorage.setItem('emailForSignIn', email);
+    window.localStorage.setItem('tempSetupMode', state.setupMode);
+    
+    state.isSending = false;
+    state.message = email;
+    state.setupStep = 2; 
+    render();
+  } catch (error) {
+    state.isSending = false;
+    render();
+    alert("エラーが発生しました: " + error.message);
   }
 };
 
@@ -460,12 +501,11 @@ window.joinFamily = async () => {
   }
 };
 
-// --- アクション時のメール通知モック ---
+// 通知モック
 function notifyMail(title) {
   setTimeout(() => alert(`✉️ 通知メール送信\n「${title}」の通知をメールアドレスに送信しました。`), 500);
 }
 
-// --- イベントロジック ---
 window.unlinkAccount = () => { if (confirm("リセットしますか？")) { localStorage.clear(); window.location.reload(); } };
 window.addTask = async () => { const t = document.getElementById('task-title').value, p = parseInt(document.getElementById('task-points').value), d = document.getElementById('task-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() }); setView('home'); notifyMail('新しい仕事が発注されました'); } };
 window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); notifyMail('子供から新しい報酬の提案が届きました'); } };
@@ -477,15 +517,7 @@ window.addTicket2 = async () => { const t = document.getElementById('t-title').v
 window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
 window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); notifyMail('子供がチケットを購入しました'); };
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
-
-window.sellCustom = async (id, v) => { 
-  if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) {
-    await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); 
-    await deleteDoc(doc(db, "investments", id)); 
-    setView('invest');
-  }
-};
-
+window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
 window.investCustom = async (n) => { const a = parseInt(document.getElementById('invest-amount').value); if (!a || state.points < a) return alert("pt不足"); const r = n === '日本' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); const ex = state.investments.find(i => i.name === n); if (ex) { await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); } else { await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: n, investedPoints: a, shares: a / r, createdAt: Date.now() }); } setView('invest'); };
 window.requestExchange = async () => { const a = parseInt(document.getElementById('exchange-amount').value); if (!a || state.points < a) return alert("pt不足"); await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() }); setView('home'); notifyMail('子供から現金換金の申請が届きました'); };
 window.approveExchange = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); await updateDoc(doc(db, "exchanges", id), { status: 'approved' }); };
@@ -501,4 +533,4 @@ function setupListeners() {
   const w = (c, k) => { onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); a.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); state[k] = a; render(); }); };
   w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons");
 }
-if (state.familyCode) setupListeners(); else render();
+// ここも削除しました（window.onload内で実行するため）
