@@ -14,7 +14,12 @@ let state = {
   investments: [],
   exchanges: [],
   banks: [],    
-  balloons: []  
+  balloons: [],
+  // ログイン画面用の状態管理
+  setupMode: null, // 'parent' or 'child'
+  setupStep: 1,    // 1:email, 2:code, 3:familyCode(子供のみ)
+  tempEmail: '',
+  tempAuthCode: ''
 };
 
 const appDiv = document.getElementById('app');
@@ -139,7 +144,6 @@ function renderHeader() {
   `;
 }
 
-// ★ 左右のバランスを 1:1（半分ずつ）に修正しました！
 function renderHome() {
   const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed'].includes(t.status));
   const tJob = state.role === 'child' ? { id: 'propose', title: rb('報酬','ほうしゅう')+'を'+rb('提案','ていあん') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
@@ -147,10 +151,8 @@ function renderHome() {
 
   return `
     <div class="flex-1 min-h-0 p-3">
-      <!-- ここを grid-cols-2 (50:50) に変更してバランスを整えました -->
       <div class="h-full grid grid-cols-2 gap-3">
         
-        <!-- 左側：洗練されたメニューボタン -->
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex-1 p-2.5 space-y-3 overflow-y-auto">
             <div>
@@ -196,7 +198,6 @@ function renderHome() {
           </div>
         </div>
 
-        <!-- 右側：JOBリスト -->
         <div class="solid-box flex flex-col min-h-0 relative overflow-hidden min-w-0">
           <div class="flex-none p-3 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
             <h2 class="text-xs font-bold text-slate-800 flex items-center gap-1.5"><div class="w-4 h-4 text-slate-400">${getIcon('task')}</div>JOB LIST</h2>
@@ -364,69 +365,107 @@ function renderCalendar() {
   return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-5 h-5 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl shadow-sm flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-red-400':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-xs font-black bg-slate-50 px-2 py-1 rounded-md ${t.deadline<Date.now()?'text-red-500':'text-slate-500'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-50"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-xs font-bold text-slate-400">予定はありません</p></div>`}</div>`;
 }
 
-// ★ 2段階認証とメール通知のモックアップを搭載！
-function renderSetup() { 
+// ★ ここから新実装の「段階的メール認証フロー」 ★
+function renderSetup() {
+  let content = '';
+
+  if (!state.setupMode) {
+    content = `
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 mb-6 relative z-10 text-center">
+        <h3 class="font-black text-slate-800 mb-6 text-lg">どちらで始めますか？</h3>
+        <button onclick="setSetupMode('parent')" class="solid-btn w-full py-4 bg-slate-800 text-white font-bold shadow-md mb-4 hover:bg-slate-700">親として開始</button>
+        <button onclick="setSetupMode('child')" class="solid-btn w-full py-4 bg-blue-600 text-white font-bold shadow-md shadow-blue-200 hover:bg-blue-500">子供として開始</button>
+      </div>
+    `;
+  } else if (state.setupStep === 1) {
+    const roleText = state.setupMode === 'parent' ? '親' : '子供';
+    content = `
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
+        <button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
+        <h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">${roleText}のメールアドレス</h3>
+        <p class="text-xs font-bold text-slate-400 text-center mb-6 leading-relaxed">セキュリティ向上のため、<br>2段階認証を行います。</p>
+        <input type="email" id="setup-email" placeholder="example@email.com" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+        <button onclick="sendAuthCode()" class="solid-btn w-full py-4 bg-blue-600 text-white font-bold shadow-lg shadow-blue-200">認証コードを送信</button>
+      </div>
+    `;
+  } else if (state.setupStep === 2) {
+    content = `
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
+        <button onclick="state.setupStep=1; render();" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
+        <h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">認証コードの確認</h3>
+        <p class="text-[10px] font-bold text-slate-500 text-center mb-6 leading-relaxed bg-slate-50 p-2 rounded-lg border border-slate-100">${state.tempEmail}<br>に届いた6桁のコードを入力してください。</p>
+        <input type="number" id="setup-code" placeholder="123456" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-3xl tracking-[0.2em] focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+        <button onclick="verifyAuthCode()" class="solid-btn w-full py-4 bg-slate-800 text-white font-bold shadow-lg shadow-slate-200">認証する</button>
+      </div>
+    `;
+  } else if (state.setupStep === 3) {
+    content = `
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
+        <h3 class="font-black text-slate-800 mb-2 text-center text-lg">親の同期IDを入力</h3>
+        <p class="text-xs font-bold text-slate-400 text-center mb-6 leading-relaxed">親のアプリの設定画面にある<br>「同期ID」を入力して連携します。</p>
+        <input id="setup-family-code" placeholder="IDを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-2xl uppercase tracking-widest focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+        <button onclick="joinFamily()" class="solid-btn w-full py-4 bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-200">連携してスタート</button>
+      </div>
+    `;
+  }
+
   appDiv.innerHTML = `
     <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
       <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
-      <div class="w-24 h-24 mb-6 rounded-full overflow-hidden bg-white shadow-xl flex items-center justify-center relative z-10 border-4 border-white">
+      
+      <div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.1)] flex items-center justify-center relative z-10 border-4 border-white transition-transform transform hover:scale-105">
         <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
       </div>
-      <h1 class="text-4xl font-black text-slate-800 mb-10 tracking-tighter relative z-10">イエノミクス</h1>
       
-      <!-- 親の登録 -->
-      <div class="w-full max-w-sm bg-white p-6 rounded-2xl shadow-lg border border-slate-100 mb-6 relative z-10">
-        <h3 class="font-bold text-slate-500 mb-4 text-center text-sm">親として登録</h3>
-        <input type="email" id="input-email-parent" placeholder="メールアドレスを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white" />
-        <button onclick="handleAuth('parent')" class="solid-btn w-full py-4 bg-slate-800 text-white font-bold shadow-md">メール認証して開始</button>
-      </div>
-      
-      <!-- 子供の登録 -->
-      <div class="w-full max-w-sm bg-white p-6 rounded-2xl shadow-lg border border-slate-100 relative z-10">
-        <h3 class="font-bold text-slate-500 mb-4 text-center text-sm">子供として連携</h3>
-        <input type="email" id="input-email-child" placeholder="親のメールアドレスを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white" />
-        <input id="input-family-code" placeholder="親の同期ID" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-4 text-center font-mono font-black text-xl uppercase focus:outline-none focus:border-blue-400 focus:bg-white" />
-        <button onclick="handleAuth('child')" class="solid-btn w-full py-4 bg-blue-600 text-white font-bold shadow-md shadow-blue-200">認証して連携する</button>
-      </div>
+      ${content}
     </div>
-  `; 
+  `;
 }
 
-// ★ フェイク2段階認証ロジック
-window.handleAuth = async (role) => {
-  const email = document.getElementById(`input-email-${role}`).value;
-  if(!email.includes('@')) return alert('正しいメールアドレスを入力してください。');
+window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
+window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
 
-  // フェイクの認証コードを生成して送信風に見せる
-  const code = Math.floor(100000 + Math.random() * 900000);
-  alert(`✉️ 【イエノミクス セキュリティ】\n\n「${email}」宛に、2段階認証の確認メールを送信しました。\n\n※デモ用コード: ${code}`);
+window.sendAuthCode = () => {
+  const email = document.getElementById('setup-email').value;
+  if (!email.includes('@')) return alert('正しいメールアドレスを入力してください。');
+  state.tempEmail = email;
+  state.tempAuthCode = Math.floor(100000 + Math.random() * 900000).toString();
+  alert(`✉️ 【イエノミクス セキュリティ】\n\n「${email}」宛に認証コードを送信しました。\n\n※デモ用コード: ${state.tempAuthCode}`);
+  state.setupStep = 2; render();
+};
 
-  const inputCode = prompt('メールに届いた6桁の認証コードを入力してください。');
-  if(inputCode !== String(code)) return alert('認証コードが違います。セキュリティのため処理を中断します。');
-
-  alert('認証に成功しました！');
-
-  if(role === 'parent') {
+window.verifyAuthCode = async () => {
+  const inputCode = document.getElementById('setup-code').value;
+  if (inputCode !== state.tempAuthCode) return alert('認証コードが違います。');
+  
+  if (state.setupMode === 'parent') {
     const c = Math.random().toString(36).substring(2, 8).toUpperCase(); 
     await setDoc(doc(db, "families", c), { points: 0 }); 
     localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
     state.role = 'parent'; state.familyCode = c; state.view = 'home'; setupListeners();
   } else {
-    const c = document.getElementById('input-family-code').value.toUpperCase().trim(); 
-    if (!c) return; const s = await getDoc(doc(db, "families", c)); 
-    if (s.exists()) { 
-      localStorage.setItem('chibiz_role', 'child'); localStorage.setItem('chibiz_familyCode', c); 
-      state.role = 'child'; state.familyCode = c; state.view = 'home'; setupListeners(); 
-    } else alert("同期IDが違います");
+    state.setupStep = 3; render();
   }
-}
+};
 
+window.joinFamily = async () => {
+  const c = document.getElementById('setup-family-code').value.toUpperCase().trim(); 
+  if (!c) return; 
+  const s = await getDoc(doc(db, "families", c)); 
+  if (s.exists()) { 
+    localStorage.setItem('chibiz_role', 'child'); localStorage.setItem('chibiz_familyCode', c); 
+    state.role = 'child'; state.familyCode = c; state.view = 'home'; setupListeners(); 
+  } else {
+    alert("同期IDが見つかりません。親のアプリでIDを確認してください。");
+  }
+};
 
-// --- イベントロジック（アクション時にメール通知のフリをする） ---
+// --- アクション時のメール通知モック ---
 function notifyMail(title) {
-  setTimeout(() => alert(`✉️ 親のメールアドレスに「${title}」の通知を送信しました。`), 500);
+  setTimeout(() => alert(`✉️ 通知メール送信\n「${title}」の通知をメールアドレスに送信しました。`), 500);
 }
 
+// --- イベントロジック ---
 window.unlinkAccount = () => { if (confirm("リセットしますか？")) { localStorage.clear(); window.location.reload(); } };
 window.addTask = async () => { const t = document.getElementById('task-title').value, p = parseInt(document.getElementById('task-points').value), d = document.getElementById('task-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() }); setView('home'); notifyMail('新しい仕事が発注されました'); } };
 window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); notifyMail('子供から新しい報酬の提案が届きました'); } };
@@ -453,7 +492,7 @@ window.approveExchange = async (id, p) => { if (state.points < p) return alert("
 window.rejectExchange = async (id) => updateDoc(doc(db, "exchanges", id), { status: 'rejected' });
 window.depositBank = async () => { const a = parseInt(document.getElementById('bank-amount').value); if (!a || state.points < a) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() }); setView('bank'); };
 window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const m = (Date.now() - b.createdAt) / (1000*60*60*24*30); t += b.amount + Math.floor(b.amount * (0.001 * m)); deleteDoc(doc(db, "banks", b.id)); }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(t) }); setView('home'); alert(`${t}pt 引き出しました`); };
-window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); } };
+window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); notifyMail('子供に風船ギフトを送信しました'); } };
 window.openBalloon = async (id, p, m) => { alert(`風船ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 
 function setupListeners() {
