@@ -17,6 +17,10 @@ let state = {
   balloons: []  
 };
 
+// ★ おそらくここがコピーから漏れていました！
+const appDiv = document.getElementById('app');
+const bottomNav = document.getElementById('bottom-nav');
+
 const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 if (state.furigana) document.body.classList.add('furigana-on');
 
@@ -92,7 +96,6 @@ function render() {
       break;
   }
 
-  // 風船機能
   if (state.role === 'child' && state.view === 'home' && state.balloons.length > 0) {
     const b = state.balloons[0];
     html += `
@@ -109,7 +112,6 @@ function render() {
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
 }
 
-// ★ ヘッダーの右上にロゴを透かし、左上にもアイコンとして配置！
 function renderHeader() {
   return `
     <div class="flex-none p-3 pb-0">
@@ -340,17 +342,18 @@ function renderCalendar() {
   const tasks = state.tasks.filter(t => t.deadline).sort((a, b) => a.deadline - b.deadline);
   return `<h2 class="text-xl font-black mb-4 border-b-2 border-slate-800 pb-2">${rb('月間予定','げんかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="solid-box p-3 bg-slate-50 flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-red-400':'border-blue-400'}"><span class="font-bold text-xs">${t.title}</span><span class="text-[10px] font-black text-slate-400">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<p class="text-xs font-bold text-slate-300 text-center py-8">予定はありません</p>`}</div>`;
 }
-
-// ★ 最初のログイン画面にもロゴをどーんと配置！
 function renderSetup() { 
   appDiv.innerHTML = `
-    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-900">
-      <div class="w-24 h-24 mb-6 rounded-full overflow-hidden bg-white shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center justify-center">
+    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-900 relative overflow-hidden">
+      <!-- 背景にロゴを透かす -->
+      <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-lighten" onerror="this.style.display='none'" />
+      
+      <div class="w-24 h-24 mb-6 rounded-full overflow-hidden bg-white shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center justify-center relative z-10">
         <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
       </div>
-      <h1 class="text-5xl font-black text-white mb-10 tracking-tighter">イエノミクス</h1>
-      <div class="w-full max-w-sm solid-box p-6 mb-6"><h3 class="font-bold text-slate-800 mb-4 text-center">親として開始</h3><button id="btn-create-parent" class="solid-btn w-full py-4 bg-slate-800 text-white font-black">新規ID発行</button></div>
-      <div class="w-full max-w-sm solid-box p-6 bg-slate-100"><h3 class="font-bold text-slate-800 mb-4 text-center">子供として開始</h3><input id="input-family-code" placeholder="IDを入力" class="w-full p-4 solid-box rounded mb-4 text-center font-mono font-black text-xl uppercase" /><button id="btn-join-child" class="solid-btn w-full py-4 bg-blue-600 text-white font-black">連携する</button></div>
+      <h1 class="text-5xl font-black text-white mb-10 tracking-tighter relative z-10">イエノミクス</h1>
+      <div class="w-full max-w-sm solid-box p-6 mb-6 relative z-10"><h3 class="font-bold text-slate-800 mb-4 text-center">親として開始</h3><button id="btn-create-parent" class="solid-btn w-full py-4 bg-slate-800 text-white font-black">新規ID発行</button></div>
+      <div class="w-full max-w-sm solid-box p-6 bg-slate-100 relative z-10"><h3 class="font-bold text-slate-800 mb-4 text-center">子供として開始</h3><input id="input-family-code" placeholder="IDを入力" class="w-full p-4 solid-box rounded mb-4 text-center font-mono font-black text-xl uppercase" /><button id="btn-join-child" class="solid-btn w-full py-4 bg-blue-600 text-white font-black">連携する</button></div>
     </div>
   `; 
   document.getElementById('btn-create-parent').onclick = async () => { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); await setDoc(doc(db, "families", c), { points: 0 }); localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); state.role = 'parent'; state.familyCode = c; state.view = 'home'; setupListeners(); }; document.getElementById('btn-join-child').onclick = async () => { const c = document.getElementById('input-family-code').value.toUpperCase().trim(); if (!c) return; const s = await getDoc(doc(db, "families", c)); if (s.exists()) { localStorage.setItem('chibiz_role', 'child'); localStorage.setItem('chibiz_familyCode', c); state.role = 'child'; state.familyCode = c; state.view = 'home'; setupListeners(); } else alert("IDが違います"); }; 
