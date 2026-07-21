@@ -17,7 +17,6 @@ let state = {
   balloons: []  
 };
 
-// ★ おそらくここがコピーから漏れていました！
 const appDiv = document.getElementById('app');
 const bottomNav = document.getElementById('bottom-nav');
 
@@ -96,12 +95,13 @@ function render() {
       break;
   }
 
+  // 風船機能
   if (state.role === 'child' && state.view === 'home' && state.balloons.length > 0) {
     const b = state.balloons[0];
     html += `
       <div class="absolute bottom-28 right-6 z-40 float-balloon" onclick="openBalloon('${b.id}', ${b.points}, '${b.message}')">
         <div class="w-20 h-20 rounded-full overflow-hidden border-4 border-white shadow-2xl bg-white flex items-center justify-center">
-          <img src="balloon.png" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+          <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
           <span style="display:none;" class="text-4xl">🎈</span>
         </div>
       </div>
@@ -116,10 +116,7 @@ function renderHeader() {
   return `
     <div class="flex-none p-3 pb-0">
       <div class="bg-[#1a1c23] text-white rounded-[12px] p-5 flex items-center justify-between shadow-md relative h-[105px] overflow-hidden">
-        
-        <!-- 背景右上にロゴを透かして配置 -->
         <img src="logo.png" class="absolute -right-6 -top-6 w-32 h-32 opacity-20 object-cover mix-blend-lighten pointer-events-none" onerror="this.style.display='none'" />
-
         <div class="flex-1 relative z-10">
           <div class="flex items-center gap-1.5 mb-1">
              <div class="w-4 h-4 rounded-full overflow-hidden bg-white flex items-center justify-center">
@@ -142,6 +139,7 @@ function renderHeader() {
   `;
 }
 
+// ★ 右側（ジョブ欄）がはみ出ないように min-w-0 と truncate を設定！
 function renderHome() {
   const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed'].includes(t.status));
   const tJob = state.role === 'child' ? { id: 'propose', title: rb('報酬','ほうしゅう')+'を'+rb('提案','ていあん') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
@@ -185,30 +183,37 @@ function renderHome() {
           </div>
         </div>
 
-        <div class="solid-box flex flex-col min-h-0 relative">
+        <div class="solid-box flex flex-col min-h-0 relative overflow-hidden">
           <div class="flex-none p-2 border-b-2 border-slate-800 flex justify-between items-center bg-slate-100 rounded-t-[6px]">
             <h2 class="text-xs font-black text-slate-800 flex items-center gap-1">${getIcon('task')} JOB</h2>
             <button onclick="setView('calendar')" class="w-6 h-6 text-slate-500 hover:text-black transition">${getIcon('calendar')}</button>
           </div>
-          <div class="flex-1 overflow-y-auto p-2 space-y-2">
+          
+          <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-2">
             ${activeTasks.length > 0 ? activeTasks.map(t => {
               const diff = t.deadline ? t.deadline - Date.now() : null;
               const days = diff ? Math.floor(diff / (1000 * 60 * 60 * 24)) : null;
               const timeTxt = diff === null ? '--' : (diff < 0 ? '終了' : (days > 0 ? `あと${days}日` : '今日'));
               let btn = '';
               if (state.role === 'child') {
-                if (t.status === 'open') btn = `<button onclick="acceptTask('${t.id}')" class="bg-slate-800 text-white px-2 py-1 rounded text-[9px] font-black">受注</button>`;
-                else if (t.status === 'accepted') btn = `<button onclick="completeTask('${t.id}')" class="bg-blue-600 text-white px-2 py-1 rounded text-[9px] font-black">完了</button>`;
-                else btn = `<span class="text-[9px] text-slate-400 font-bold">待機</span>`;
+                if (t.status === 'open') btn = `<button onclick="acceptTask('${t.id}')" class="bg-slate-800 text-white px-2 py-1 rounded text-[9px] font-black shrink-0">受注</button>`;
+                else if (t.status === 'accepted') btn = `<button onclick="completeTask('${t.id}')" class="bg-blue-600 text-white px-2 py-1 rounded text-[9px] font-black shrink-0">完了</button>`;
+                else btn = `<span class="text-[9px] text-slate-400 font-bold shrink-0">待機</span>`;
               } else {
-                if (t.status === 'completed') btn = `<button onclick="approveTask('${t.id}', ${t.points})" class="bg-blue-600 text-white px-2 py-1 rounded text-[9px] font-black">付与</button>`;
-                else if (t.status === 'proposed') btn = `<button onclick="approveProposal('${t.id}')" class="bg-slate-800 text-white px-2 py-1 rounded text-[9px] font-black">承認</button>`;
-                else btn = `<span class="text-[9px] text-slate-400 font-bold">進行中</span>`;
+                if (t.status === 'completed') btn = `<button onclick="approveTask('${t.id}', ${t.points})" class="bg-blue-600 text-white px-2 py-1 rounded text-[9px] font-black shrink-0">付与</button>`;
+                else if (t.status === 'proposed') btn = `<button onclick="approveProposal('${t.id}')" class="bg-slate-800 text-white px-2 py-1 rounded text-[9px] font-black shrink-0">承認</button>`;
+                else btn = `<span class="text-[9px] text-slate-400 font-bold shrink-0">進行中</span>`;
               }
               return `
-                <div class="border-b border-slate-100 pb-2 flex flex-col gap-1">
-                  <div class="flex justify-between items-start"><span class="font-bold text-[11px] text-slate-800 leading-tight">${t.title}</span><span class="text-[9px] font-black text-slate-400">${timeTxt}</span></div>
-                  <div class="flex justify-between items-center mt-1"><span class="text-[10px] font-black text-blue-600">${t.points} pt</span>${btn}</div>
+                <div class="border-b border-slate-100 pb-2 flex flex-col gap-1 min-w-0">
+                  <div class="flex justify-between items-start gap-1 min-w-0">
+                    <span class="font-bold text-[11px] text-slate-800 leading-tight truncate flex-1">・${t.title}</span>
+                    <span class="text-[9px] font-black text-slate-400 shrink-0">${timeTxt}</span>
+                  </div>
+                  <div class="flex justify-between items-center mt-1">
+                    <span class="text-[10px] font-black text-blue-600 shrink-0">${t.points} pt</span>
+                    ${btn}
+                  </div>
                 </div>
               `;
             }).join('') : `<p class="text-center text-[10px] font-bold text-slate-300 mt-6">現在、仕事はありません</p>`}
@@ -242,7 +247,7 @@ function renderBank() {
     </div>
     ${state.role === 'child' ? `
       <div class="flex gap-2 mb-4">
-        <input type="number" id="bank-amount" placeholder="金額を入力" class="flex-1 p-3 solid-box border-emerald-800 font-bold text-sm" />
+        <input type="number" id="bank-amount" placeholder="金額" class="flex-1 p-3 solid-box border-emerald-800 font-bold text-sm" />
         <button onclick="depositBank()" class="solid-btn px-6 bg-emerald-800 text-white font-black">預ける</button>
       </div>
       ${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-black bg-white text-emerald-800 border-emerald-800">全額引き出す</button>` : ''}
@@ -277,9 +282,9 @@ function renderInvest() {
                 <span class="text-[10px] font-bold ${color} ml-1">(${diff >= 0 ? '+' : ''}${diff})</span>
               </div>
             </div>
-            <div class="flex justify-between text-[10px] font-bold text-slate-400 px-1">
+            <div class="flex justify-between text-[10px] font-bold text-slate-400 px-1 items-center">
               <span>購入時: ${inv.investedPoints} pt</span>
-              ${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-purple-700 underline">売却する</button>` : ''}
+              ${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-purple-700 underline font-black bg-purple-100 px-2 py-1 rounded">売却する</button>` : ''}
             </div>
           </div>
         `;
@@ -342,12 +347,11 @@ function renderCalendar() {
   const tasks = state.tasks.filter(t => t.deadline).sort((a, b) => a.deadline - b.deadline);
   return `<h2 class="text-xl font-black mb-4 border-b-2 border-slate-800 pb-2">${rb('月間予定','げんかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="solid-box p-3 bg-slate-50 flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-red-400':'border-blue-400'}"><span class="font-bold text-xs">${t.title}</span><span class="text-[10px] font-black text-slate-400">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<p class="text-xs font-bold text-slate-300 text-center py-8">予定はありません</p>`}</div>`;
 }
+
 function renderSetup() { 
   appDiv.innerHTML = `
     <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-900 relative overflow-hidden">
-      <!-- 背景にロゴを透かす -->
       <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-lighten" onerror="this.style.display='none'" />
-      
       <div class="w-24 h-24 mb-6 rounded-full overflow-hidden bg-white shadow-[0_0_20px_rgba(255,255,255,0.2)] flex items-center justify-center relative z-10">
         <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
       </div>
@@ -371,8 +375,17 @@ window.addTicket2 = async () => { const t = document.getElementById('t-title').v
 window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
 window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); };
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
+
+// ★ 売却時に確認ダイアログを出して、確実に売れるように修正
+window.sellCustom = async (id, v) => { 
+  if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) {
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); 
+    await deleteDoc(doc(db, "investments", id)); 
+    setView('invest');
+  }
+};
+
 window.investCustom = async (n) => { const a = parseInt(document.getElementById('invest-amount').value); if (!a || state.points < a) return alert("pt不足"); const r = n === '日本' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); const ex = state.investments.find(i => i.name === n); if (ex) { await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); } else { await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: n, investedPoints: a, shares: a / r, createdAt: Date.now() }); } setView('invest'); };
-window.sellCustom = async (id, v) => { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); };
 window.requestExchange = async () => { const a = parseInt(document.getElementById('exchange-amount').value); if (!a || state.points < a) return alert("pt不足"); await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() }); setView('home'); };
 window.approveExchange = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); await updateDoc(doc(db, "exchanges", id), { status: 'approved' }); };
 window.rejectExchange = async (id) => updateDoc(doc(db, "exchanges", id), { status: 'rejected' });

@@ -4,7 +4,7 @@ html, body {
   width: 100%; height: 100%; 
   overflow: hidden; 
   background-color: #0f172a; 
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  font-family: "Hiragino Sans", "Meiryo", sans-serif;
   overscroll-behavior: none;
 }
 
@@ -19,54 +19,28 @@ html, body {
   position: relative;
 }
 
-/* ソリッドなボーダーUI */
-.solid-box {
-  border: 2px solid #1e293b;
-  background: #ffffff;
-  border-radius: 8px;
-}
-
-.solid-btn {
-  border: 2px solid #1e293b;
-  background: #ffffff;
-  border-radius: 8px;
-  transition: all 0.1s ease;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer;
-}
+.solid-box { border: 2px solid #1e293b; background: #ffffff; border-radius: 8px; }
+.solid-btn { border: 2px solid #1e293b; background: #ffffff; border-radius: 8px; transition: all 0.1s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
 .solid-btn:active { background: #1e293b; color: #ffffff; transform: scale(0.97); }
 
-/* カッコいいボトムナビ（タブバー） */
-.nav-tab {
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  color: #94a3b8; font-weight: 700; font-size: 10px; gap: 4px;
-  transition: color 0.2s;
-}
-.nav-tab svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+/* ボトムナビ */
+.nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #94a3b8; font-weight: 700; font-size: 10px; gap: 4px; }
+.nav-tab svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2.5; fill: none; }
 .nav-tab.active { color: #1e293b; }
 
-.fade-in { animation: fadeIn 0.2s ease-out forwards; }
-@keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-
-/* 風船プカプカアニメーション */
+/* 風船アニメーション */
 .float-balloon { animation: float 3s ease-in-out infinite; cursor: pointer; }
-@keyframes float {
-  0% { transform: translateY(0) rotate(-5deg); }
-  50% { transform: translateY(-15px) rotate(5deg); }
-  100% { transform: translateY(0) rotate(-5deg); }
-}
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-20px) rotate(3deg); } }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* ★ フリガナ（ルビ）を文字の真上に固定 */
+ruby { display: inline-flex; flex-direction: column-reverse; vertical-align: bottom; align-items: center; line-height: 1; }
+rt { display: none; font-size: 0.6em; line-height: 1.2; color: #64748b; margin-bottom: 2px; }
+body.furigana-on rt { display: block; }
+
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-/* ★ フリガナ（ルビ）の修正版（横に崩れないように透明度でコントロール） */
-ruby rt {
-  opacity: 0;
-  font-size: 0.6em;
-  color: #64748b;
-  transition: opacity 0.2s;
-}
-body.furigana-on ruby rt {
-  opacity: 1;
+/* ★ スマホ入力時の画面ズーム防止！(iOSは文字が16px未満だと勝手にズームするのを防ぐ) ★ */
+input, textarea, select {
+  font-size: 16px !important;
 }
