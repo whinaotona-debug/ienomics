@@ -1,6 +1,5 @@
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-// createUserWithEmailAndPassword は後で使うので消さず、新しく更新用の機能をインポート
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/tibiz/"; 
@@ -23,7 +22,7 @@ let state = {
   setupMode: null, 
   isSending: false,
   message: '',
-  requirePasswordSetup: false // メールから戻ってきた時のパスワード設定フラグ
+  requirePasswordSetup: false 
 };
 
 const appDiv = document.getElementById('app');
@@ -56,7 +55,7 @@ document.addEventListener('click', (e) => {
 const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 if (state.furigana) document.body.classList.add('furigana-on');
 
-// ★ メールリンクを踏んで戻ってきた時の処理
+// ★ エラーを修正したメールリンク認証ロジック
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
@@ -68,31 +67,24 @@ window.onload = async () => {
       const result = await signInWithEmailLink(auth, email, window.location.href);
       window.localStorage.removeItem('emailForSignIn');
       
-      // ★ もし新規登録（パスワードが未設定）ならパスワード設定画面へ飛ばす
-      if (result.additionalUserInfo.isNewUser) {
+      const uid = result.user.uid;
+      
+      // DBにユーザーデータがあるか確認（これで新規か既存かを確実に判定）
+      const userDoc = await getDoc(doc(db, "users", uid));
+      
+      if (!userDoc.exists()) {
+        // ★ データがない ＝ 新規登録 ＝ パスワード設定画面へ！
         state.requirePasswordSetup = true;
-        // URLをきれいに掃除する
         window.history.replaceState(null, null, window.location.pathname);
         render();
-        return; // ここで一旦止める
-      }
-
-      // 既存ユーザーのログインなら、そのまま開始
-      const uid = result.user.uid;
-      const userDoc = await getDoc(doc(db, "users", uid));
-      if (userDoc.exists()) {
+      } else {
+        // ★ 既存ユーザーなら普通にログインして開始
         const c = userDoc.data().familyCode;
         localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
         state.role = 'parent'; state.familyCode = c; state.view = 'home';
         window.history.replaceState(null, null, window.location.pathname);
         setupListeners();
-      } else {
-        // 万が一DBにデータがない場合は新規と同じ扱いにする
-        state.requirePasswordSetup = true;
-        window.history.replaceState(null, null, window.location.pathname);
-        render();
       }
-
     } catch (error) {
       alert("エラーが発生しました: " + error.message);
     }
@@ -204,7 +196,6 @@ function render() {
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
 }
 
-// ★ メールのリンクを踏んだあとの「パスワード設定画面」
 function renderPasswordSetup() {
   appDiv.innerHTML = `
     <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
@@ -222,17 +213,14 @@ function renderPasswordSetup() {
   `;
 }
 
-// パスワードを保存してアプリを開始する処理
 window.saveNewPassword = async () => {
   const pass = document.getElementById('new-password').value;
   if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
 
   try {
     const user = auth.currentUser;
-    // Firebaseにパスワードを登録
     await updatePassword(user, pass);
     
-    // 同期IDを発行してDBに保存
     const c = Math.random().toString(36).substring(2, 8).toUpperCase(); 
     await setDoc(doc(db, "users", user.uid), { familyCode: c, role: 'parent' });
     await setDoc(doc(db, "families", c), { points: 0, childLinked: false }); 
@@ -393,7 +381,6 @@ function renderModal(content) {
   return `<div class="flex-1 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-sm z-30 absolute inset-0"><div class="solid-box w-full max-h-[90%] flex flex-col relative shadow-[0_20px_40px_rgba(0,0,0,0.08)] animate-in zoom-in-95 duration-200"><button onclick="setView('home')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 font-bold text-slate-500 z-10 transition">✕</button><div class="flex-1 overflow-y-auto p-6 min-h-0">${content}</div></div></div>`;
 }
 
-// 銀行などの各種機能のUI
 function renderBank() {
   let totalDeposit = 0, totalInterest = 0;
   state.banks.forEach(b => {
@@ -514,7 +501,6 @@ function renderCalendar() {
   return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-6 h-6 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`;
 }
 
-// ★ ここから「パスワード認証」を追加した新しい登録フロー
 function renderSetup() {
   let content = '';
 
@@ -533,8 +519,8 @@ function renderSetup() {
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
         <button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
         <h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">親のアカウント設定</h3>
-        <button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める（メール認証）</button>
-        <button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">既存のアカウントにログイン</button>
+        <button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める</button>
+        <button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">別のアカウントにログイン</button>
       </div>
     `;
   } else if (state.setupMode === 'parent_register') {
@@ -583,7 +569,6 @@ function renderSetup() {
   appDiv.innerHTML = `
     <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
       <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
-      
       <div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex items-center justify-center relative z-10 border border-slate-100">
         <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
       </div>
@@ -596,7 +581,6 @@ function renderSetup() {
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
 
-// ★ 本物のメール送信（新規登録用）
 window.sendRealEmailLink = async () => {
   const email = document.getElementById('setup-email').value;
   if (!email.includes('@')) return alert('正しいメールアドレスを入力してください。');
@@ -607,7 +591,7 @@ window.sendRealEmailLink = async () => {
   try {
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
     window.localStorage.setItem('emailForSignIn', email);
-    window.localStorage.setItem('tempSetupMode', 'parent');
+    window.localStorage.setItem('tempSetupMode', state.setupMode);
     
     state.isSending = false;
     state.message = email;
@@ -619,7 +603,6 @@ window.sendRealEmailLink = async () => {
   }
 };
 
-// ★ ログイン処理（別端末用）
 window.loginParent = async () => {
   const email = document.getElementById('login-email').value;
   const pass = document.getElementById('login-password').value;
@@ -630,7 +613,6 @@ window.loginParent = async () => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
     const uid = userCredential.user.uid;
-    
     const userDoc = await getDoc(doc(db, "users", uid));
     if (userDoc.exists()) {
       const c = userDoc.data().familyCode;
@@ -666,7 +648,6 @@ window.unlinkAccount = async () => {
   } 
 };
 
-// 以下データ操作
 window.addTask = async () => { const t = document.getElementById('task-title').value, p = parseInt(document.getElementById('task-points').value), d = document.getElementById('task-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() }); setView('home'); } };
 window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); } };
 window.approveTask = async (id, p) => { await updateDoc(doc(db, "tasks", id), { status: 'approved' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); };
