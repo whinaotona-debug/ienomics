@@ -3,33 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Chibiz (Tech Kids Grand Prix Ver.)</title>
+  <!-- ★ 6番: サイト名をイエノミクスに統一 -->
+  <title>イエノミクス</title>
   
-  <!-- Tailwind CSS と Chart.js の読み込み -->
+  <!-- ★ 7番: アプリアイコン（ファビコンとスマホホーム画面用）の設定 -->
+  <link rel="icon" type="image/png" href="logo.png">
+  <link rel="apple-touch-icon" href="logo.png">
+  
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
-  <!-- ★ 分割したCSSを読み込む -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <div class="app-container max-w-[500px]">
-    
-    <!-- メインコンテンツ領域 -->
     <div id="app" class="flex-1 flex flex-col min-h-0 w-full z-10 relative">
       <div class="h-full flex items-center justify-center font-bold text-slate-400">Loading...</div>
     </div>
-    
-    <!-- ボトムナビ -->
     <nav id="bottom-nav" class="flex-none h-[88px] bg-slate-50 border-t-2 border-slate-800 z-20 hidden px-2 pb-2">
-      <!-- JSでレンダリングされます -->
     </nav>
-
   </div>
 
-  <!-- ★ 分割したメインのプログラムを読み込む (type="module" が重要！) -->
-  <script type="module" src="app.js"></script>
+  <script type="module" src="app.js?v=101"></script>
 
 </body>
 </html>

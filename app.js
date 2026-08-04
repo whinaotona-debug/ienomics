@@ -7,9 +7,9 @@ const APP_URL = "https://whinaotona-debug.github.io/tibiz/";
 let investChartInstance = null; 
 
 let state = {
-  role: localStorage.getItem('chibiz_role'),
-  familyCode: localStorage.getItem('chibiz_familyCode'),
-  furigana: localStorage.getItem('chibiz_furigana') === 'true',
+  role: localStorage.getItem('ienomics_role'), // ★ chibiz を ienomics に変更
+  familyCode: localStorage.getItem('ienomics_familyCode'),
+  furigana: localStorage.getItem('ienomics_furigana') === 'true',
   view: 'home',
   points: 0,
   childLinked: true,
@@ -55,7 +55,6 @@ document.addEventListener('click', (e) => {
 const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 if (state.furigana) document.body.classList.add('furigana-on');
 
-// ★ エラーを修正したメールリンク認証ロジック
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
@@ -66,21 +65,16 @@ window.onload = async () => {
     try {
       const result = await signInWithEmailLink(auth, email, window.location.href);
       window.localStorage.removeItem('emailForSignIn');
-      
       const uid = result.user.uid;
-      
-      // DBにユーザーデータがあるか確認（これで新規か既存かを確実に判定）
       const userDoc = await getDoc(doc(db, "users", uid));
       
       if (!userDoc.exists()) {
-        // ★ データがない ＝ 新規登録 ＝ パスワード設定画面へ！
         state.requirePasswordSetup = true;
         window.history.replaceState(null, null, window.location.pathname);
         render();
       } else {
-        // ★ 既存ユーザーなら普通にログインして開始
         const c = userDoc.data().familyCode;
-        localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
+        localStorage.setItem('ienomics_role', 'parent'); localStorage.setItem('ienomics_familyCode', c); 
         state.role = 'parent'; state.familyCode = c; state.view = 'home';
         window.history.replaceState(null, null, window.location.pathname);
         setupListeners();
@@ -95,7 +89,7 @@ window.onload = async () => {
 
 window.toggleFurigana = () => {
   state.furigana = !state.furigana;
-  localStorage.setItem('chibiz_furigana', state.furigana);
+  localStorage.setItem('ienomics_furigana', state.furigana);
   document.body.classList.toggle('furigana-on', state.furigana);
   render();
 };
@@ -103,7 +97,8 @@ window.toggleFurigana = () => {
 function getIcon(name) {
   const icons = {
     'home': `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
-    'ticket': `<path d="M15 5H9a2 2 0 00-2 2v3a2 2 0 010 4v3a2 2 0 002 2h6a2 2 0 002-2v-3a2 2 0 010-4V7a2 2 0 00-2-2z"></path><path d="M9 9h6M9 15h6"></path>`,
+    // ★ 10番: チケットのアイコンを切り取り線のあるリアルなものに変更
+    'ticket': `<path d="M15 5H9a2 2 0 00-2 2v3a2 2 0 010 4v3a2 2 0 002 2h6a2 2 0 002-2v-3a2 2 0 010-4V7a2 2 0 00-2-2z"></path><line x1="9" y1="9" x2="9" y2="15" stroke-dasharray="2 2"></line><line x1="15" y1="9" x2="15" y2="15" stroke-dasharray="2 2"></line>`,
     'settings': `<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>`,
     'history': `<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>`,
     'propose': `<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>`,
@@ -112,10 +107,43 @@ function getIcon(name) {
     'bank': `<rect x="3" y="10" width="18" height="10" rx="2" ry="2"></rect><path d="M7 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M12 14v2"></path>`,
     'task': `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>`,
     'calendar': `<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>`,
-    'balloon': `<path d="M12 2c-2.8 0-5 2.2-5 5 0 3.8 5 8 5 8s5-4.2 5-8c0-2.8-2.2-5-5-5z"></path><path d="M12 15v6"></path><path d="M10 21h4"></path>`
+    // ★ 11番: ギフトをプレゼントボックスに変更
+    'gift': `<polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>`,
+    'eye': `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`,
+    'eye-off': `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`,
+    'trash': `<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>`
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
+
+// ★ 5番: 期限の表示を計算する関数
+function formatTimeLeft(deadlineTime) {
+  if (!deadlineTime) return '--';
+  const diff = deadlineTime - Date.now();
+  if (diff < 0) return '期限切れ';
+  
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days >= 1) return `あと${days}日`;
+  
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours >= 1) return `あと${hours}時間`;
+  
+  const minutes = Math.floor(diff / (1000 * 60));
+  return `あと${minutes}分`;
+}
+
+// パスワードの表示切り替えロジック
+window.togglePassword = (inputId, eyeIconId) => {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(eyeIconId);
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.innerHTML = getIcon('eye-off');
+  } else {
+    input.type = 'password';
+    icon.innerHTML = getIcon('eye');
+  }
+};
 
 function getMarketRates() {
   const today = new Date();
@@ -154,7 +182,7 @@ function render() {
   bottomNav.classList.remove('hidden');
   bottomNav.innerHTML = `
     <div class="w-full h-full flex justify-around items-center bg-white shadow-[0_-5px_20px_rgba(0,0,0,0.02)] pb-2 pt-1">
-      <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span class="mt-0.5">${rb('家','ホーム')}</span></button>
+      <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span class="mt-0.5">ホーム</span></button>
       <button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span class="mt-0.5">チケット</span></button>
       <button onclick="setView('history')" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span class="mt-0.5">${rb('履歴','りれき')}</span></button>
       <button onclick="setView('settings')" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span class="mt-0.5">${rb('設定','せってい')}</span></button>
@@ -186,7 +214,7 @@ function render() {
       <div class="absolute bottom-28 right-6 z-40 float-balloon" onclick="openBalloon('${b.id}', ${b.points}, '${b.message}')">
         <div class="w-16 h-16 rounded-full overflow-hidden shadow-lg bg-white flex items-center justify-center border border-slate-100">
           <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-          <span style="display:none;" class="text-2xl text-pink-500">${getIcon('balloon')}</span>
+          <span style="display:none;" class="text-2xl text-pink-500">${getIcon('gift')}</span>
         </div>
       </div>
     `;
@@ -204,9 +232,20 @@ function renderPasswordSetup() {
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95">
         <h3 class="font-black text-slate-800 mb-2 text-lg">パスワードを設定</h3>
         <p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
-          メールの確認が完了しました。<br>次回以降のログインに使うパスワードを決めてください。
+          次回以降のログインに使う<br>パスワードを決めてください。
         </p>
-        <input type="password" id="new-password" placeholder="パスワード（6文字以上）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+        
+        <!-- ★ 1番と12番: パスワード確認用入力と目のマーク -->
+        <div class="password-wrapper">
+          <input type="password" id="new-password" placeholder="パスワード（6文字以上）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+          <div id="eye-new" class="password-eye" onclick="togglePassword('new-password', 'eye-new')">${getIcon('eye')}</div>
+        </div>
+        
+        <div class="password-wrapper">
+          <input type="password" id="new-password-confirm" placeholder="もう一度入力（確認用）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+          <div id="eye-confirm" class="password-eye" onclick="togglePassword('new-password-confirm', 'eye-confirm')">${getIcon('eye')}</div>
+        </div>
+
         <button onclick="saveNewPassword()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md shadow-blue-200">設定して開始</button>
       </div>
     </div>
@@ -215,7 +254,10 @@ function renderPasswordSetup() {
 
 window.saveNewPassword = async () => {
   const pass = document.getElementById('new-password').value;
+  const passConf = document.getElementById('new-password-confirm').value;
+  
   if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
+  if (pass !== passConf) return alert("パスワードが一致しません！");
 
   try {
     const user = auth.currentUser;
@@ -225,8 +267,8 @@ window.saveNewPassword = async () => {
     await setDoc(doc(db, "users", user.uid), { familyCode: c, role: 'parent' });
     await setDoc(doc(db, "families", c), { points: 0, childLinked: false }); 
     
-    localStorage.setItem('chibiz_role', 'parent'); 
-    localStorage.setItem('chibiz_familyCode', c); 
+    localStorage.setItem('ienomics_role', 'parent'); 
+    localStorage.setItem('ienomics_familyCode', c); 
     
     state.requirePasswordSetup = false;
     state.role = 'parent'; 
@@ -302,7 +344,7 @@ function renderHome() {
             <div>
               <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1 tracking-wider">${rb('仕事','しごと')}</p>
               <button onclick="setView('${tJob.id}')" class="solid-btn w-full py-3 hover:bg-slate-50 flex-row gap-2">
-                <div class="w-4 h-4 text-slate-600">${getIcon('propose')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${tJob.title}</span>
+                <div class="w-4 h-4 text-slate-600">${getIcon('propose')}</div><span class="text-[9px] font-bold text-slate-700 mt-0.5">${tJob.title}</span>
               </button>
             </div>
             <div>
@@ -329,7 +371,7 @@ function renderHome() {
             </div>
             ${state.role === 'parent' ? `
               <button onclick="setView('balloonSend')" class="solid-btn w-full py-2.5 mt-2 bg-slate-900 border-slate-900 text-white hover:bg-slate-800">
-                <div class="flex items-center gap-1.5"><div class="w-3 h-3">${getIcon('balloon')}</div><span class="text-[10px] font-bold">ギフト送信</span></div>
+                <div class="flex items-center gap-1.5"><div class="w-3 h-3">${getIcon('gift')}</div><span class="text-[10px] font-bold">ギフト送信</span></div>
               </button>
             ` : ''}
           </div>
@@ -344,24 +386,31 @@ function renderHome() {
           </div>
           <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1">
             ${activeTasks.length > 0 ? activeTasks.map(t => {
-              const diff = t.deadline ? t.deadline - Date.now() : null;
-              const days = diff ? Math.floor(diff / (1000 * 60 * 60 * 24)) : null;
-              const timeTxt = diff === null ? '--' : (diff < 0 ? '終了' : (days > 0 ? `あと${days}日` : '今日'));
+              const timeTxt = formatTimeLeft(t.deadline);
+              
               let btn = '';
+              let trashBtn = '';
+
               if (state.role === 'child') {
-                if (t.status === 'open') btn = `<button onclick="acceptTask('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0">受注</button>`;
+                if (t.status === 'open') btn = `<button onclick="acceptTask('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">受注</button>`;
                 else if (t.status === 'accepted') btn = `<button onclick="completeTask('${t.id}')" class="solid-btn px-3 py-1.5 text-[9px] font-bold shrink-0 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100">完了</button>`;
                 else btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">待機</span>`;
               } else {
-                if (t.status === 'completed') btn = `<button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0">付与</button>`;
-                else if (t.status === 'proposed') btn = `<button onclick="approveProposal('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0">承認</button>`;
+                // ★ 14番: 親は自分が発注したオープン状態の仕事を削除できる
+                if (t.status === 'open') trashBtn = `<button onclick="deleteTask('${t.id}')" class="text-red-400 hover:text-red-600 w-4 h-4 shrink-0 transition">${getIcon('trash')}</button>`;
+                
+                if (t.status === 'completed') btn = `<button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>`;
+                else if (t.status === 'proposed') btn = `<button onclick="approveProposal('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">承認</button>`;
                 else btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">進行中</span>`;
               }
               return `
                 <div class="p-3 flex flex-col gap-1.5 min-w-0 bg-white hover:bg-slate-50 rounded-xl transition border border-transparent hover:border-slate-100">
                   <div class="flex justify-between items-center gap-2 min-w-0">
                     <span class="font-bold text-xs text-slate-700 truncate flex-1">${t.title}</span>
-                    <span class="text-[9px] font-medium text-slate-400 shrink-0">${timeTxt}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-[9px] font-medium ${timeTxt.includes('切れ')?'text-red-500':'text-slate-400'} shrink-0">${timeTxt}</span>
+                      ${trashBtn}
+                    </div>
                   </div>
                   <div class="flex justify-between items-center mt-0.5">
                     <span class="text-xs font-black text-slate-800 shrink-0">${t.points} <span class="text-[9px] font-semibold text-slate-400">pt</span></span>
@@ -378,7 +427,7 @@ function renderHome() {
 }
 
 function renderModal(content) {
-  return `<div class="flex-1 flex items-center justify-center p-4 bg-slate-900/10 backdrop-blur-sm z-30 absolute inset-0"><div class="solid-box w-full max-h-[90%] flex flex-col relative shadow-[0_20px_40px_rgba(0,0,0,0.08)] animate-in zoom-in-95 duration-200"><button onclick="setView('home')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 font-bold text-slate-500 z-10 transition">✕</button><div class="flex-1 overflow-y-auto p-6 min-h-0">${content}</div></div></div>`;
+  return `<div class="flex-1 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md z-30 absolute inset-0"><div class="solid-box w-full max-h-[90%] flex flex-col relative shadow-[0_20px_40px_rgba(0,0,0,0.08)] animate-in zoom-in-95 duration-200"><button onclick="setView('home')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 font-bold text-slate-500 z-10 transition">✕</button><div class="flex-1 overflow-y-auto p-6 min-h-0">${content}</div></div></div>`;
 }
 
 function renderBank() {
@@ -475,7 +524,7 @@ function drawInvestChart() {
   });
 }
 
-function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-500">${getIcon('balloon')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
+function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
 function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
 function renderTaskCreate() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('仕事発注','しごとはっちゅう')}</h2><input type="text" id="task-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="task-points" placeholder="報酬金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">発注する</button>`; }
 function renderExchange() {
@@ -498,12 +547,11 @@ function renderHistory() {
 function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
 function renderCalendar() {
   const tasks = state.tasks.filter(t => t.deadline).sort((a, b) => a.deadline - b.deadline);
-  return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-6 h-6 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`;
+  return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`;
 }
 
 function renderSetup() {
   let content = '';
-
   if (state.isSending) {
     content = `<div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10"><div class="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-slate-500">通信中...</p></div>`;
   } else if (!state.setupMode) {
@@ -519,8 +567,8 @@ function renderSetup() {
       <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10">
         <button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
         <h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">親のアカウント設定</h3>
-        <button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める</button>
-        <button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">別のアカウントにログイン</button>
+        <button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める（メール認証）</button>
+        <button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">既存のアカウントにログイン</button>
       </div>
     `;
   } else if (state.setupMode === 'parent_register') {
@@ -550,7 +598,12 @@ function renderSetup() {
         <button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
         <h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">ログイン（親）</h3>
         <input type="email" id="login-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-3 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" />
-        <input type="password" id="login-password" placeholder="パスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" />
+        
+        <div class="password-wrapper">
+          <input type="password" id="login-password" placeholder="パスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" />
+          <div id="eye-login" class="password-eye" onclick="togglePassword('login-password', 'eye-login')">${getIcon('eye')}</div>
+        </div>
+        
         <button onclick="loginParent()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">ログイン</button>
       </div>
     `;
@@ -584,22 +637,15 @@ window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render
 window.sendRealEmailLink = async () => {
   const email = document.getElementById('setup-email').value;
   if (!email.includes('@')) return alert('正しいメールアドレスを入力してください。');
-
   state.isSending = true; render();
   const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
-
   try {
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
     window.localStorage.setItem('emailForSignIn', email);
-    window.localStorage.setItem('tempSetupMode', state.setupMode);
-    
-    state.isSending = false;
-    state.message = email;
-    state.setupStep = 2; 
-    render();
+    window.localStorage.setItem('tempSetupMode', 'parent');
+    state.isSending = false; state.message = email; state.setupStep = 2; render();
   } catch (error) {
-    state.isSending = false; render();
-    alert("エラーが発生しました: " + error.message);
+    state.isSending = false; render(); alert("エラーが発生しました: " + error.message);
   }
 };
 
@@ -607,24 +653,19 @@ window.loginParent = async () => {
   const email = document.getElementById('login-email').value;
   const pass = document.getElementById('login-password').value;
   if (!email || !pass) return alert('入力してください。');
-  
   state.isSending = true; render();
-
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, pass);
     const uid = userCredential.user.uid;
     const userDoc = await getDoc(doc(db, "users", uid));
     if (userDoc.exists()) {
       const c = userDoc.data().familyCode;
-      localStorage.setItem('chibiz_role', 'parent'); localStorage.setItem('chibiz_familyCode', c); 
+      localStorage.setItem('ienomics_role', 'parent'); localStorage.setItem('ienomics_familyCode', c); 
       state.role = 'parent'; state.familyCode = c; state.view = 'home'; state.isSending = false;
       setupListeners();
-    } else {
-      throw new Error("ユーザーデータが見つかりません");
-    }
+    } else { throw new Error("ユーザーデータが見つかりません"); }
   } catch (error) {
-    state.isSending = false; render();
-    alert("ログイン失敗: " + error.message);
+    state.isSending = false; render(); alert("ログイン失敗: " + error.message);
   }
 };
 
@@ -634,19 +675,17 @@ window.joinFamily = async () => {
   const s = await getDoc(doc(db, "families", c)); 
   if (s.exists()) { 
     await updateDoc(doc(db, "families", c), { childLinked: true });
-    localStorage.setItem('chibiz_role', 'child'); localStorage.setItem('chibiz_familyCode', c); 
+    localStorage.setItem('ienomics_role', 'child'); localStorage.setItem('ienomics_familyCode', c); 
     state.role = 'child'; state.familyCode = c; state.view = 'home'; setupListeners(); 
   } else {
     alert("同期IDが見つかりません。親のアプリでIDを確認してください。");
   }
 };
 
-window.unlinkAccount = async () => { 
-  if (confirm("ログアウトして最初に戻りますか？")) { 
-    await signOut(auth); 
-    localStorage.clear(); window.location.reload(); 
-  } 
-};
+window.unlinkAccount = async () => { if (confirm("ログアウトして最初に戻りますか？")) { await signOut(auth); localStorage.clear(); window.location.reload(); } };
+
+// ★ 14番: 削除機能追加
+window.deleteTask = async (id) => { if(confirm("この発注を取り消しますか？")) { await deleteDoc(doc(db, "tasks", id)); setView('home'); } };
 
 window.addTask = async () => { const t = document.getElementById('task-title').value, p = parseInt(document.getElementById('task-points').value), d = document.getElementById('task-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() }); setView('home'); } };
 window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); } };
