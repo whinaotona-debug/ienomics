@@ -1,10 +1,10 @@
-/* モダンで洗練された大人UIへ変更 */
+/* 洗練された大人のモダンUI */
 html, body { 
   margin: 0; padding: 0; 
   width: 100%; height: 100%; 
   overflow: hidden; 
-  background-color: #f1f5f9; /* 外側の背景を落ち着いたグレーに */
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f3f4f6; /* 少し明るいグレーで統一感 */
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Arial, sans-serif;
   overscroll-behavior: none;
 }
 
@@ -15,46 +15,56 @@ html, body {
   height: 100%; height: 100dvh;
   margin: 0 auto;
   display: flex; flex-direction: column;
-  box-shadow: 0 0 30px rgba(0,0,0,0.05); /* 影を柔らかく上品に */
+  box-shadow: 0 0 30px rgba(0,0,0,0.03); 
   position: relative;
 }
 
-/* 美しい白カードと柔らかい影 */
+/* 大人の白カード */
 .solid-box { 
   background: #ffffff; 
-  border-radius: 16px; /* 角丸を大きめに */
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03); /* ほんのり浮き上がる影 */
-  border: 1px solid #f1f5f9; /* 極細で上品な境界線 */
+  border-radius: 16px; 
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02); /* かなり薄い上品な影 */
+  border: 1px solid #e2e8f0; 
 }
 
-/* 押し心地の良いモダンボタン */
+/* 押し心地の良いフラットボタン */
 .solid-btn { 
   background: #ffffff; 
   border-radius: 12px; 
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
   display: flex; flex-direction: column; align-items: center; justify-content: center; 
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid #e2e8f0;
+  color: #334155;
 }
 .solid-btn:active { 
-  transform: scale(0.95); 
-  opacity: 0.8; 
+  transform: scale(0.96); 
+  background-color: #f1f5f9;
+}
+/* 強調したいボタン（プライマリボタン） */
+.primary-btn {
+  background-color: #0f172a;
+  color: #ffffff;
+  border: none;
+}
+.primary-btn:active {
+  background-color: #334155;
 }
 
-/* ボトムナビ（PayPayのようなクリーンなタブ） */
+/* ボトムナビ */
 .nav-tab { 
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; 
-  color: #94a3b8; font-weight: 600; font-size: 10px; gap: 5px; 
+  color: #94a3b8; font-weight: 600; font-size: 10px; gap: 4px; 
   transition: color 0.2s;
 }
-.nav-tab svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 2; fill: none; }
-.nav-tab.active { color: #2563eb; } /* アクティブ時は鮮やかなブルー */
+.nav-tab svg { width: 22px; height: 22px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+.nav-tab.active { color: #0f172a; } /* アクティブ時はシックな黒に */
 
 /* 風船プカプカ */
 .float-balloon { animation: float 4s ease-in-out infinite; cursor: pointer; }
-@keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-15px) rotate(2deg); } }
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-10px) rotate(2deg); } }
 
-/* フリガナ（ルビ）設定 */
+/* フリガナ設定 */
 ruby { display: inline-flex; flex-direction: column-reverse; vertical-align: bottom; align-items: center; line-height: 1; }
 rt { display: none; font-size: 0.6em; line-height: 1.2; color: #94a3b8; margin-bottom: 2px; }
 body.furigana-on rt { display: block; }
@@ -62,7 +72,4 @@ body.furigana-on rt { display: block; }
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-/* スマホでの自動ズーム防止 */
-input, textarea, select {
-  font-size: 16px !important;
-}
+input, textarea, select { font-size: 16px !important; }
