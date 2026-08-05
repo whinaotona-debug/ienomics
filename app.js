@@ -1,5 +1,3 @@
---- START OF FILE text/javascript ---
-
 import { state } from './state.js';
 import { render } from './ui.js';
 import { applyFuriganaState, requestPushPermission, sendPushNotification } from './utils.js';
@@ -11,9 +9,7 @@ const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 applyFuriganaState();
-
-// ★ スマホで画面が開かなくなる原因になるため、起動時の通知許可を一旦無効化します
-// requestPushPermission(); 
+requestPushPermission();
 
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -86,23 +82,19 @@ function loadParentChildren(parentUid) {
   });
 }
 
-// ★ 繰り返し仕事の自動追加判定ロジック
 async function checkAndGenerateRepeatedTasks() {
   if (!state.familyCode) return;
   const now = new Date();
-  const currentDay = now.getDay(); // 0:日, 1:月...
-  const currentDate = now.getDate(); // 1〜31
+  const currentDay = now.getDay(); 
+  const currentDate = now.getDate(); 
   const currentHHMM = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
   state.taskTemplates.forEach(async (temp) => {
-    // 時間を過ぎているか判定
     if (currentHHMM < temp.time) return;
 
-    // 今日すでにこのテンプレートからタスクが作られているか確認
     const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
     const generatedKey = `rep_${temp.id}_${todayStr}`;
     
-    // 重複チェック
     const isAlreadyCreated = state.tasks.some(t => t.generatedKey === generatedKey);
     if (isAlreadyCreated) return;
 
@@ -116,7 +108,7 @@ async function checkAndGenerateRepeatedTasks() {
         title: temp.title,
         points: temp.points,
         status: 'open',
-        generatedKey: generatedKey, // 重複防止用キー
+        generatedKey: generatedKey, 
         createdAt: Date.now(),
         deadline: null
       });
@@ -139,11 +131,10 @@ function setupListeners() {
   }, () => render());
   unsubscribes.push(unsubFamily);
 
-  // ★ 繰り返しタスク（テンプレート）の取得
   const unsubTemp = onSnapshot(query(collection(db, "taskTemplates"), where("familyCode", "==", state.familyCode)), (s) => {
     const list = []; s.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.taskTemplates = list;
-    checkAndGenerateRepeatedTasks(); // 読み込み時にチェック
+    checkAndGenerateRepeatedTasks(); 
   });
   unsubscribes.push(unsubTemp);
 
@@ -152,7 +143,6 @@ function setupListeners() {
       const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); 
       a.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
       
-      // ★ リアルタイム・プッシュ通知判定
       if (!state.isInitialLoad) {
         s.docChanges().forEach(change => {
           if (change.type === "added" && k === "tasks") {
@@ -175,7 +165,7 @@ function setupListeners() {
       
       state[k] = a; 
       if (k === "tasks") {
-        state.isInitialLoad = false; // 初回読み込み完了フラグ
+        state.isInitialLoad = false; 
         checkAndGenerateRepeatedTasks();
       }
       render(); 
@@ -191,7 +181,6 @@ window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render
 window.switchActiveChild = (code) => { state.familyCode = code; localStorage.setItem('ienomics_familyCode', code); setupListeners(); };
 window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.setItem('ienomics_furigana', state.furigana); applyFuriganaState(); render(); };
 
-// 仕事の追加（繰り返しタスク対応）
 window.addTask = async () => { 
   const t = document.getElementById('task-title').value;
   const p = parseInt(document.getElementById('task-points').value);
@@ -200,7 +189,6 @@ window.addTask = async () => {
 
   if (t && p) { 
     if (isRepeat) {
-      // 繰り返しタスク（テンプレート）として保存
       const repeatType = window.repeatType || 'weekly';
       let days = [];
       if (repeatType === 'weekly') {
@@ -222,7 +210,6 @@ window.addTask = async () => {
       });
       alert("繰り返し発注として保存しました！時間になると自動追加されます。");
     } else {
-      // 通常の一発発注
       await addDoc(collection(db, "tasks"), { 
         familyCode: state.familyCode, title: t, points: p, 
         deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() 
@@ -232,14 +219,12 @@ window.addTask = async () => {
   } 
 };
 
-// ★ お断り（拒否）機能
 window.rejectTask = async (id) => {
   if (confirm("このお仕事をお断り（拒否）しますか？")) {
     await updateDoc(doc(db, "tasks", id), { status: 'rejected' });
   }
 };
 
-// ★ やり直し（差し戻し）機能
 window.returnTask = async (id) => {
   if (confirm("やり直し（差し戻し）を指示しますか？")) {
     await updateDoc(doc(db, "tasks", id), { status: 'accepted', statusBefore: 'completed' });
@@ -251,7 +236,7 @@ window.saveNewPassword = async () => {
   const passConf = document.getElementById('new-password-confirm').value;
   if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
   if (pass !== passConf) return alert("パスワードが一致しません！");
-  const childName = prompt("管理するお子様の名前を入力してください") || "こども";
+  const childName = prompt("管理するお子様の名前を入力してください（例：たろう）") || "こども";
   try {
     const user = auth.currentUser; await updatePassword(user, pass);
     await setDoc(doc(db, "users", user.uid), { role: 'parent' });
@@ -267,6 +252,7 @@ window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status:
 window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
 window.completeTask = async (id) => { await updateDoc(doc(db, "tasks", id), { status: 'completed' }); };
 window.addTicket2 = async () => { const t = document.getElementById('t-title').value, p = parseInt(document.getElementById('t-pts').value); if(t&&p) await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title: t, price: p, status: 'available', createdAt: Date.now() }); };
+window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
 window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); };
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
@@ -278,95 +264,4 @@ window.depositBank = async () => { const a = parseInt(document.getElementById('b
 window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const m = (Date.now() - b.createdAt) / (1000*60*60*24*30); t += b.amount + Math.floor(b.amount * (0.001 * m)); deleteDoc(doc(db, "banks", b.id)); }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(t) }); setView('home'); alert(`${t}pt 引き出しました`); };
 window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); } };
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
-window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
-
-// ==========================================
-// ★ 欠落機能の補完＆エラー回避版の追加
-// ==========================================
-
-// 連携解除（ログアウト）
-window.unlinkAccount = async () => {
-  if (confirm("連携を解除（またはログアウト）しますか？")) {
-    try { await signOut(auth); } catch (e) {}
-    localStorage.removeItem('ienomics_role');
-    localStorage.removeItem('ienomics_familyCode');
-    state.role = null; state.familyCode = null; state.children = [];
-    if (window.unsubChildren) window.unsubChildren();
-    unsubscribes.forEach(unsub => unsub()); unsubscribes = [];
-    window.location.reload(); 
-  }
-};
-
-// 仕事・チケットの削除
-window.deleteTask = async (id) => {
-  if (confirm("このお仕事を削除しますか？")) {
-    await deleteDoc(doc(db, "tasks", id));
-  }
-};
-window.deleteTicket = async (id) => {
-  if (confirm("このチケットを削除しますか？")) {
-    await deleteDoc(doc(db, "tickets", id));
-  }
-};
-
-// 子供の同期（参加）※エラーハンドリング強化版
-window.joinFamily = async () => {
-  const code = document.getElementById('setup-family-code').value.toUpperCase().trim();
-  if (!code) return alert("IDを入力してください");
-  
-  try {
-    const docRef = doc(db, "families", code);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      state.familyCode = code; 
-      state.role = 'child';
-      localStorage.setItem('ienomics_familyCode', code);
-      localStorage.setItem('ienomics_role', 'child');
-      
-      // 子供側からの更新で権限エラーになる場合は無視して続行する
-      try {
-        await updateDoc(docRef, { childLinked: true });
-      } catch (e) {
-        console.warn("親への通知状態の更新をスキップしました", e);
-      }
-      
-      setupListeners(); 
-      render();
-    } else {
-      alert("無効なIDです。親の画面で確認してください。");
-    }
-  } catch (error) {
-    // 画面にエラー内容を表示する
-    alert("通信エラーが発生しました: " + error.message);
-    console.error(error);
-  }
-};
-
-// 親の新規登録（メール送信）
-window.sendRealEmailLink = async () => {
-  const email = document.getElementById('setup-email').value;
-  if (!email) return alert("メールアドレスを入力してください");
-  state.isSending = true; render();
-  try {
-    const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-    window.localStorage.setItem('emailForSignIn', email);
-    state.message = email; state.setupStep = 2;
-  } catch (error) { alert("エラー: " + error.message); } 
-  finally { state.isSending = false; render(); }
-};
-
-// 親のログイン
-window.loginParent = async () => {
-  const email = document.getElementById('login-email').value;
-  const pass = document.getElementById('login-password').value;
-  if (!email || !pass) return alert("入力してください");
-  state.isSending = true; render();
-  try {
-    const result = await signInWithEmailAndPassword(auth, email, pass);
-    state.role = 'parent'; localStorage.setItem('ienomics_role', 'parent');
-    await runMigrationAndLoadChildren(result.user.uid);
-  } catch (error) { alert("ログイン失敗: パスワードまたはメールアドレスが違います"); } 
-  finally { state.isSending = false; render(); }
-};
+window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください（例：はなこ）"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
