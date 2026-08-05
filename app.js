@@ -5,7 +5,9 @@ import { db, auth } from './firebase.js';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
+// app.js の一番上の行をこれに書き換えてください
+
+const APP_URL = "https://whinaotona-debug.github.io/IENOMICS/index.html";
 let unsubscribes = [];
 
 // --- アプリの起動処理 ---
