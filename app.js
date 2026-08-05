@@ -9,8 +9,6 @@ const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 applyFuriganaState();
-// ★スマホで画面が開かなくなる原因になるため、起動時の通知許可はコメントアウトしています
-// requestPushPermission(); 
 
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -233,10 +231,6 @@ window.sendBalloon = async () => { const p = parseInt(document.getElementById('b
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
 
-// ==========================================
-// ★ 欠落機能の補完＆エラー回避版の追加
-// ==========================================
-
 window.unlinkAccount = async () => {
   if (confirm("連携を解除（またはログアウト）しますか？")) {
     try { await signOut(auth); } catch (e) {}
@@ -257,9 +251,12 @@ window.deleteTicket = async (id) => {
 };
 
 window.joinFamily = async () => {
-  const code = document.getElementById('setup-family-code').value.toUpperCase().trim();
-  if (!code) return alert("IDを入力してください");
   try {
+    const emailInput = document.getElementById('setup-family-code');
+    if (!emailInput) return alert("システムエラー: 入力欄が見つかりません");
+    const code = emailInput.value.toUpperCase().trim();
+    if (!code) return alert("IDを入力してください");
+    
     const docRef = doc(db, "families", code);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -276,27 +273,43 @@ window.joinFamily = async () => {
 };
 
 window.sendRealEmailLink = async () => {
-  const email = document.getElementById('setup-email').value;
-  if (!email) return alert("メールアドレスを入力してください");
-  state.isSending = true; render();
   try {
+    const emailInput = document.getElementById('setup-email');
+    if (!emailInput) return alert("システムエラー: 入力欄が見つかりません");
+    
+    const email = emailInput.value.trim();
+    if (!email) return alert("メールアドレスを入力してください");
+    
+    state.isSending = true; 
+    render();
+    
     const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
     await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    
     window.localStorage.setItem('emailForSignIn', email);
-    state.message = email; state.setupStep = 2;
-  } catch (error) { alert("エラー: " + error.message); } 
-  finally { state.isSending = false; render(); }
+    state.message = email; 
+    state.setupStep = 2; // ★ これで送信完了マークが出ます
+  } catch (error) { 
+    alert("エラーが発生しました: " + error.message); 
+  } finally { 
+    state.isSending = false; 
+    render(); 
+  }
 };
 
 window.loginParent = async () => {
-  const email = document.getElementById('login-email').value;
-  const pass = document.getElementById('login-password').value;
-  if (!email || !pass) return alert("入力してください");
-  state.isSending = true; render();
   try {
+    const email = document.getElementById('login-email').value.trim();
+    const pass = document.getElementById('login-password').value;
+    if (!email || !pass) return alert("メールアドレスとパスワードを入力してください");
+    
+    state.isSending = true; render();
     const result = await signInWithEmailAndPassword(auth, email, pass);
     state.role = 'parent'; localStorage.setItem('ienomics_role', 'parent');
     await runMigrationAndLoadChildren(result.user.uid);
-  } catch (error) { alert("ログイン失敗: パスワードまたはメールアドレスが違います"); } 
-  finally { state.isSending = false; render(); }
+  } catch (error) { 
+    alert("ログイン失敗: パスワードまたはメールアドレスが違います"); 
+  } finally { 
+    state.isSending = false; render(); 
+  }
 };
