@@ -1,3 +1,5 @@
+--- START OF FILE text/javascript ---
+
 import { state } from './state.js';
 import { render } from './ui.js';
 import { applyFuriganaState, requestPushPermission, sendPushNotification } from './utils.js';
@@ -276,7 +278,6 @@ window.sendBalloon = async () => { const p = parseInt(document.getElementById('b
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
 
-
 // ==========================================
 // ★ 追加分（前回欠落していた機能の補完）
 // ==========================================
@@ -310,16 +311,33 @@ window.deleteTicket = async (id) => {
 window.joinFamily = async () => {
   const code = document.getElementById('setup-family-code').value.toUpperCase().trim();
   if (!code) return alert("IDを入力してください");
-  const docRef = doc(db, "families", code);
-  const docSnap = await getDoc(docRef);
-  if (docSnap.exists()) {
-    state.familyCode = code; state.role = 'child';
-    localStorage.setItem('ienomics_familyCode', code);
-    localStorage.setItem('ienomics_role', 'child');
-    await updateDoc(docRef, { childLinked: true });
-    setupListeners(); render();
-  } else {
-    alert("無効なIDです。親の画面で確認してください。");
+  
+  try {
+    const docRef = doc(db, "families", code);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      state.familyCode = code; 
+      state.role = 'child';
+      localStorage.setItem('ienomics_familyCode', code);
+      localStorage.setItem('ienomics_role', 'child');
+      
+      // 子供側からの更新で権限エラーになる場合は無視して続行する
+      try {
+        await updateDoc(docRef, { childLinked: true });
+      } catch (e) {
+        console.warn("親への通知状態の更新をスキップしました", e);
+      }
+      
+      setupListeners(); 
+      render();
+    } else {
+      alert("無効なIDです。親の画面で確認してください。");
+    }
+  } catch (error) {
+    // 画面にエラー内容を表示する
+    alert("通信エラーが発生しました: " + error.message);
+    console.error(error);
   }
 };
 
