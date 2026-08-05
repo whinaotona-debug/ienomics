@@ -1,3 +1,5 @@
+--- START OF FILE text/javascript ---
+
 import { state } from './state.js';
 
 // --- ふりがな（ルビ）をつける関数 ---
@@ -8,6 +10,34 @@ export function applyFuriganaState() {
     document.body.classList.add('furigana-on');
   } else {
     document.body.classList.remove('furigana-on');
+  }
+}
+
+// ★ 追加：プッシュ通知の許可を求める関数
+export function requestPushPermission() {
+  if (!("Notification" in window)) {
+    console.warn("このブラウザはプッシュ通知をサポートしていません。");
+    return;
+  }
+  if (Notification.permission !== "denied" && Notification.permission !== "granted") {
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        console.log("プッシュ通知の許可が得られました。");
+      }
+    });
+  }
+}
+
+// ★ 追加：プッシュ通知を送信する関数
+export function sendPushNotification(title, body) {
+  if (!("Notification" in window)) {
+    return;
+  }
+  if (Notification.permission === "granted") {
+    new Notification(title, {
+      body: body,
+      icon: 'logo.png' // 通知にアプリアイコンを表示
+    });
   }
 }
 
