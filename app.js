@@ -263,7 +263,6 @@ window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status:
 window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
 window.completeTask = async (id) => { await updateDoc(doc(db, "tasks", id), { status: 'completed' }); };
 window.addTicket2 = async () => { const t = document.getElementById('t-title').value, p = parseInt(document.getElementById('t-pts').value); if(t&&p) await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title: t, price: p, status: 'available', createdAt: Date.now() }); };
-window.deleteTicket = async (id) => deleteDoc(doc(db, "tickets", id));
 window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); };
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
@@ -276,3 +275,78 @@ window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const 
 window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); } };
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
+
+
+// ==========================================
+// ★ 追加分（前回欠落していた機能の補完）
+// ==========================================
+
+// 連携解除（ログアウト）
+window.unlinkAccount = async () => {
+  if (confirm("連携を解除（またはログアウト）しますか？")) {
+    try { await signOut(auth); } catch (e) {}
+    localStorage.removeItem('ienomics_role');
+    localStorage.removeItem('ienomics_familyCode');
+    state.role = null; state.familyCode = null; state.children = [];
+    if (window.unsubChildren) window.unsubChildren();
+    unsubscribes.forEach(unsub => unsub()); unsubscribes = [];
+    window.location.reload(); 
+  }
+};
+
+// 仕事・チケットの削除
+window.deleteTask = async (id) => {
+  if (confirm("このお仕事を削除しますか？")) {
+    await deleteDoc(doc(db, "tasks", id));
+  }
+};
+window.deleteTicket = async (id) => {
+  if (confirm("このチケットを削除しますか？")) {
+    await deleteDoc(doc(db, "tickets", id));
+  }
+};
+
+// 子供の同期（参加）
+window.joinFamily = async () => {
+  const code = document.getElementById('setup-family-code').value.toUpperCase().trim();
+  if (!code) return alert("IDを入力してください");
+  const docRef = doc(db, "families", code);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    state.familyCode = code; state.role = 'child';
+    localStorage.setItem('ienomics_familyCode', code);
+    localStorage.setItem('ienomics_role', 'child');
+    await updateDoc(docRef, { childLinked: true });
+    setupListeners(); render();
+  } else {
+    alert("無効なIDです。親の画面で確認してください。");
+  }
+};
+
+// 親の新規登録（メール送信）
+window.sendRealEmailLink = async () => {
+  const email = document.getElementById('setup-email').value;
+  if (!email) return alert("メールアドレスを入力してください");
+  state.isSending = true; render();
+  try {
+    const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    window.localStorage.setItem('emailForSignIn', email);
+    state.message = email; state.setupStep = 2;
+  } catch (error) { alert("エラー: " + error.message); } 
+  finally { state.isSending = false; render(); }
+};
+
+// 親のログイン
+window.loginParent = async () => {
+  const email = document.getElementById('login-email').value;
+  const pass = document.getElementById('login-password').value;
+  if (!email || !pass) return alert("入力してください");
+  state.isSending = true; render();
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, pass);
+    state.role = 'parent'; localStorage.setItem('ienomics_role', 'parent');
+    await runMigrationAndLoadChildren(result.user.uid);
+  } catch (error) { alert("ログイン失敗: パスワードまたはメールアドレスが違います"); } 
+  finally { state.isSending = false; render(); }
+};
