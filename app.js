@@ -7,7 +7,7 @@ const APP_URL = "https://whinaotona-debug.github.io/tibiz/";
 let investChartInstance = null; 
 
 let state = {
-  role: localStorage.getItem('ienomics_role'), // ★ chibiz を ienomics に変更
+  role: localStorage.getItem('ienomics_role'), 
   familyCode: localStorage.getItem('ienomics_familyCode'),
   furigana: localStorage.getItem('ienomics_furigana') === 'true',
   view: 'home',
@@ -55,6 +55,7 @@ document.addEventListener('click', (e) => {
 const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 if (state.furigana) document.body.classList.add('furigana-on');
 
+// ★ バグ修正箇所1：Firebaseの認証状態を正しく待つように変更
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
@@ -81,9 +82,30 @@ window.onload = async () => {
       }
     } catch (error) {
       alert("エラーが発生しました: " + error.message);
+      render();
     }
   } else {
-    if (state.familyCode) setupListeners(); else render();
+    // 認証状態の確認を待ってから画面を表示する
+    auth.onAuthStateChanged((user) => {
+      if (state.role === 'parent') {
+        if (user) {
+          // 親としてログイン成功
+          if (state.familyCode) setupListeners(); else render();
+        } else {
+          // ログアウト状態なら初期画面へ
+          localStorage.removeItem('ienomics_role');
+          localStorage.removeItem('ienomics_familyCode');
+          state.role = null;
+          state.familyCode = null;
+          render();
+        }
+      } else if (state.role === 'child' && state.familyCode) {
+        // 子供はログイン不要
+        setupListeners();
+      } else {
+        render();
+      }
+    });
   }
 };
 
@@ -97,7 +119,6 @@ window.toggleFurigana = () => {
 function getIcon(name) {
   const icons = {
     'home': `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
-    // ★ 10番: チケットのアイコンを切り取り線のあるリアルなものに変更
     'ticket': `<path d="M15 5H9a2 2 0 00-2 2v3a2 2 0 010 4v3a2 2 0 002 2h6a2 2 0 002-2v-3a2 2 0 010-4V7a2 2 0 00-2-2z"></path><line x1="9" y1="9" x2="9" y2="15" stroke-dasharray="2 2"></line><line x1="15" y1="9" x2="15" y2="15" stroke-dasharray="2 2"></line>`,
     'settings': `<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>`,
     'history': `<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>`,
@@ -107,7 +128,6 @@ function getIcon(name) {
     'bank': `<rect x="3" y="10" width="18" height="10" rx="2" ry="2"></rect><path d="M7 10V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4"></path><path d="M12 14v2"></path>`,
     'task': `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline>`,
     'calendar': `<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>`,
-    // ★ 11番: ギフトをプレゼントボックスに変更
     'gift': `<polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>`,
     'eye': `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`,
     'eye-off': `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`,
@@ -116,7 +136,6 @@ function getIcon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
 
-// ★ 5番: 期限の表示を計算する関数
 function formatTimeLeft(deadlineTime) {
   if (!deadlineTime) return '--';
   const diff = deadlineTime - Date.now();
@@ -132,7 +151,6 @@ function formatTimeLeft(deadlineTime) {
   return `あと${minutes}分`;
 }
 
-// パスワードの表示切り替えロジック
 window.togglePassword = (inputId, eyeIconId) => {
   const input = document.getElementById(inputId);
   const icon = document.getElementById(eyeIconId);
@@ -235,7 +253,6 @@ function renderPasswordSetup() {
           次回以降のログインに使う<br>パスワードを決めてください。
         </p>
         
-        <!-- ★ 1番と12番: パスワード確認用入力と目のマーク -->
         <div class="password-wrapper">
           <input type="password" id="new-password" placeholder="パスワード（6文字以上）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
           <div id="eye-new" class="password-eye" onclick="togglePassword('new-password', 'eye-new')">${getIcon('eye')}</div>
@@ -396,7 +413,6 @@ function renderHome() {
                 else if (t.status === 'accepted') btn = `<button onclick="completeTask('${t.id}')" class="solid-btn px-3 py-1.5 text-[9px] font-bold shrink-0 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100">完了</button>`;
                 else btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">待機</span>`;
               } else {
-                // ★ 14番: 親は自分が発注したオープン状態の仕事を削除できる
                 if (t.status === 'open') trashBtn = `<button onclick="deleteTask('${t.id}')" class="text-red-400 hover:text-red-600 w-4 h-4 shrink-0 transition">${getIcon('trash')}</button>`;
                 
                 if (t.status === 'completed') btn = `<button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>`;
@@ -684,7 +700,6 @@ window.joinFamily = async () => {
 
 window.unlinkAccount = async () => { if (confirm("ログアウトして最初に戻りますか？")) { await signOut(auth); localStorage.clear(); window.location.reload(); } };
 
-// ★ 14番: 削除機能追加
 window.deleteTask = async (id) => { if(confirm("この発注を取り消しますか？")) { await deleteDoc(doc(db, "tasks", id)); setView('home'); } };
 
 window.addTask = async () => { const t = document.getElementById('task-title').value, p = parseInt(document.getElementById('task-points').value), d = document.getElementById('task-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() }); setView('home'); } };
@@ -707,6 +722,7 @@ window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const 
 window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); } };
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 
+// ★ バグ修正箇所2：データ取得失敗時や削除時にもフリーズしないようにする
 function setupListeners() {
   if (!state.familyCode) return;
   onSnapshot(doc(db, "families", state.familyCode), (d) => { 
@@ -715,9 +731,22 @@ function setupListeners() {
       state.points = data.points || 0; 
       state.childLinked = data.childLinked !== false; 
       render(); 
-    } 
+    } else {
+      render(); // ドキュメントがない場合もローディングを抜ける
+    }
+  }, (error) => {
+    console.error("Firestore error:", error);
+    render(); // エラー時もローディングを抜ける
   });
-  const w = (c, k) => { onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); a.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); state[k] = a; render(); }); };
+
+  const w = (c, k) => { 
+    onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { 
+      const a = []; 
+      s.forEach(d => a.push({ id: d.id, ...d.data() })); 
+      a.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
+      state[k] = a; 
+      render(); 
+    }); 
+  };
   w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons");
 }
-if (state.familyCode) setupListeners(); else render();
