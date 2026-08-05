@@ -9,14 +9,23 @@ const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 applyFuriganaState();
+// ★スマホで画面が開かなくなる原因になるため、起動時の通知許可はコメントアウトしています
+// requestPushPermission(); 
 
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
+    
+    // ★ 別のブラウザやアプリで開かれた場合は、プロンプトを出して再入力させる
     if (!email) {
-      alert("エラー：メールを送信した時と同じブラウザ（Safariなど）で開いてください。");
+      email = window.prompt("セキュリティ確認のため、登録したメールアドレスをもう一度入力してください。");
+    }
+    
+    if (!email) {
+      alert("認証がキャンセルされました。");
       render(); return;
     }
+
     try {
       const result = await signInWithEmailLink(auth, email, window.location.href);
       window.localStorage.removeItem('emailForSignIn');
@@ -288,7 +297,7 @@ window.sendRealEmailLink = async () => {
     
     window.localStorage.setItem('emailForSignIn', email);
     state.message = email; 
-    state.setupStep = 2; // ★ これで送信完了マークが出ます
+    state.setupStep = 2; 
   } catch (error) { 
     alert("エラーが発生しました: " + error.message); 
   } finally { 
