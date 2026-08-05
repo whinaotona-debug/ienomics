@@ -11,7 +11,9 @@ const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 applyFuriganaState();
-requestPushPermission(); // アプリ起動時にプッシュ通知の許可を取る
+
+// ★ スマホで画面が開かなくなる原因になるため、起動時の通知許可を一旦無効化します
+// requestPushPermission(); 
 
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -279,7 +281,7 @@ window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「$
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
 
 // ==========================================
-// ★ 追加分（前回欠落していた機能の補完）
+// ★ 欠落機能の補完＆エラー回避版の追加
 // ==========================================
 
 // 連携解除（ログアウト）
@@ -307,7 +309,7 @@ window.deleteTicket = async (id) => {
   }
 };
 
-// 子供の同期（参加）
+// 子供の同期（参加）※エラーハンドリング強化版
 window.joinFamily = async () => {
   const code = document.getElementById('setup-family-code').value.toUpperCase().trim();
   if (!code) return alert("IDを入力してください");
