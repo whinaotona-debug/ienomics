@@ -7,7 +7,7 @@ import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWit
 
 // app.js の一番上の行をこれに書き換えてください
 
-const APP_URL = "https://whinaotona-debug.github.io/IENOMICS/index.html";
+const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 // --- アプリの起動処理 ---
