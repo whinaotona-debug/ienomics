@@ -1,31 +1,5 @@
 import { state } from './state.js';
 
-// --- 音声再生 (Web Audio API) ---
-const AudioContext = window.AudioContext || window.webkitAudioContext;
-let audioCtx;
-export function playPopSound() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  if (audioCtx.state === 'suspended') audioCtx.resume();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = 'sine'; 
-  osc.frequency.setValueAtTime(600, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
-  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + 0.1);
-}
-
-// 画面内のボタンクリックで音を鳴らす設定
-document.addEventListener('click', (e) => {
-  if (e.target.closest('button') || e.target.closest('.solid-btn')) {
-    playPopSound();
-  }
-});
-
 // --- ふりがな（ルビ）をつける関数 ---
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
