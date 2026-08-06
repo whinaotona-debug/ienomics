@@ -143,12 +143,22 @@ function renderHome() {
       }
       
       if (t.status === 'completed') {
-        btn = `
-          <div class="flex gap-1.5">
-            <button onclick="returnTask('${t.id}')" class="solid-btn px-2.5 py-1.5 text-[9px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">やり直し</button>
-            <button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>
-          </div>
-        `;
+        // ★ 期限切れペナルティのUI表示
+        if (t.isExpired) {
+          btn = `
+            <div class="flex gap-1.5 items-center">
+              <span class="text-[9px] text-red-500 font-bold shrink-0">期限切れ(0pt)</span>
+              <button onclick="approveTask('${t.id}', 0)" class="solid-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm text-red-600 border-red-200 bg-red-50">確認</button>
+            </div>
+          `;
+        } else {
+          btn = `
+            <div class="flex gap-1.5">
+              <button onclick="returnTask('${t.id}')" class="solid-btn px-2.5 py-1.5 text-[9px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">やり直し</button>
+              <button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>
+            </div>
+          `;
+        }
       } else if (t.status === 'rejected') {
         btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">お断りされました</span>`;
       } else if (t.status === 'proposed') {
@@ -245,31 +255,22 @@ function renderModal(content) {
   `;
 }
 
-function renderBank() {
-  let totalDeposit = 0, totalInterest = 0;
-  state.banks.forEach(b => {
-    const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
-    const interest = Math.floor(b.amount * (0.001 * months)); 
-    totalDeposit += b.amount; totalInterest += interest;
-  });
-  const currentTotal = totalDeposit + totalInterest;
-  return `
-    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2>
-    <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6">
-      <p class="text-[10px] font-bold text-slate-500 mb-1 tracking-widest">${rb('預金残高','よきんざんだか')}</p>
-      <p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">pt</span></p>
-      <p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}pt (月0.1%)</p>
-    </div>
-    ${state.role === 'child' ? `<div class="flex gap-2 mb-4"><input type="number" id="bank-amount" placeholder="金額を入力" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-6 font-bold text-sm">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`}
-  `;
-}
-
+// ★ スマホ最適化：投資画面のボタンを1画面に収める
 function renderInvest() {
   const rates = getMarketRates();
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-purple-500">${getIcon('invest')}</div>${rb('資産運用','しさんうんよう')}</h2>
     <div class="w-full h-[180px] mb-6 relative p-1"><canvas id="investChart"></canvas></div>
-    ${state.role === 'child' ? `<div class="flex gap-2 mb-6"><input type="number" id="invest-amount" placeholder="金額" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" /><button onclick="investCustom('日本')" class="solid-btn px-4 bg-slate-100 hover:bg-slate-200 font-bold text-xs">日本株</button><button onclick="investCustom('アメリカ')" class="solid-btn px-4 bg-slate-100 hover:bg-slate-200 font-bold text-xs">米国株</button></div>` : ''}
+    ${state.role === 'child' ? `
+      <div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} pt）</p>
+        <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+        <div class="flex gap-2">
+          <button onclick="investCustom('日本')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇯🇵 日本株を買う</button>
+          <button onclick="investCustom('アメリカ')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇺🇸 米国株を買う</button>
+        </div>
+      </div>
+    ` : ''}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
         const cur = inv.name === '日本' ? rates.日本[12] : rates.アメリカ[12];
@@ -282,57 +283,7 @@ function renderInvest() {
   `;
 }
 
-function renderSettings() { 
-  return `
-    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2>
-    <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100">
-      <p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p>
-      <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p>
-    </div>
-    ${state.role==='child'?`
-      <div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()">
-        <span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span>
-        <div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}">
-          <div class="w-4 h-4 bg-white rounded-full shadow-sm"></div>
-        </div>
-      </div>
-    `:''}
-    <button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>
-  `; 
-}
-
-export function drawInvestChart() {
-  const canvas = document.getElementById('investChart'); if (!canvas) return;
-  const rates = getMarketRates(); const ctx = canvas.getContext('2d');
-  const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ');
-  const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0;
-  const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0;
-  const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r));
-  const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r));
-  if (investChartInstance) investChartInstance.destroy();
-  const isDetail = state.view === 'invest';
-  investChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: rates.labels,
-      datasets: [
-        { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail },
-        { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } },
-      scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } },
-      layout: { padding: isDetail ? 0 : 5 }
-    }
-  });
-}
-
-function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
-function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
-
+// ★ 繰り返しUIの変更：「自動追加する時間」から「その日の期限（締切）」に変更
 function renderTaskCreate() { 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('仕事発注','しごとはっちゅう')}</h2>
@@ -352,24 +303,25 @@ function renderTaskCreate() {
           <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-monthly">毎月指定</button>
         </div>
         <div id="weekly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（0時自動追加）</p>
           <div class="flex gap-2 flex-wrap">
             ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="repeat-weeks" value="${i}"> ${w}</label>`).join('')}
           </div>
         </div>
         <div id="monthly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（1〜31日）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（0時自動追加）</p>
           <select id="repeat-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
             ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}
           </select>
         </div>
         <div>
-          <p class="text-[9px] font-bold text-slate-400 mb-2">自動追加する時間</p>
-          <input type="time" id="repeat-time" class="p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="09:00">
+          <p class="text-[9px] font-bold text-slate-400 mb-2">その日の期限（締切時間）を設定</p>
+          <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="19:00">
         </div>
       </div>
     </div>
 
+    <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">期限を設定（単発発注の場合）</p>
     <input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none" />
     <button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">発注する</button>
   `; 
@@ -378,9 +330,9 @@ function renderTaskCreate() {
 window.toggleRepeatUI = () => {
   const isRepeat = document.getElementById('task-repeat-toggle').checked;
   document.getElementById('repeat-ui').classList.toggle('hidden', !isRepeat);
-  if (isRepeat) {
-    setRepeatType('weekly'); 
-  }
+  document.getElementById('task-deadline').classList.toggle('hidden', isRepeat);
+  document.getElementById('normal-deadline-title').classList.toggle('hidden', isRepeat);
+  if (isRepeat) setRepeatType('weekly'); 
 };
 window.setRepeatType = (type) => {
   window.repeatType = type;
@@ -391,6 +343,12 @@ window.setRepeatType = (type) => {
   document.getElementById('btn-rep-monthly').classList.toggle('primary-btn', !isWeekly);
 };
 
+// 以下、その他の画面関数（変更なし）
+function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.001 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-widest">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">pt</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}pt (月0.1%)</p></div>${state.role === 'child' ? `<div class="flex gap-2 mb-4"><input type="number" id="bank-amount" placeholder="金額を入力" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-6 font-bold text-sm">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
+function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
+export function drawInvestChart() { const canvas = document.getElementById('investChart'); if (!canvas) return; const rates = getMarketRates(); const ctx = canvas.getContext('2d'); const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ'); const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0; const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0; const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r)); const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r)); if (investChartInstance) investChartInstance.destroy(); const isDetail = state.view === 'invest'; investChartInstance = new Chart(ctx, { type: 'line', data: { labels: rates.labels, datasets: [ { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }, { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } }, scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } }, layout: { padding: isDetail ? 0 : 5 } } }); }
+function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
+function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
 function renderExchange() { const p = state.exchanges.filter(e => e.status === 'pending'); if (state.role === 'child') return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div>${rb('換金申請','かんきんしんせい')}</h2><div class="flex items-center gap-3 mb-6"><input type="number" id="exchange-amount" placeholder="金額" class="flex-1 p-4 bg-white border border-slate-200 rounded-xl font-black text-xl text-right focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">円</span></div><button onclick="requestExchange()" class="solid-btn primary-btn w-full py-4 font-bold mb-6">申請する</button><div class="space-y-2">${p.map(e => `<div class="p-3 rounded-xl text-sm font-bold flex justify-between bg-slate-50 border border-slate-100"><span class="text-slate-700">${e.yen} 円</span><span class="text-slate-400 text-[10px] bg-white px-2 py-1 rounded border border-slate-200">承認待ち</span></div>`).join('')}</div>`; else return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`; }
 function renderTickets() { const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div>チケット${state.role==='parent'?'管理':'購入'}</h2>${state.role==='parent'?'<div class="flex gap-2 mb-6"><input id="t-title" placeholder="品名" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/><input id="t-pts" type="number" placeholder="pt" class="w-24 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/></div><button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-6">追加する</button>':''}<div class="space-y-3">${ts.map(t=>{ let b = ''; if(state.role==='child'){ if(t.status==='available') b=`<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold">購入</button>`; else b=`<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md">所持中</span>`; } else { if(t.status==='available') b=`<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition">削除</button>`; else if(t.status==='bought') b=`<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">使用済にする</button>`; else b=`<span class="text-[9px] text-slate-300 font-bold">使用済</span>`; } return `<div class="p-4 rounded-xl border ${t.status==='bought'?'bg-slate-50 border-slate-200':'bg-white border-slate-100'} flex justify-between items-center"><div><p class="font-bold text-sm text-slate-700">${t.title}</p><p class="text-[10px] font-bold mt-0.5 ${t.status==='bought'?'text-slate-400':'text-rose-500'}">${t.price} pt</p></div>${b}</div>`; }).join('')}</div>`; }
 function renderHistory() { const app = state.tasks.filter(t => t.status === 'approved'); const t = app.reduce((s, t) => s + t.points, 0); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p><p class="text-3xl font-black text-slate-800 tracking-tight">${t.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p></div><div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>`; }
@@ -400,7 +358,6 @@ function renderWaitingChild() { return `<div class="h-full flex flex-col items-c
 
 function renderSetup() {
   let content = '';
-  
   if (state.isSending) {
     content = `<div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10"><div class="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-slate-500">通信中...</p></div>`;
   } else if (!state.setupMode) {
@@ -416,6 +373,5 @@ function renderSetup() {
   } else if (state.setupMode === 'child') {
     content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">親の同期IDを入力</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">親のアプリの設定画面にある<br>「同期ID」を入力して連携します。</p><input id="setup-family-code" placeholder="IDを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-2xl uppercase tracking-widest focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="joinFamily()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">同期してスタート</button></div>`;
   }
-  
   return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex items-center justify-center relative z-10 border border-slate-100"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-slate-800 mb-10 tracking-tighter relative z-10">イエノミクス</h1>${content}</div>`;
 }

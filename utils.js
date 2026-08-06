@@ -1,6 +1,5 @@
 import { state } from './state.js';
 
-// --- ふりがな（ルビ）をつける関数 ---
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
 export function applyFuriganaState() {
@@ -11,7 +10,6 @@ export function applyFuriganaState() {
   }
 }
 
-// ★ 追加：プッシュ通知の許可を求める関数
 export function requestPushPermission() {
   if (!("Notification" in window)) {
     console.warn("このブラウザはプッシュ通知をサポートしていません。");
@@ -19,31 +17,23 @@ export function requestPushPermission() {
   }
   if (Notification.permission !== "denied" && Notification.permission !== "granted") {
     Notification.requestPermission().then((permission) => {
-      if (permission === "granted") {
-        console.log("プッシュ通知の許可が得られました。");
-      }
+      if (permission === "granted") console.log("プッシュ通知の許可が得られました。");
     });
   }
 }
 
-// ★ 追加：プッシュ通知を送信する関数
 export function sendPushNotification(title, body) {
-  if (!("Notification" in window)) {
-    return;
-  }
+  if (!("Notification" in window)) return;
   if (Notification.permission === "granted") {
-    new Notification(title, {
-      body: body,
-      icon: 'logo.png' // 通知にアプリアイコンを表示
-    });
+    new Notification(title, { body: body, icon: 'logo.png' });
   }
 }
 
-// --- アイコンを取得する関数 ---
 export function getIcon(name) {
   const icons = {
     'home': `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>`,
-    'ticket': `<path d="M15 5H9a2 2 0 00-2 2v3a2 2 0 010 4v3a2 2 0 010 4v3a2 2 0 002 2h6a2 2 0 002-2v-3a2 2 0 010-4V7a2 2 0 00-2-2z"></path><line x1="9" y1="9" x2="9" y2="15" stroke-dasharray="2 2"></line><line x1="15" y1="9" x2="15" y2="15" stroke-dasharray="2 2"></line>`,
+    // ★ チケットアイコンを本物らしく（両端に切り欠きと切り取り線）変更
+    'ticket': `<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"></path><path d="M12 5v2"></path><path d="M12 17v2"></path><path d="M12 11v2"></path>`,
     'settings': `<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>`,
     'history': `<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>`,
     'propose': `<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>`,
@@ -60,7 +50,6 @@ export function getIcon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
 
-// --- 日数・時間の計算関数 ---
 export function formatTimeLeft(deadlineTime) {
   if (!deadlineTime) return '--';
   const diff = deadlineTime - Date.now();
@@ -76,7 +65,6 @@ export function formatTimeLeft(deadlineTime) {
   return `あと${minutes}分`;
 }
 
-// --- 資産運用の相場（レート）を計算する関数 ---
 export function getMarketRates() {
   const today = new Date();
   const rates = { 日本: [], アメリカ: [], labels: [] };
