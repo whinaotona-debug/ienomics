@@ -84,51 +84,61 @@ function loadParentChildren(parentUid) {
   });
 }
 
-// ★ 二重発注バグの修正：isGenerating フラグで処理が重複しないようにガード
+// ★ 修正：二重発注を絶対に防ぐための強力なロック機能
 let isGenerating = false;
 async function checkAndGenerateRepeatedTasks() {
   if (!state.familyCode || isGenerating) return;
-  isGenerating = true;
+  isGenerating = true; // 処理中はロックをかける
   
-  const now = new Date();
-  const currentDay = now.getDay(); 
-  const currentDate = now.getDate(); 
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  try {
+    const now = new Date();
+    const currentDay = now.getDay(); 
+    const currentDate = now.getDate(); 
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  for (const temp of state.taskTemplates) {
-    const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
-    const generatedKey = `rep_${temp.id}_${todayStr}`;
-    
-    const isAlreadyCreated = state.tasks.some(t => t.generatedKey === generatedKey);
-    if (isAlreadyCreated) continue;
+    // 現在のタスクリスト（すでに作られたものを確認）
+    const existingKeys = state.tasks.map(t => t.generatedKey).filter(Boolean);
 
-    let shouldCreate = false;
-    if (temp.type === 'weekly' && temp.days.includes(currentDay)) shouldCreate = true;
-    if (temp.type === 'monthly' && temp.days.includes(currentDate)) shouldCreate = true;
+    for (const temp of state.taskTemplates) {
+      const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+      const generatedKey = `rep_${temp.id}_${todayStr}`;
+      
+      // すでに作られていたらスキップ
+      if (existingKeys.includes(generatedKey)) continue;
 
-    if (shouldCreate) {
-      const [hours, minutes] = temp.time.split(':').map(Number);
-      const deadlineDate = new Date(todayStart);
-      deadlineDate.setHours(hours, minutes, 0, 0);
+      let shouldCreate = false;
+      if (temp.type === 'weekly' && temp.days.includes(currentDay)) shouldCreate = true;
+      if (temp.type === 'monthly' && temp.days.includes(currentDate)) shouldCreate = true;
 
-      await addDoc(collection(db, "tasks"), {
-        familyCode: state.familyCode,
-        title: temp.title,
-        points: temp.points,
-        status: 'open',
-        generatedKey: generatedKey, 
-        createdAt: Date.now(),
-        deadline: deadlineDate.getTime() 
-      });
+      if (shouldCreate) {
+        const [hours, minutes] = temp.time.split(':').map(Number);
+        const deadlineDate = new Date(todayStart);
+        deadlineDate.setHours(hours, minutes, 0, 0);
+
+        await addDoc(collection(db, "tasks"), {
+          familyCode: state.familyCode,
+          title: temp.title,
+          points: temp.points,
+          status: 'open',
+          generatedKey: generatedKey, 
+          createdAt: Date.now(),
+          deadline: deadlineDate.getTime() 
+        });
+        
+        // 作成したキーをすぐに追加して、次のループでの重複を防ぐ
+        existingKeys.push(generatedKey);
+      }
     }
+  } catch (error) {
+    console.error("繰り返しタスク生成エラー:", error);
+  } finally {
+    isGenerating = false; // 処理が終わったらロック解除
   }
-  isGenerating = false;
 }
 
 function setupListeners() {
   if (!state.familyCode) return;
   
-  // 既存のリスナーをすべて解除
   unsubscribes.forEach(unsub => unsub()); 
   unsubscribes = []; 
   
@@ -256,7 +266,7 @@ window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不�
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
 
-// ★ 投資引数エラー修正版
+// ★ 修正：株購入の引数エラーを解消
 window.investCustom = async (n) => { 
   const valStr = document.getElementById('invest-amount').value;
   if (!valStr) return alert("投資する金額(pt)を入力してください");
@@ -264,9 +274,8 @@ window.investCustom = async (n) => {
   if (isNaN(a) || a <= 0) return alert("正しい金額を入力してください");
   if (state.points < a) return alert(`ptが不足しています（所持: ${state.points}pt）`); 
   
-  // n は 'japan' か 'us' になるように ui.js 側で修正済み
   const r = n === 'japan' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; 
-  const dbName = n === 'japan' ? '日本' : 'アメリカ'; // DB保存用
+  const dbName = n === 'japan' ? '日本' : 'アメリカ'; 
   
   await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
   const ex = state.investments.find(i => i.name === dbName); 
@@ -287,7 +296,19 @@ window.sendBalloon = async () => { const p = parseInt(document.getElementById('b
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
 window.unlinkAccount = async () => { if (confirm("連携を解除（またはログアウト）しますか？")) { try { await signOut(auth); } catch (e) {} localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode'); state.role = null; state.familyCode = null; state.children = []; if (window.unsubChildren) window.unsubChildren(); unsubscribes.forEach(unsub => unsub()); unsubscribes = []; window.location.reload(); } };
-window.deleteTask = async (id) => { if (confirm("このお仕事を削除しますか？")) { await deleteDoc(doc(db, "tasks", id)); } };
+
+// ★ 修正：ゴミ箱ボタンの削除機能
+window.deleteTask = async (id) => { 
+  if (confirm("このお仕事を削除しますか？")) { 
+    try {
+      await deleteDoc(doc(db, "tasks", id)); 
+      setView('home'); // 画面を更新して表示を消す
+    } catch (error) {
+      alert("削除できませんでした: " + error.message);
+    }
+  } 
+};
+
 window.deleteTicket = async (id) => { if (confirm("このチケットを削除しますか？")) { await deleteDoc(doc(db, "tickets", id)); } };
 window.joinFamily = async () => { try { const emailInput = document.getElementById('setup-family-code'); if (!emailInput) return alert("システムエラー"); const code = emailInput.value.toUpperCase().trim(); if (!code) return alert("IDを入力してください"); const docRef = doc(db, "families", code); const docSnap = await getDoc(docRef); if (docSnap.exists()) { state.familyCode = code; state.role = 'child'; localStorage.setItem('ienomics_familyCode', code); localStorage.setItem('ienomics_role', 'child'); try { await updateDoc(docRef, { childLinked: true }); } catch (e) { } setupListeners(); render(); } else { alert("無効なIDです"); } } catch (error) { alert("エラー: " + error.message); } };
 window.sendRealEmailLink = async () => { try { const emailInput = document.getElementById('setup-email'); if (!emailInput) return; const email = emailInput.value.trim(); if (!email) return alert("メールアドレスを入力してください"); state.isSending = true; render(); const actionCodeSettings = { url: APP_URL, handleCodeInApp: true }; await sendSignInLinkToEmail(auth, email, actionCodeSettings); window.localStorage.setItem('emailForSignIn', email); state.message = email; state.setupStep = 2; } catch (error) { alert("エラー: " + error.message); } finally { state.isSending = false; render(); } };
