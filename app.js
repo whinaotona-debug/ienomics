@@ -9,7 +9,6 @@ const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
 let unsubscribes = [];
 
 applyFuriganaState();
-// requestPushPermission(); // 必要に応じて有効化
 
 window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
@@ -85,29 +84,29 @@ function loadParentChildren(parentUid) {
   });
 }
 
-// ★ 自動追加ロジックの変更：「0時に追加し、設定時間を期限とする」
+// ★ 二重発注バグの修正：isGenerating フラグで処理が重複しないようにガード
+let isGenerating = false;
 async function checkAndGenerateRepeatedTasks() {
-  if (!state.familyCode) return;
+  if (!state.familyCode || isGenerating) return;
+  isGenerating = true;
+  
   const now = new Date();
   const currentDay = now.getDay(); 
   const currentDate = now.getDate(); 
-
-  // 今日の0時0分0秒を基準にする
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  state.taskTemplates.forEach(async (temp) => {
+  for (const temp of state.taskTemplates) {
     const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
     const generatedKey = `rep_${temp.id}_${todayStr}`;
     
     const isAlreadyCreated = state.tasks.some(t => t.generatedKey === generatedKey);
-    if (isAlreadyCreated) return;
+    if (isAlreadyCreated) continue;
 
     let shouldCreate = false;
     if (temp.type === 'weekly' && temp.days.includes(currentDay)) shouldCreate = true;
     if (temp.type === 'monthly' && temp.days.includes(currentDate)) shouldCreate = true;
 
     if (shouldCreate) {
-      // 期限（deadline）の作成。当日の指定時刻をセットする
       const [hours, minutes] = temp.time.split(':').map(Number);
       const deadlineDate = new Date(todayStart);
       deadlineDate.setHours(hours, minutes, 0, 0);
@@ -119,15 +118,19 @@ async function checkAndGenerateRepeatedTasks() {
         status: 'open',
         generatedKey: generatedKey, 
         createdAt: Date.now(),
-        deadline: deadlineDate.getTime() // 当日の指定時間が期限になる
+        deadline: deadlineDate.getTime() 
       });
     }
-  });
+  }
+  isGenerating = false;
 }
 
 function setupListeners() {
   if (!state.familyCode) return;
-  unsubscribes.forEach(unsub => unsub()); unsubscribes = []; 
+  
+  // 既存のリスナーをすべて解除
+  unsubscribes.forEach(unsub => unsub()); 
+  unsubscribes = []; 
   
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => { 
     if (d.exists()) { 
@@ -210,7 +213,7 @@ window.addTask = async () => {
       await addDoc(collection(db, "taskTemplates"), {
         familyCode: state.familyCode, title: t, points: p, type: repeatType, days: days, time: time, createdAt: Date.now()
       });
-      alert("繰り返し発注として保存しました！該当する日は0時に自動追加されます。");
+      alert("繰り返し発注として保存しました！該当する日の0時に自動追加されます。");
     } else {
       const d = document.getElementById('task-deadline').value; 
       await addDoc(collection(db, "tasks"), { 
@@ -221,13 +224,12 @@ window.addTask = async () => {
   } 
 };
 
-// ★ 子供の完了処理：期限切れ（isExpired）の判定と記録
 window.completeTask = async (id) => { 
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
   let isExpired = false;
   if (task.deadline && Date.now() > task.deadline) {
-    isExpired = true; // 期限切れフラグ
+    isExpired = true; 
   }
   await updateDoc(doc(db, "tasks", id), { 
     status: 'completed', 
@@ -236,7 +238,6 @@ window.completeTask = async (id) => {
   }); 
 };
 
-// 親の承認処理
 window.approveTask = async (id, p) => { 
   await updateDoc(doc(db, "tasks", id), { status: 'approved' }); 
   if (p > 0) {
@@ -255,7 +256,7 @@ window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不�
 window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
 window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
 
-// ★ 投資のバグ修正：エラー文を分かりやすく変更
+// ★ 投資引数エラー修正版
 window.investCustom = async (n) => { 
   const valStr = document.getElementById('invest-amount').value;
   if (!valStr) return alert("投資する金額(pt)を入力してください");
@@ -263,13 +264,16 @@ window.investCustom = async (n) => {
   if (isNaN(a) || a <= 0) return alert("正しい金額を入力してください");
   if (state.points < a) return alert(`ptが不足しています（所持: ${state.points}pt）`); 
   
-  const r = n === '日本' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; 
+  // n は 'japan' か 'us' になるように ui.js 側で修正済み
+  const r = n === 'japan' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; 
+  const dbName = n === 'japan' ? '日本' : 'アメリカ'; // DB保存用
+  
   await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
-  const ex = state.investments.find(i => i.name === n); 
+  const ex = state.investments.find(i => i.name === dbName); 
   if (ex) { 
     await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); 
   } else { 
-    await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: n, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
+    await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: dbName, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
   } 
   setView('invest'); 
 };
