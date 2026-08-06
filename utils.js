@@ -1,4 +1,4 @@
-import { state } from './state.js';
+import { state } from './state.js?v=106';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -45,7 +45,8 @@ export function getIcon(name) {
     'gift': `<polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path>`,
     'eye': `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`,
     'eye-off': `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`,
-    'trash': `<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>`
+    'trash': `<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>`,
+    'repeat': `<polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>`
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
@@ -63,6 +64,26 @@ export function formatTimeLeft(deadlineTime) {
   
   const minutes = Math.floor(diff / (1000 * 60));
   return `あと${minutes}分`;
+}
+
+/** 繰り返しタスクから taskTemplates の ID を取り出す */
+export function getTemplateIdFromTask(task) {
+  if (!task) return null;
+  if (task.templateId) return task.templateId;
+  if (!task.generatedKey) return null;
+  const m = String(task.generatedKey).match(/^rep_(.+)_(\d{4}-\d{1,2}-\d{1,2})$/);
+  return m ? m[1] : null;
+}
+
+export function formatRepeatLabel(temp) {
+  if (!temp) return '定期';
+  const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
+  if (temp.type === 'weekly') {
+    const days = (temp.days || []).slice().sort((a, b) => a - b).map(d => weekNames[d]).join('');
+    return `毎週${days || '？'} ${temp.time || ''}`;
+  }
+  const day = (temp.days && temp.days[0]) || '?';
+  return `毎月${day}日 ${temp.time || ''}`;
 }
 
 export function getMarketRates() {

@@ -1,5 +1,5 @@
-import { state } from './state.js';
-import { getIcon, rb, formatTimeLeft, getMarketRates } from './utils.js';
+import { state } from './state.js?v=106';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel } from './utils.js?v=106';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -15,6 +15,11 @@ window.togglePassword = (inputId, eyeIconId) => {
 };
 
 export function render() {
+  if (state.resetPasswordCode || state.setupMode === 'password_reset_form') {
+    bottomNav.classList.add('hidden');
+    appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordResetForm()}</div>`;
+    return;
+  }
   if (state.requirePasswordSetup) {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordSetup()}</div>`;
@@ -50,6 +55,7 @@ export function render() {
       let content = '';
       if(state.view === 'propose') content = renderPropose();
       else if(state.view === 'taskCreate') content = renderTaskCreate();
+      else if(state.view === 'templateEdit') content = renderTemplateEdit();
       else if(state.view === 'exchange') content = renderExchange();
       else if(state.view === 'invest') content = renderInvest();
       else if(state.view === 'bank') content = renderBank();
@@ -123,6 +129,17 @@ function renderHome() {
   let taskHtml = activeTasks.length > 0 ? activeTasks.map(t => {
     const timeTxt = formatTimeLeft(t.deadline);
     let btn = ''; let trashBtn = '';
+    const templateId = getTemplateIdFromTask(t);
+    const template = templateId ? state.taskTemplates.find(tp => tp.id === templateId) : null;
+    let repeatMark = '';
+    if (template) {
+      const tip = formatRepeatLabel(template);
+      if (state.role === 'parent') {
+        repeatMark = `<button type="button" onclick="openTemplateEdit('${template.id}')" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100 transition" title="${tip}（タップで編集）"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black tracking-wide">定期</span></button>`;
+      } else {
+        repeatMark = `<span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-500 border border-sky-100" title="${tip}"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black tracking-wide">定期</span></span>`;
+      }
+    }
     
     if (state.role === 'child') {
       if (t.status === 'open') {
@@ -170,7 +187,10 @@ function renderHome() {
     return `
       <div class="p-3 flex flex-col gap-1.5 min-w-0 bg-white hover:bg-slate-50 rounded-xl transition border border-transparent hover:border-slate-100">
         <div class="flex justify-between items-center gap-2 min-w-0">
-          <span class="font-bold text-xs text-slate-700 truncate flex-1">${t.title}</span>
+          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+            ${repeatMark}
+            <span class="font-bold text-xs text-slate-700 truncate">${t.title}</span>
+          </div>
           <div class="flex items-center gap-1.5">
             <span class="text-[9px] font-medium ${timeTxt.includes('切れ')?'text-red-500':'text-slate-400'} shrink-0">${timeTxt}</span>
             ${trashBtn}
@@ -326,6 +346,56 @@ function renderTaskCreate() {
   `; 
 }
 
+function renderTemplateEdit() {
+  const temp = state.taskTemplates.find(t => t.id === state.editingTemplateId);
+  if (!temp) {
+    return `
+      <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">定期発注の編集</h2>
+      <p class="text-sm font-bold text-slate-500 text-center py-8">この定期設定は削除済みか見つかりません。</p>
+      <button onclick="setView('home')" class="solid-btn w-full py-3 font-bold text-sm">戻る</button>
+    `;
+  }
+  const isWeekly = temp.type !== 'monthly';
+  window.repeatType = isWeekly ? 'weekly' : 'monthly';
+  const days = temp.days || [];
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-sky-500">${getIcon('repeat')}</div>
+      定期発注の編集
+    </h2>
+    <p class="text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-100 rounded-xl px-3 py-2 mb-4">${formatRepeatLabel(temp)}</p>
+    <input type="text" id="tmpl-title" value="${String(temp.title || '').replace(/"/g, '&quot;')}" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <div class="flex items-center gap-3 mb-4">
+      <input type="number" id="tmpl-points" value="${temp.points || ''}" placeholder="報酬金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+      <span class="font-bold text-sm text-slate-500">pt</span>
+    </div>
+    <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
+      <div class="flex gap-2">
+        <button type="button" onclick="setRepeatType('weekly')" class="solid-btn flex-1 py-2 font-bold text-[10px] ${isWeekly ? 'primary-btn' : ''}" id="btn-rep-weekly">曜日指定</button>
+        <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px] ${!isWeekly ? 'primary-btn' : ''}" id="btn-rep-monthly">毎月指定</button>
+      </div>
+      <div id="weekly-select" class="${isWeekly ? '' : 'hidden'}">
+        <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（0時自動追加）</p>
+        <div class="flex gap-2 flex-wrap">
+          ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="repeat-weeks" value="${i}" ${days.includes(i) ? 'checked' : ''}> ${w}</label>`).join('')}
+        </div>
+      </div>
+      <div id="monthly-select" class="${isWeekly ? 'hidden' : ''}">
+        <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（0時自動追加）</p>
+        <select id="repeat-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
+          ${Array.from({length:31},(_,i)=>`<option value="${i+1}" ${days[0] === i+1 ? 'selected' : ''}>${i+1}日</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <p class="text-[9px] font-bold text-slate-400 mb-2">その日の期限（締切時間）を設定</p>
+        <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="${temp.time || '19:00'}">
+      </div>
+    </div>
+    <button onclick="updateTemplate()" class="solid-btn primary-btn w-full py-4 font-bold mb-3">変更を保存</button>
+    <button onclick="deleteTemplate()" class="solid-btn w-full py-3 font-bold text-sm text-red-500 hover:bg-red-50 border-red-100">この定期発注を削除</button>
+  `;
+}
+
 window.toggleRepeatUI = () => {
   const isRepeat = document.getElementById('task-repeat-toggle').checked;
   document.getElementById('repeat-ui').classList.toggle('hidden', !isRepeat);
@@ -350,8 +420,32 @@ function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b bo
 function renderExchange() { const p = state.exchanges.filter(e => e.status === 'pending'); if (state.role === 'child') return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div>${rb('換金申請','かんきんしんせい')}</h2><div class="flex items-center gap-3 mb-6"><input type="number" id="exchange-amount" placeholder="金額" class="flex-1 p-4 bg-white border border-slate-200 rounded-xl font-black text-xl text-right focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">円</span></div><button onclick="requestExchange()" class="solid-btn primary-btn w-full py-4 font-bold mb-6">申請する</button><div class="space-y-2">${p.map(e => `<div class="p-3 rounded-xl text-sm font-bold flex justify-between bg-slate-50 border border-slate-100"><span class="text-slate-700">${e.yen} 円</span><span class="text-slate-400 text-[10px] bg-white px-2 py-1 rounded border border-slate-200">承認待ち</span></div>`).join('')}</div>`; else return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`; }
 function renderTickets() { const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div>チケット${state.role==='parent'?'管理':'購入'}</h2>${state.role==='parent'?'<div class="flex gap-2 mb-6"><input id="t-title" placeholder="品名" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/><input id="t-pts" type="number" placeholder="pt" class="w-24 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/></div><button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-6">追加する</button>':''}<div class="space-y-3">${ts.map(t=>{ let b = ''; if(state.role==='child'){ if(t.status==='available') b=`<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold">購入</button>`; else b=`<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md">所持中</span>`; } else { if(t.status==='available') b=`<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition">削除</button>`; else if(t.status==='bought') b=`<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">使用済にする</button>`; else b=`<span class="text-[9px] text-slate-300 font-bold">使用済</span>`; } return `<div class="p-4 rounded-xl border ${t.status==='bought'?'bg-slate-50 border-slate-200':'bg-white border-slate-100'} flex justify-between items-center"><div><p class="font-bold text-sm text-slate-700">${t.title}</p><p class="text-[10px] font-bold mt-0.5 ${t.status==='bought'?'text-slate-400':'text-rose-500'}">${t.price} pt</p></div>${b}</div>`; }).join('')}</div>`; }
 function renderHistory() { const app = state.tasks.filter(t => t.status === 'approved'); const t = app.reduce((s, t) => s + t.points, 0); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p><p class="text-3xl font-black text-slate-800 tracking-tight">${t.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p></div><div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>`; }
-function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline).sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
+function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
 function renderPasswordSetup() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">パスワードを設定</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">次回以降のログインに使う<br>パスワードを決めてください。</p><div class="password-wrapper"><input type="password" id="new-password" placeholder="パスワード（6文字以上）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" /><div id="eye-new" class="password-eye" onclick="togglePassword('new-password', 'eye-new')">${getIcon('eye')}</div></div><div class="password-wrapper"><input type="password" id="new-password-confirm" placeholder="もう一度入力（確認用）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" /><div id="eye-confirm" class="password-eye" onclick="togglePassword('new-password-confirm', 'eye-confirm')">${getIcon('eye')}</div></div><button onclick="saveNewPassword()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md shadow-blue-200">設定して開始</button></div></div>`; }
+
+function renderPasswordResetForm() {
+  if (state.isSending) {
+    return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50"><div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center"><div class="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-slate-500">通信中...</p></div></div>`;
+  }
+  return `
+    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
+      <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95">
+        <h3 class="font-black text-slate-800 mb-2 text-lg">新しいパスワード</h3>
+        <p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">新しいパスワードを入力してください。<br>（6文字以上）</p>
+        <div class="password-wrapper">
+          <input type="password" id="reset-new-password" placeholder="新しいパスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+          <div id="eye-reset-new" class="password-eye" onclick="togglePassword('reset-new-password', 'eye-reset-new')">${getIcon('eye')}</div>
+        </div>
+        <div class="password-wrapper">
+          <input type="password" id="reset-new-password-confirm" placeholder="もう一度入力（確認用）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" />
+          <div id="eye-reset-confirm" class="password-eye" onclick="togglePassword('reset-new-password-confirm', 'eye-reset-confirm')">${getIcon('eye')}</div>
+        </div>
+        <button onclick="submitPasswordReset()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">パスワードを変更する</button>
+      </div>
+    </div>
+  `;
+}
 function renderWaitingChild() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">${state.childName} の連携待機中</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。</p><div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${state.familyCode}</div><div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse"><div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...</div>${state.children.length > 1 ? `<button onclick="switchActiveChild('${state.children.find(c=>c.id!==state.familyCode)?.id}')" class="text-[10px] text-blue-500 font-bold mb-4">別の子供の画面へ</button><br>` : ''}<button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button></div></div>`; }
 
 function renderSetup() {
@@ -361,7 +455,9 @@ function renderSetup() {
   else if (state.setupMode === 'parent_select') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">親のアカウント設定</h3><button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める（メール認証）</button><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">既存のアカウントにログイン</button></div>`; } 
   else if (state.setupMode === 'parent_register' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>登録用URLを送信しました。<br><br>メールアプリを開き、<br>リンクをクリックしてください。</p><p class="text-[10px] text-slate-400">※この画面は閉じて構いません</p></div>`; } 
   else if (state.setupMode === 'parent_register') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">新規登録（親）</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">入力したアドレスに認証リンクを送信します。<br>パスワードは認証後に設定します。</p><input type="email" id="setup-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendRealEmailLink()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">認証メールを送信する</button></div>`; } 
-  else if (state.setupMode === 'parent_login') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">ログイン（親）</h3><input type="email" id="login-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-3 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div class="password-wrapper"><input type="password" id="login-password" placeholder="パスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div id="eye-login" class="password-eye" onclick="togglePassword('login-password', 'eye-login')">${getIcon('eye')}</div></div><button onclick="loginParent()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">ログイン</button></div>`; } 
+  else if (state.setupMode === 'parent_login') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">ログイン（親）</h3><input type="email" id="login-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-3 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div class="password-wrapper"><input type="password" id="login-password" placeholder="パスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div id="eye-login" class="password-eye" onclick="togglePassword('login-password', 'eye-login')">${getIcon('eye')}</div></div><button onclick="loginParent()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md mb-4">ログイン</button><button type="button" onclick="setSetupMode('parent_forgot')" class="w-full text-center text-[11px] font-bold text-slate-500 hover:text-slate-800 underline underline-offset-2 transition">パスワードを忘れた方はこちら</button></div>`; } 
+  else if (state.setupMode === 'parent_forgot' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>パスワード再設定用のリンクを送信しました。<br><br>メールアプリを開き、<br>リンクをタップしてください。</p><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50">ログイン画面へ戻る</button></div>`; }
+  else if (state.setupMode === 'parent_forgot') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_login')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">パスワード再設定</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">登録しているメールアドレスを入力してください。<br>再設定用のリンクを送信します。</p><input type="email" id="reset-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendPasswordReset()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">再設定メールを送信</button></div>`; }
   else if (state.setupMode === 'child') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">親の同期IDを入力</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">親のアプリの設定画面にある<br>「同期ID」を入力して連携します。</p><input id="setup-family-code" placeholder="IDを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-2xl uppercase tracking-widest focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="joinFamily()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">同期してスタート</button></div>`; }
   return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex items-center justify-center relative z-10 border border-slate-100"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-slate-800 mb-10 tracking-tighter relative z-10">イエノミクス</h1>${content}</div>`;
 }

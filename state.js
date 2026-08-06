@@ -13,6 +13,8 @@ export const state = {
   isSending: false,
   message: '',
   requirePasswordSetup: false,
+  resetPasswordCode: null,
+  editingTemplateId: null,
   
   // 親が管理する複数子供用データ（新規機能）
   children: [], 
@@ -22,9 +24,12 @@ export const state = {
   points: 0,
   childLinked: true,
   tasks: [],
+  taskTemplates: [],
   tickets: [],
   investments: [],
   exchanges: [],
   banks: [],    
-  balloons: []
+  balloons: [],
+  isInitialLoad: true,
+  tasksReady: false
 };

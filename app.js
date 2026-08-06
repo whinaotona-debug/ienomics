@@ -1,9 +1,9 @@
-import { state } from './state.js';
-import { render } from './ui.js';
-import { applyFuriganaState, requestPushPermission, sendPushNotification } from './utils.js';
+import { state } from './state.js?v=106';
+import { render } from './ui.js?v=106';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask } from './utils.js?v=106';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
 let unsubscribes = [];
@@ -14,6 +14,28 @@ let generatedToday = {};
 applyFuriganaState();
 
 window.onload = async () => {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+  const oobCode = params.get('oobCode');
+
+  // パスワード再設定メールのリンクから戻ってきた場合
+  if (mode === 'resetPassword' && oobCode) {
+    try {
+      await verifyPasswordResetCode(auth, oobCode);
+      state.resetPasswordCode = oobCode;
+      state.setupMode = 'password_reset_form';
+      window.history.replaceState(null, null, window.location.pathname);
+      render();
+      return;
+    } catch (error) {
+      alert("パスワード再設定リンクが無効、または期限切れです。もう一度お試しください。");
+      window.history.replaceState(null, null, window.location.pathname);
+      state.setupMode = 'parent_forgot';
+      render();
+      return;
+    }
+  }
+
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
     if (!email) {
@@ -87,31 +109,76 @@ function loadParentChildren(parentUid) {
   });
 }
 
-// ★ 徹底修正：二重発注を絶対に防ぐロジック
+// 繰り返し発注: 親端末のみ・確定ドキュメントID・論理削除で二重発注/削除増殖を防ぐ
 let isGenerating = false;
-async function checkAndGenerateRepeatedTasks() {
-  if (!state.familyCode || isGenerating || state.taskTemplates.length === 0) return;
-  isGenerating = true; 
-  
+let isDeduping = false;
+
+function todayKeyString() {
+  const now = new Date();
+  return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+}
+
+async function dedupeRepeatedTasks() {
+  if (state.role !== 'parent' || isDeduping || !state.familyCode) return;
+  const groups = {};
+  for (const t of state.tasks) {
+    if (!t.generatedKey || t.status === 'deleted') continue;
+    if (!groups[t.generatedKey]) groups[t.generatedKey] = [];
+    groups[t.generatedKey].push(t);
+  }
+  const extras = [];
+  for (const key of Object.keys(groups)) {
+    const list = groups[key].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    for (let i = 1; i < list.length; i++) extras.push(list[i]);
+  }
+  if (extras.length === 0) return;
+  isDeduping = true;
   try {
+    for (const t of extras) {
+      await deleteDoc(doc(db, "tasks", t.id));
+    }
+  } catch (error) {
+    console.error("重複タスク整理エラー:", error);
+  } finally {
+    isDeduping = false;
+  }
+}
+
+async function checkAndGenerateRepeatedTasks() {
+  // 子端末では作らない（親子同時書き込みの二重発注を防ぐ）
+  if (state.role !== 'parent') return;
+  if (!state.familyCode || !state.tasksReady || isGenerating) return;
+  if (!state.taskTemplates || state.taskTemplates.length === 0) return;
+  isGenerating = true;
+
+  try {
+    await dedupeRepeatedTasks();
+
     const now = new Date();
-    const currentDay = now.getDay(); 
-    const currentDate = now.getDate(); 
-    const todayStr = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+    const currentDay = now.getDay();
+    const currentDate = now.getDate();
+    const todayStr = todayKeyString();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // Firestore上にすでにある今年の今日のタスクキーを取得
-    const existingKeys = state.tasks.map(t => t.generatedKey).filter(Boolean);
+    // 削除済みも含めてキーがあれば「今日は処理済み」（論理削除で再発注を防ぐ）
+    const existingKeys = new Set(
+      state.tasks.map(t => t.generatedKey).filter(Boolean)
+    );
 
     for (const temp of state.taskTemplates) {
       const generatedKey = `rep_${temp.id}_${todayStr}`;
-      
-      // 1. 今開いているブラウザですでに作ったか？（ローカルチェック）
-      if (generatedToday[generatedKey]) continue;
-      
-      // 2. データベース上にすでに存在しているか？（クラウドチェック）
-      if (existingKeys.includes(generatedKey)) {
-        generatedToday[generatedKey] = true; // 次から高速スキップするために記憶
+
+      if (generatedToday[generatedKey] || existingKeys.has(generatedKey)) {
+        generatedToday[generatedKey] = true;
+        continue;
+      }
+
+      // 確定IDのドキュメントが既にあればスキップ（他端末との競合対策）
+      const taskRef = doc(db, "tasks", generatedKey);
+      const existingDoc = await getDoc(taskRef);
+      if (existingDoc.exists()) {
+        generatedToday[generatedKey] = true;
+        existingKeys.add(generatedKey);
         continue;
       }
 
@@ -120,28 +187,30 @@ async function checkAndGenerateRepeatedTasks() {
       if (temp.type === 'monthly' && temp.days.includes(currentDate)) shouldCreate = true;
 
       if (shouldCreate) {
-        // ★ 作る直前に「作ったよスタンプ」を押す（2個目を作らせないため）
-        generatedToday[generatedKey] = true; 
+        generatedToday[generatedKey] = true;
+        existingKeys.add(generatedKey);
 
         const [hours, minutes] = temp.time.split(':').map(Number);
         const deadlineDate = new Date(todayStart);
         deadlineDate.setHours(hours, minutes, 0, 0);
 
-        await addDoc(collection(db, "tasks"), {
+        // addDoc禁止: 同じ generatedKey をドキュメントIDにして上書き合流させる
+        await setDoc(taskRef, {
           familyCode: state.familyCode,
           title: temp.title,
           points: temp.points,
           status: 'open',
-          generatedKey: generatedKey, 
+          generatedKey: generatedKey,
+          templateId: temp.id,
           createdAt: Date.now(),
-          deadline: deadlineDate.getTime() 
+          deadline: deadlineDate.getTime()
         });
       }
     }
   } catch (error) {
     console.error("繰り返しタスク生成エラー:", error);
   } finally {
-    isGenerating = false; 
+    isGenerating = false;
   }
 }
 
@@ -149,7 +218,9 @@ function setupListeners() {
   if (!state.familyCode) return;
   
   unsubscribes.forEach(unsub => unsub()); 
-  unsubscribes = []; 
+  unsubscribes = [];
+  state.tasksReady = false;
+  state.isInitialLoad = true;
   
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => { 
     if (d.exists()) { 
@@ -178,6 +249,7 @@ function setupListeners() {
         s.docChanges().forEach(change => {
           if (change.type === "added" && k === "tasks") {
             const t = change.doc.data();
+            if (t.status === 'deleted') return;
             if (state.role === 'child' && t.status === 'open') {
               sendPushNotification("新しいお仕事！", `「${t.title}」が追加されました！`);
             }
@@ -196,8 +268,12 @@ function setupListeners() {
       
       state[k] = a; 
       if (k === "tasks") {
-        state.isInitialLoad = false; 
-        checkAndGenerateRepeatedTasks();
+        const firstLoad = state.isInitialLoad;
+        state.isInitialLoad = false;
+        state.tasksReady = true;
+        // 初回読込時のみ自動発注（削除のたびに再生成しない）
+        if (firstLoad) checkAndGenerateRepeatedTasks();
+        else dedupeRepeatedTasks();
       }
       render(); 
     });
@@ -206,9 +282,84 @@ function setupListeners() {
   w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons");
 }
 
-window.setView = (viewName) => { state.view = viewName; render(); };
+window.setView = (viewName) => {
+  if (viewName !== 'templateEdit') state.editingTemplateId = null;
+  state.view = viewName;
+  render();
+};
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
+
+window.openTemplateEdit = (templateId) => {
+  if (state.role !== 'parent') return;
+  const temp = state.taskTemplates.find(t => t.id === templateId);
+  if (!temp) return alert("この定期設定は見つかりません（すでに削除された可能性があります）");
+  state.editingTemplateId = templateId;
+  state.view = 'templateEdit';
+  render();
+};
+
+function readRepeatFormDays() {
+  const repeatType = window.repeatType || 'weekly';
+  let days = [];
+  if (repeatType === 'weekly') {
+    document.querySelectorAll('input[name="repeat-weeks"]:checked').forEach(cb => days.push(parseInt(cb.value)));
+  } else {
+    days.push(parseInt(document.getElementById('repeat-day-select').value));
+  }
+  return { repeatType, days, time: document.getElementById('repeat-time').value || '19:00' };
+}
+
+window.updateTemplate = async () => {
+  const id = state.editingTemplateId;
+  if (!id) return;
+  const title = document.getElementById('tmpl-title').value.trim();
+  const points = parseInt(document.getElementById('tmpl-points').value);
+  if (!title || !points) return alert("内容と報酬を入力してください");
+  const { repeatType, days, time } = readRepeatFormDays();
+  if (repeatType === 'weekly' && days.length === 0) return alert("曜日を1つ以上選んでください");
+
+  try {
+    await updateDoc(doc(db, "taskTemplates", id), {
+      title, points, type: repeatType, days, time
+    });
+
+    // 今日すでに出ている未完了の定期ジョブも内容を揃える
+    const [hours, minutes] = time.split(':').map(Number);
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const deadlineDate = new Date(todayStart);
+    deadlineDate.setHours(hours, minutes, 0, 0);
+
+    for (const t of state.tasks) {
+      const tid = getTemplateIdFromTask(t);
+      if (tid !== id) continue;
+      if (!['open', 'accepted', 'rejected'].includes(t.status)) continue;
+      await updateDoc(doc(db, "tasks", t.id), {
+        title, points, deadline: deadlineDate.getTime(), templateId: id
+      });
+    }
+
+    state.editingTemplateId = null;
+    setView('home');
+    alert("定期発注を更新しました");
+  } catch (error) {
+    alert("更新できませんでした: " + error.message);
+  }
+};
+
+window.deleteTemplate = async () => {
+  const id = state.editingTemplateId;
+  if (!id) return;
+  if (!confirm("この定期発注を削除しますか？\n今後は自動で追加されなくなります。\n（今日すでに出ている仕事は残ります）")) return;
+  try {
+    await deleteDoc(doc(db, "taskTemplates", id));
+    state.editingTemplateId = null;
+    setView('home');
+    alert("定期発注を削除しました");
+  } catch (error) {
+    alert("削除できませんでした: " + error.message);
+  }
+};
 
 // ★ 修正：切り替えた時に「作ったよスタンプ」をリセットする
 window.switchActiveChild = (code) => { 
@@ -314,17 +465,75 @@ window.addNewChild = async () => { const name = prompt("追加するお子様の
 window.unlinkAccount = async () => { if (confirm("連携を解除（またはログアウト）しますか？")) { try { await signOut(auth); } catch (e) {} localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode'); state.role = null; state.familyCode = null; state.children = []; if (window.unsubChildren) window.unsubChildren(); unsubscribes.forEach(unsub => unsub()); unsubscribes = []; window.location.reload(); } };
 
 window.deleteTask = async (id) => { 
-  if (confirm("このお仕事を削除しますか？")) { 
-    try {
-      await deleteDoc(doc(db, "tasks", id)); 
-      setView('home'); 
-    } catch (error) {
-      alert("削除できませんでした: " + error.message);
+  if (!confirm("このお仕事を削除しますか？")) return;
+  try {
+    const task = state.tasks.find(t => t.id === id);
+    if (task?.generatedKey) {
+      // 繰り返し発注分は論理削除（ドキュメントを残して今日の再発注を防ぐ）
+      generatedToday[task.generatedKey] = true;
+      await updateDoc(doc(db, "tasks", id), { status: 'deleted', deletedAt: Date.now() });
+    } else {
+      await deleteDoc(doc(db, "tasks", id));
     }
-  } 
+    setView('home');
+  } catch (error) {
+    alert("削除できませんでした: " + error.message);
+  }
 };
 
 window.deleteTicket = async (id) => { if (confirm("このチケットを削除しますか？")) { await deleteDoc(doc(db, "tickets", id)); } };
 window.joinFamily = async () => { try { const emailInput = document.getElementById('setup-family-code'); if (!emailInput) return alert("システムエラー"); const code = emailInput.value.toUpperCase().trim(); if (!code) return alert("IDを入力してください"); const docRef = doc(db, "families", code); const docSnap = await getDoc(docRef); if (docSnap.exists()) { state.familyCode = code; state.role = 'child'; localStorage.setItem('ienomics_familyCode', code); localStorage.setItem('ienomics_role', 'child'); try { await updateDoc(docRef, { childLinked: true }); } catch (e) { } setupListeners(); render(); } else { alert("無効なIDです"); } } catch (error) { alert("エラー: " + error.message); } };
 window.sendRealEmailLink = async () => { try { const emailInput = document.getElementById('setup-email'); if (!emailInput) return; const email = emailInput.value.trim(); if (!email) return alert("メールアドレスを入力してください"); state.isSending = true; render(); const actionCodeSettings = { url: APP_URL, handleCodeInApp: true }; await sendSignInLinkToEmail(auth, email, actionCodeSettings); window.localStorage.setItem('emailForSignIn', email); state.message = email; state.setupStep = 2; } catch (error) { alert("エラー: " + error.message); } finally { state.isSending = false; render(); } };
+
+window.sendPasswordReset = async () => {
+  try {
+    const emailInput = document.getElementById('reset-email');
+    if (!emailInput) return;
+    const email = emailInput.value.trim();
+    if (!email) return alert("メールアドレスを入力してください");
+    state.isSending = true;
+    render();
+    const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
+    await sendPasswordResetEmail(auth, email, actionCodeSettings);
+    state.message = email;
+    state.setupStep = 2;
+  } catch (error) {
+    const code = error?.code || '';
+    if (code === 'auth/user-not-found') {
+      alert("このメールアドレスのアカウントが見つかりません");
+    } else if (code === 'auth/invalid-email') {
+      alert("メールアドレスの形式が正しくありません");
+    } else {
+      alert("送信エラー: " + error.message);
+    }
+  } finally {
+    state.isSending = false;
+    render();
+  }
+};
+
+window.submitPasswordReset = async () => {
+  const code = state.resetPasswordCode;
+  if (!code) return alert("再設定コードがありません。メールのリンクから再度開いてください。");
+  const pass = document.getElementById('reset-new-password')?.value || '';
+  const passConf = document.getElementById('reset-new-password-confirm')?.value || '';
+  if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
+  if (pass !== passConf) return alert("パスワードが一致しません！");
+  try {
+    state.isSending = true;
+    render();
+    await confirmPasswordReset(auth, code, pass);
+    state.resetPasswordCode = null;
+    state.setupMode = 'parent_login';
+    state.setupStep = 1;
+    state.message = '';
+    alert("パスワードを変更しました。新しいパスワードでログインしてください。");
+  } catch (error) {
+    alert("再設定に失敗しました: " + (error.message || error));
+  } finally {
+    state.isSending = false;
+    render();
+  }
+};
+
 window.loginParent = async () => { try { const email = document.getElementById('login-email').value.trim(); const pass = document.getElementById('login-password').value; if (!email || !pass) return alert("メールアドレスとパスワードを入力してください"); state.isSending = true; render(); const result = await signInWithEmailAndPassword(auth, email, pass); state.role = 'parent'; localStorage.setItem('ienomics_role', 'parent'); await runMigrationAndLoadChildren(result.user.uid); } catch (error) { alert("ログイン失敗: パスワードまたはメールアドレスが違います"); } finally { state.isSending = false; render(); } };
