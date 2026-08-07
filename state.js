@@ -17,6 +17,7 @@ export const state = {
   setupLoadingMessage: '',
   editingTemplateId: null,
   editingPaymentId: null,
+  investRange: 'week', // 'day' | 'week' | 'month'
   
   // 親が管理する複数子供用データ（新規機能）
   children: [], 

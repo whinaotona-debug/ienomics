@@ -1,6 +1,6 @@
 import { state } from './state.js?v=118';
-import { render } from './ui.js?v=121';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=118';
+import { render } from './ui.js?v=125';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=124';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -566,6 +566,12 @@ window.setView = (viewName) => {
   render();
 };
 
+window.setInvestRange = (range) => {
+  if (!['day', 'week', 'month'].includes(range)) return;
+  state.investRange = range;
+  render();
+};
+
 /** キャッシュを避けて最新のアプリを読み込み直す */
 window.reloadApp = () => {
   const url = new URL(window.location.href);
@@ -626,7 +632,7 @@ window.updateTemplate = async () => {
     }
 
     state.editingTemplateId = null;
-    setView('home');
+    setView('templates');
     alert("定期発注を更新しました");
   } catch (error) {
     alert("更新できませんでした: " + error.message);
@@ -640,7 +646,7 @@ window.deleteTemplate = async () => {
   try {
     await deleteDoc(doc(db, "taskTemplates", id));
     state.editingTemplateId = null;
-    setView('home');
+    setView('templates');
     alert("定期発注を削除しました");
   } catch (error) {
     alert("削除できませんでした: " + error.message);
@@ -785,7 +791,8 @@ window.investCustom = async (n) => {
   if (isNaN(a) || a <= 0) return alert("正しい金額を入力してください");
   if (state.points < a) return alert(`ptが不足しています（所持: ${state.points}pt）`); 
   
-  const r = n === 'japan' ? getMarketRates().日本[12] : getMarketRates().アメリカ[12]; 
+  const cur = getCurrentMarketRates();
+  const r = n === 'japan' ? cur.日本 : cur.アメリカ; 
   const dbName = n === 'japan' ? '日本' : 'アメリカ'; 
   
   await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 

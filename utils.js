@@ -227,15 +227,52 @@ export function getHelpStampData(tasks) {
   return { cardDays, stamped, streak, year, month };
 }
 
-export function getMarketRates() {
-  const today = new Date();
+/** 市場レート（決定論的。range: 'day' | 'week' | 'month'） */
+function rateAt(date, market) {
+  const day = Math.floor(date.getTime() / 86400000);
+  const hour = date.getHours() + date.getMinutes() / 60;
+  const t = day + hour / 24;
+  if (market === '日本') {
+    return Math.max(0.1, 1.0 + Math.sin(t * 0.1) * 0.2 + Math.sin(t * 0.03) * 0.3 + Math.sin(hour * 0.55) * 0.025);
+  }
+  return Math.max(0.1, 1.0 + Math.cos(t * 0.08) * 0.3 + Math.sin(t * 0.04) * 0.4 + Math.cos(hour * 0.4) * 0.03);
+}
+
+export function getMarketRates(range = 'month') {
+  const now = new Date();
   const rates = { 日本: [], アメリカ: [], labels: [] };
-  for (let i = 12; i >= 0; i--) {
-    const d = new Date(today.getTime() - i * 15 * 86400000);
-    rates.labels.push(`${d.getMonth()+1}/${d.getDate()}`);
-    const day = Math.floor(d.getTime() / 86400000);
-    rates.日本.push(Math.max(0.1, 1.0 + Math.sin(day * 0.1) * 0.2 + Math.sin(day * 0.03) * 0.3)); 
-    rates.アメリカ.push(Math.max(0.1, 1.0 + Math.cos(day * 0.08) * 0.3 + Math.sin(day * 0.04) * 0.4));
+  let steps = 30;
+  let stepMs = 86400000;
+  let labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+
+  if (range === 'day') {
+    steps = 24;
+    stepMs = 3600000;
+    labelFn = (d) => `${d.getHours()}時`;
+  } else if (range === 'week') {
+    steps = 7;
+    stepMs = 86400000;
+    labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  } else {
+    steps = 30;
+    stepMs = 86400000;
+    labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  for (let i = steps - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * stepMs);
+    rates.labels.push(labelFn(d));
+    rates.日本.push(rateAt(d, '日本'));
+    rates.アメリカ.push(rateAt(d, 'アメリカ'));
   }
   return rates;
+}
+
+/** 売買・評価用の現在レート（表示期間に依存しない） */
+export function getCurrentMarketRates() {
+  const now = new Date();
+  return {
+    日本: rateAt(now, '日本'),
+    アメリカ: rateAt(now, 'アメリカ')
+  };
 }
