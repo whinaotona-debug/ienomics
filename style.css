@@ -210,6 +210,27 @@ html, body {
   pointer-events: none;
 }
 
+/* ptスロット風カウント */
+.ie-points-value {
+  display: inline-block;
+  min-width: 1ch;
+  transform-origin: left center;
+}
+.ie-points-value.ie-points-spin {
+  animation: ie-points-tick 0.07s steps(2) infinite;
+}
+.ie-points-value.ie-points-up {
+  color: #b8ffe8 !important;
+  text-shadow: 0 0 18px rgba(184, 255, 232, 0.45);
+}
+.ie-points-value.ie-points-down {
+  color: #ffd0c8 !important;
+}
+@keyframes ie-points-tick {
+  from { transform: translateY(0); }
+  to { transform: translateY(-2px); }
+}
+
 .ie-refresh-btn svg {
   width: 16px;
   height: 16px;

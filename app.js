@@ -1,5 +1,5 @@
 import { state } from './state.js?v=118';
-import { render } from './ui.js?v=119';
+import { render } from './ui.js?v=121';
 import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=118';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";

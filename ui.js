@@ -7,6 +7,111 @@ const appDiv = document.getElementById('app');
 const bottomNav = document.getElementById('bottom-nav');
 let investChartInstance = null;
 
+/** ヘッダーptのスロット風カウント用 */
+let displayedPoints = null;
+let pointsAnimFamily = null;
+let pointsAnimRaf = null;
+let pointsAnimToken = 0;
+let pointsAnim = null; // { from, to, start }
+const POINTS_ANIM_MS = 1000;
+
+function syncPointsColor(el, value) {
+  if (!el) return;
+  const neg = value < 0;
+  el.classList.toggle('text-red-300', neg);
+  el.classList.toggle('text-white', !neg);
+  const unit = document.getElementById('ie-points-unit');
+  if (unit) {
+    unit.classList.toggle('text-red-300/80', neg);
+    unit.classList.toggle('text-white/60', !neg);
+  }
+}
+
+function stopPointsAnimClasses(el) {
+  if (!el) return;
+  el.classList.remove('ie-points-spin', 'ie-points-up', 'ie-points-down');
+}
+
+function animatePointsDisplay() {
+  const el = document.getElementById('ie-points-value');
+  if (!el) return;
+
+  const target = Number(state.points) || 0;
+  const family = state.familyCode;
+
+  // 初回 or 子供切替は即反映
+  if (displayedPoints === null || pointsAnimFamily !== family) {
+    if (pointsAnimRaf) cancelAnimationFrame(pointsAnimRaf);
+    pointsAnimToken++;
+    pointsAnim = null;
+    displayedPoints = target;
+    pointsAnimFamily = family;
+    el.textContent = target.toLocaleString();
+    syncPointsColor(el, target);
+    stopPointsAnimClasses(el);
+    return;
+  }
+
+  if (displayedPoints === target && !pointsAnim) {
+    el.textContent = target.toLocaleString();
+    syncPointsColor(el, target);
+    stopPointsAnimClasses(el);
+    return;
+  }
+
+  // 目標が変わったときだけアニメ開始（再描画では進行を維持）
+  if (!pointsAnim || pointsAnim.to !== target) {
+    pointsAnim = {
+      from: displayedPoints,
+      to: target,
+      start: performance.now()
+    };
+  }
+
+  const rising = pointsAnim.to > pointsAnim.from;
+  el.classList.add('ie-points-spin', rising ? 'ie-points-up' : 'ie-points-down');
+  el.classList.toggle('ie-points-up', rising);
+  el.classList.toggle('ie-points-down', !rising);
+
+  const token = ++pointsAnimToken;
+  if (pointsAnimRaf) cancelAnimationFrame(pointsAnimRaf);
+
+  const tick = (now) => {
+    if (token !== pointsAnimToken || !pointsAnim) return;
+    const { from, to, start } = pointsAnim;
+    const t = Math.min(1, (now - start) / POINTS_ANIM_MS);
+    // 序盤じゃかじゃか → 終盤で落ち着く
+    const eased = t < 0.7
+      ? (t / 0.7) * 0.85
+      : 0.85 + (1 - Math.pow(1 - (t - 0.7) / 0.3, 2)) * 0.15;
+    let current = Math.round(from + (to - from) * eased);
+    if (t < 0.92 && Math.abs(to - from) > 3) {
+      const jitter = Math.round((Math.random() - 0.5) * Math.min(9, Math.abs(to - from) * 0.04));
+      current += jitter;
+    }
+    displayedPoints = current;
+    const node = document.getElementById('ie-points-value');
+    if (!node) {
+      pointsAnimRaf = requestAnimationFrame(tick);
+      return;
+    }
+    node.textContent = current.toLocaleString();
+    syncPointsColor(node, current);
+
+    if (t < 1) {
+      pointsAnimRaf = requestAnimationFrame(tick);
+    } else {
+      displayedPoints = to;
+      node.textContent = to.toLocaleString();
+      syncPointsColor(node, to);
+      stopPointsAnimClasses(node);
+      pointsAnim = null;
+      pointsAnimRaf = null;
+    }
+  };
+  pointsAnimRaf = requestAnimationFrame(tick);
+}
+
 window.togglePassword = (inputId, eyeIconId) => {
   const input = document.getElementById(inputId);
   const icon = document.getElementById(eyeIconId);
@@ -75,9 +180,8 @@ export function render() {
       break;
   }
 
-  }
-
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
+  animatePointsDisplay();
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
 }
 
@@ -120,8 +224,8 @@ function renderHeader() {
              ${nameTag}
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-4xl font-black tracking-tight ${state.points < 0 ? 'text-red-300' : 'text-white'}">${state.points.toLocaleString()}</span>
-            <span class="text-xs font-bold ${state.points < 0 ? 'text-red-300/80' : 'text-white/60'}">pt</span>
+            <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
+            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/80' : 'text-white/60'}">pt</span>
           </div>
           ${state.points < 0 ? `<p class="text-[9px] font-bold text-red-300 mt-1">残高不足（株・換金はロック中）</p>` : ''}
           ${payHint}
