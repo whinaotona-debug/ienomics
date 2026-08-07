@@ -1,6 +1,6 @@
-import { state } from './state.js?v=112';
-import { render } from './ui.js?v=112';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue } from './utils.js?v=112';
+import { state } from './state.js?v=113';
+import { render } from './ui.js?v=113';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=113';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -173,7 +173,7 @@ async function processScheduledPayments() {
 
       try {
         let charged = false;
-        let insufficient = false;
+        let wentNegative = false;
 
         await runTransaction(db, async (tx) => {
           const chargeSnap = await tx.get(chargeRef);
@@ -182,10 +182,6 @@ async function processScheduledPayments() {
           const famSnap = await tx.get(famRef);
           if (!famSnap.exists()) return;
           const pts = famSnap.data().points || 0;
-          if (pts < amount) {
-            insufficient = true;
-            return;
-          }
 
           const paySnap = await tx.get(payRef);
           if (!paySnap.exists()) return;
@@ -193,15 +189,19 @@ async function processScheduledPayments() {
           if (payData.status !== 'active') return;
           if (payData.lastChargedKey === todayStr) return;
 
+          const nextPts = pts - amount;
+          wentNegative = nextPts < 0;
+
           tx.set(chargeRef, {
             familyCode: state.familyCode,
             paymentId: p.id,
             title: payData.title || p.title,
             amount,
             chargedAt: Date.now(),
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            wentNegative: wentNegative || undefined
           });
-          tx.update(famRef, { points: pts - amount });
+          tx.update(famRef, { points: nextPts });
 
           const updates = { lastChargedKey: todayStr };
           if (payData.mode === 'once') {
@@ -216,17 +216,15 @@ async function processScheduledPayments() {
         });
 
         if (charged) {
-          sendPushNotification(
-            "支払いが引き落とされました",
-            `「${p.title}」 −${amount}pt`
-          );
-        } else if (insufficient) {
-          const failKey = `pay_fail_${p.id}_${todayStr}`;
-          if (!sessionStorage.getItem(failKey)) {
-            sessionStorage.setItem(failKey, '1');
+          if (wentNegative) {
             sendPushNotification(
-              "支払いできませんでした",
-              `「${p.title}」は残高不足です（必要 ${amount}pt）`
+              "支払い引落（残高不足）",
+              `「${p.title}」 −${amount}pt。口座がマイナスになりました`
+            );
+          } else {
+            sendPushNotification(
+              "支払いが引き落とされました",
+              `「${p.title}」 −${amount}pt`
             );
           }
         }
@@ -745,6 +743,7 @@ window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'us
 window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
 
 window.investCustom = async (n) => { 
+  if (state.points < 0) return alert("残高がマイナスのため、株の購入はできません。お手伝いでポイントを取り戻しましょう！");
   const valStr = document.getElementById('invest-amount').value;
   if (!valStr) return alert("投資する金額(pt)を入力してください");
   const a = parseInt(valStr); 
@@ -764,7 +763,13 @@ window.investCustom = async (n) => {
   setView('invest'); 
 };
 
-window.requestExchange = async () => { const a = parseInt(document.getElementById('exchange-amount').value); if (!a || state.points < a) return alert("pt不足"); await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() }); setView('home'); };
+window.requestExchange = async () => {
+  if (state.points < 0) return alert("残高がマイナスのため、換金申請はできません。お手伝いでポイントを取り戻しましょう！");
+  const a = parseInt(document.getElementById('exchange-amount').value);
+  if (!a || state.points < a) return alert("pt不足");
+  await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() });
+  setView('home');
+};
 window.approveExchange = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); await updateDoc(doc(db, "exchanges", id), { status: 'approved' }); };
 window.rejectExchange = async (id) => updateDoc(doc(db, "exchanges", id), { status: 'rejected' });
 window.depositBank = async () => { const a = parseInt(document.getElementById('bank-amount').value); if (!a || state.points < a) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() }); setView('bank'); };

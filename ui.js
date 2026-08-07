@@ -1,5 +1,5 @@
-import { state } from './state.js?v=112';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=112';
+import { state } from './state.js?v=113';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=113';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -126,9 +126,10 @@ function renderHeader() {
              ${nameTag}
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-4xl font-black tracking-tight">${state.points.toLocaleString()}</span>
-            <span class="text-xs font-medium text-slate-400">pt</span>
+            <span class="text-4xl font-black tracking-tight ${state.points < 0 ? 'text-red-400' : ''}">${state.points.toLocaleString()}</span>
+            <span class="text-xs font-medium ${state.points < 0 ? 'text-red-400/80' : 'text-slate-400'}">pt</span>
           </div>
+          ${state.points < 0 ? `<p class="text-[9px] font-bold text-red-400 mt-1">残高不足（株・換金はロック中）</p>` : ''}
           ${payHint}
           ${streakHint}
         </div>
@@ -293,20 +294,22 @@ function renderModal(content) {
 // ★ 投資画面：引数エラーを解消
 function renderInvest() {
   const rates = getMarketRates();
+  const locked = state.points < 0;
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-purple-500">${getIcon('invest')}</div>${rb('資産運用','しさんうんよう')}</h2>
     <div class="w-full h-[180px] mb-6 relative p-1"><canvas id="investChart"></canvas></div>
-    ${state.role === 'child' ? `
-      <div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+    ${state.role === 'child' ? (
+      locked
+        ? `<div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-center"><p class="text-xs font-bold text-red-500">残高がマイナスのため株の購入はできません</p><p class="text-[10px] font-bold text-red-400 mt-1">お手伝いでポイントを取り戻しましょう</p></div>`
+        : `<div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
         <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} pt）</p>
         <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
         <div class="flex gap-2">
-          <!-- 文字列の引数渡しを修正 -->
           <button onclick="investCustom('japan')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇯🇵 日本株を買う</button>
           <button onclick="investCustom('us')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇺🇸 米国株を買う</button>
         </div>
-      </div>
-    ` : ''}
+      </div>`
+    ) : ''}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
         const cur = inv.name === '日本' ? rates.日本[12] : rates.アメリカ[12];
@@ -562,7 +565,21 @@ function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b b
 export function drawInvestChart() { const canvas = document.getElementById('investChart'); if (!canvas) return; const rates = getMarketRates(); const ctx = canvas.getContext('2d'); const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ'); const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0; const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0; const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r)); const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r)); if (investChartInstance) investChartInstance.destroy(); const isDetail = state.view === 'invest'; investChartInstance = new Chart(ctx, { type: 'line', data: { labels: rates.labels, datasets: [ { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }, { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } }, scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } }, layout: { padding: isDetail ? 0 : 5 } } }); }
 function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
 function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
-function renderExchange() { const p = state.exchanges.filter(e => e.status === 'pending'); if (state.role === 'child') return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div>${rb('換金申請','かんきんしんせい')}</h2><div class="flex items-center gap-3 mb-6"><input type="number" id="exchange-amount" placeholder="金額" class="flex-1 p-4 bg-white border border-slate-200 rounded-xl font-black text-xl text-right focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">円</span></div><button onclick="requestExchange()" class="solid-btn primary-btn w-full py-4 font-bold mb-6">申請する</button><div class="space-y-2">${p.map(e => `<div class="p-3 rounded-xl text-sm font-bold flex justify-between bg-slate-50 border border-slate-100"><span class="text-slate-700">${e.yen} 円</span><span class="text-slate-400 text-[10px] bg-white px-2 py-1 rounded border border-slate-200">承認待ち</span></div>`).join('')}</div>`; else return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`; }
+function renderExchange() {
+  const p = state.exchanges.filter(e => e.status === 'pending');
+  const locked = state.points < 0;
+  if (state.role === 'child') {
+    return `
+      <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div>${rb('換金申請','かんきんしんせい')}</h2>
+      ${locked
+        ? `<div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-center"><p class="text-xs font-bold text-red-500">残高がマイナスのため換金申請はできません</p><p class="text-[10px] font-bold text-red-400 mt-1">お手伝いでポイントを取り戻しましょう</p></div>`
+        : `<div class="flex items-center gap-3 mb-6"><input type="number" id="exchange-amount" placeholder="金額" class="flex-1 p-4 bg-white border border-slate-200 rounded-xl font-black text-xl text-right focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">円</span></div><button onclick="requestExchange()" class="solid-btn primary-btn w-full py-4 font-bold mb-6">申請する</button>`
+      }
+      <div class="space-y-2">${p.map(e => `<div class="p-3 rounded-xl text-sm font-bold flex justify-between bg-slate-50 border border-slate-100"><span class="text-slate-700">${e.yen} 円</span><span class="text-slate-400 text-[10px] bg-white px-2 py-1 rounded border border-slate-200">承認待ち</span></div>`).join('')}</div>
+    `;
+  }
+  return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`;
+}
 function renderTickets() { const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div>チケット${state.role==='parent'?'管理':'購入'}</h2>${state.role==='parent'?'<div class="flex gap-2 mb-6"><input id="t-title" placeholder="品名" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/><input id="t-pts" type="number" placeholder="pt" class="w-24 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/></div><button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-6">追加する</button>':''}<div class="space-y-3">${ts.map(t=>{ let b = ''; if(state.role==='child'){ if(t.status==='available') b=`<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold">購入</button>`; else b=`<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md">所持中</span>`; } else { if(t.status==='available') b=`<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition">削除</button>`; else if(t.status==='bought') b=`<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">使用済にする</button>`; else b=`<span class="text-[9px] text-slate-300 font-bold">使用済</span>`; } return `<div class="p-4 rounded-xl border ${t.status==='bought'?'bg-slate-50 border-slate-200':'bg-white border-slate-100'} flex justify-between items-center"><div><p class="font-bold text-sm text-slate-700">${t.title}</p><p class="text-[10px] font-bold mt-0.5 ${t.status==='bought'?'text-slate-400':'text-rose-500'}">${t.price} pt</p></div>${b}</div>`; }).join('')}</div>`; }
 function renderHistory() {
   const app = state.tasks.filter(t => t.status === 'approved');
