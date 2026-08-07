@@ -107,9 +107,17 @@ html, body {
   border-color: #c5d8d1;
   background: #fbfefd;
 }
-.solid-btn:active {
-  transform: scale(0.97);
-  background-color: var(--ie-accent-soft);
+.solid-btn.flex-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+.solid-btn.flex-row > span {
+  margin-top: 0 !important;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
 }
 
 .primary-btn {
@@ -383,9 +391,10 @@ html, body {
 ruby {
   display: inline-flex;
   flex-direction: column-reverse;
-  vertical-align: bottom;
+  vertical-align: baseline;
   align-items: center;
   line-height: 1;
+  margin: 0 0.02em;
 }
 rt {
   display: none;

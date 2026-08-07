@@ -148,10 +148,13 @@ export function render() {
   }
 
   bottomNav.classList.remove('hidden');
+  const midTab = state.role === 'parent'
+    ? `<button onclick="setView('balloonSend')" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
+    : `<button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>`;
   bottomNav.innerHTML = `
     <div class="ie-nav-shell">
       <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
-      <button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>
+      ${midTab}
       <button onclick="setView('history')" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
       <button onclick="setView('settings')" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
     </div>
@@ -233,9 +236,9 @@ function renderHeader() {
           ${streakHint}
         </div>
         <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
-        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1">
-          <p class="text-[9px] text-white/55 font-bold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
-          <p class="text-sm font-mono font-bold tracking-widest text-white/90">${state.familyCode}</p>
+        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1">
+          <p class="text-[9px] text-white/55 font-bold mb-1.5 tracking-widest leading-none">${rb('同期','どうき')}ID</p>
+          <p class="text-sm font-mono font-bold tracking-wider text-white/90 leading-none translate-y-px">${state.familyCode}</p>
         </div>
       </div>
     </div>
@@ -351,7 +354,7 @@ function renderInboxPanel() {
 
 function renderHome() {
   const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status));
-  const tJob = state.role === 'child' ? { id: 'propose', title: rb('見積り','みつもり') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
+  const tJob = state.role === 'child' ? { id: 'propose', title: rb('見積り','みつもり') } : { id: 'taskCreate', title: rb('仕事の発注','しごとはっちゅう') };
   const tEx = state.role === 'child' ? rb('換金申請','かんきんしんせい') : rb('換金承認','かんきんしょうにん');
 
   let bankTotal = 0;
@@ -462,12 +465,13 @@ function renderHome() {
             <div>
               <p class="ie-section-label">${rb('仕事','しごと')}</p>
               <button onclick="setView('${tJob.id}')" class="solid-btn w-full py-3 flex-row gap-2">
-                <div class="w-4 h-4 text-[#2f8f82]">${getIcon('propose')}</div><span class="text-[9px] font-bold text-[#3d524c] mt-0.5">${tJob.title}</span>
+                <div class="w-4 h-4 text-[#2f8f82] shrink-0">${getIcon('propose')}</div>
+                <span class="text-[9px] font-bold text-[#3d524c] leading-none">${tJob.title}</span>
               </button>
-              <button onclick="setView('templates')" class="solid-btn w-full py-2.5 flex-row gap-2 mt-2">
-                <div class="w-4 h-4 text-[#5b8def]">${getIcon('repeat')}</div>
-                <span class="text-[9px] font-bold text-[#3d524c] mt-0.5">${rb('定期一覧','ていきいちらん')}</span>
-                ${(state.taskTemplates || []).length > 0 ? `<span class="ml-auto text-[9px] font-black text-[#5b8def] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">${state.taskTemplates.length}</span>` : ''}
+              <button onclick="setView('templates')" class="solid-btn w-full py-2.5 flex-row gap-1.5 mt-2 relative">
+                <div class="w-4 h-4 text-[#5b8def] shrink-0">${getIcon('repeat')}</div>
+                <span class="text-[9px] font-bold text-[#3d524c] leading-none">${rb('定期一覧','ていきいちらん')}</span>
+                ${(state.taskTemplates || []).length > 0 ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#5b8def] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">${state.taskTemplates.length}</span>` : ''}
               </button>
             </div>
             <div>
@@ -478,14 +482,14 @@ function renderHome() {
                     <div class="w-4 h-4 text-[#2f8f82]">${getIcon('bank')}</div>
                     ${bankAmtHtml}
                   </div>
-                  <span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('銀行','ぎんこう')}</span>
+                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('銀行','ぎんこう')}</span>
                 </button>
                 <button onclick="setView('invest')" class="solid-btn py-2.5 flex-row gap-2">
                   <div class="flex flex-col items-center shrink-0">
                     <div class="w-4 h-4 text-[#5b8def]">${getIcon('invest')}</div>
                     ${investAmtHtml}
                   </div>
-                  <span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('運用','うんよう')}</span>
+                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('運用','うんよう')}</span>
                 </button>
               </div>
             </div>
@@ -493,21 +497,19 @@ function renderHome() {
               <p class="ie-section-label">${rb('支出','ししゅつ')}</p>
               <div class="grid grid-cols-1 gap-2">
                 <button onclick="setView('payments')" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#2f8f82]">${getIcon('pay')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('支払い','しはらい')}</span>
+                  <div class="w-4 h-4 text-[#2f8f82] shrink-0">${getIcon('pay')}</div>
+                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('支払い','しはらい')}</span>
                 </button>
                 <button onclick="setView('exchange')" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#e09a4a]">${getIcon('exchange')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${tEx}</span>
+                  <div class="w-4 h-4 text-[#e09a4a] shrink-0">${getIcon('exchange')}</div>
+                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${tEx}</span>
                 </button>
                 <button onclick="setView('tickets')" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#d9655b]">${getIcon('ticket')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">チケット</span>
+                  <div class="w-4 h-4 text-[#d9655b] shrink-0">${getIcon('ticket')}</div>
+                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">チケット</span>
                 </button>
               </div>
             </div>
-            ${state.role === 'parent' ? `
-              <button onclick="setView('balloonSend')" class="solid-btn primary-btn w-full py-2.5 mt-2">
-                <div class="flex items-center gap-1.5"><div class="w-3 h-3">${getIcon('gift')}</div><span class="text-[10px] font-bold">ギフト送信</span></div>
-              </button>
-            ` : ''}
           </div>
           <div class="solid-box h-[90px] relative p-1 cursor-pointer transition hover:brightness-[0.99]" onclick="setView('invest')">
             <canvas id="investChart"></canvas>
