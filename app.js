@@ -1,15 +1,190 @@
-import { state } from './state.js?v=106';
-import { render } from './ui.js?v=106';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask } from './utils.js?v=106';
+import { state } from './state.js?v=110';
+import { render } from './ui.js?v=110';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue } from './utils.js?v=110';
 import { db, auth } from './firebase.js'; 
-import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
 let unsubscribes = [];
 
 // ★ 追加：今日追加したテンプレートのIDを記憶しておく箱（セッション中の一時記憶）
-let generatedToday = {}; 
+let generatedToday = {};
+let deadlineTimer = null;
+const DEADLINE_REMIND_MS = 60 * 60 * 1000; // 1時間前
+const DEADLINE_CHECK_MS = 30 * 1000;
+
+function getDeadlineNotifiedMap() {
+  try {
+    return JSON.parse(localStorage.getItem('ienomics_deadline_notified') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveDeadlineNotifiedMap(map) {
+  localStorage.setItem('ienomics_deadline_notified', JSON.stringify(map));
+}
+
+function checkDeadlineReminders() {
+  if (!state.familyCode || !Array.isArray(state.tasks) || state.tasks.length === 0) return;
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  const now = Date.now();
+  const notified = getDeadlineNotifiedMap();
+  let changed = false;
+
+  for (const t of state.tasks) {
+    if (!t.deadline) continue;
+    if (!['open', 'accepted'].includes(t.status)) continue;
+
+    const remaining = t.deadline - now;
+    // 期限切れは対象外。残り1時間以内になったら通知
+    if (remaining <= 0 || remaining > DEADLINE_REMIND_MS) continue;
+    // 同じ期限に対して二重通知しない
+    if (notified[t.id] === t.deadline) continue;
+
+    notified[t.id] = t.deadline;
+    changed = true;
+
+    const mins = Math.max(1, Math.ceil(remaining / 60000));
+    const timeTxt = mins >= 60 ? 'あと1時間' : `あと約${mins}分`;
+    if (state.role === 'child') {
+      sendPushNotification("期限が近づいています！", `「${t.title}」の期限が${timeTxt}です。急ぎましょう！`);
+    } else {
+      sendPushNotification("期限アラーム", `「${t.title}」の期限が${timeTxt}です`);
+    }
+  }
+
+  if (changed) saveDeadlineNotifiedMap(notified);
+}
+
+function startDeadlineWatcher() {
+  stopDeadlineWatcher();
+  requestPushPermission();
+  checkDeadlineReminders();
+  processScheduledPayments();
+  deadlineTimer = setInterval(() => {
+    checkDeadlineReminders();
+    processScheduledPayments();
+  }, DEADLINE_CHECK_MS);
+}
+
+function stopDeadlineWatcher() {
+  if (deadlineTimer) {
+    clearInterval(deadlineTimer);
+    deadlineTimer = null;
+  }
+}
+
+let isProcessingPayments = false;
+
+function isScheduledPaymentDue(p, now, todayStr) {
+  if (!p || p.status !== 'active') return false;
+  if (p.lastChargedKey === todayStr) return false;
+
+  if (p.mode === 'once') {
+    if (p.lastChargedKey) return false;
+    return dateKeyToValue(todayStr) >= dateKeyToValue(p.dueDate);
+  }
+
+  // 定期
+  if (p.interval === 'weekly') {
+    return (p.days || []).includes(now.getDay());
+  }
+  if (p.interval === 'monthly') {
+    return (p.days || []).includes(now.getDate());
+  }
+  return false;
+}
+
+async function processScheduledPayments() {
+  if (!state.familyCode || isProcessingPayments) return;
+  if (!Array.isArray(state.scheduledPayments) || state.scheduledPayments.length === 0) return;
+
+  isProcessingPayments = true;
+  const now = new Date();
+  const todayStr = todayKeyString();
+
+  try {
+    for (const p of state.scheduledPayments) {
+      if (!isScheduledPaymentDue(p, now, todayStr)) continue;
+
+      const amount = Number(p.amount) || 0;
+      if (amount <= 0) continue;
+
+      const chargeId = `${p.id}_${todayStr}`;
+      const chargeRef = doc(db, "paymentLogs", chargeId);
+      const famRef = doc(db, "families", state.familyCode);
+      const payRef = doc(db, "scheduledPayments", p.id);
+
+      try {
+        let charged = false;
+        let insufficient = false;
+
+        await runTransaction(db, async (tx) => {
+          const chargeSnap = await tx.get(chargeRef);
+          if (chargeSnap.exists()) return;
+
+          const famSnap = await tx.get(famRef);
+          if (!famSnap.exists()) return;
+          const pts = famSnap.data().points || 0;
+          if (pts < amount) {
+            insufficient = true;
+            return;
+          }
+
+          const paySnap = await tx.get(payRef);
+          if (!paySnap.exists()) return;
+          const payData = paySnap.data();
+          if (payData.status !== 'active') return;
+          if (payData.lastChargedKey === todayStr) return;
+
+          tx.set(chargeRef, {
+            familyCode: state.familyCode,
+            paymentId: p.id,
+            title: payData.title || p.title,
+            amount,
+            chargedAt: Date.now(),
+            createdAt: Date.now()
+          });
+          tx.update(famRef, { points: pts - amount });
+
+          const updates = { lastChargedKey: todayStr };
+          if (payData.mode === 'once') {
+            updates.status = 'done';
+          } else if (payData.countMode === 'finite') {
+            const left = Math.max(0, (payData.remainingCount ?? 1) - 1);
+            updates.remainingCount = left;
+            if (left <= 0) updates.status = 'done';
+          }
+          tx.update(payRef, updates);
+          charged = true;
+        });
+
+        if (charged) {
+          sendPushNotification(
+            "支払いが引き落とされました",
+            `「${p.title}」 −${amount}pt`
+          );
+        } else if (insufficient) {
+          const failKey = `pay_fail_${p.id}_${todayStr}`;
+          if (!sessionStorage.getItem(failKey)) {
+            sessionStorage.setItem(failKey, '1');
+            sendPushNotification(
+              "支払いできませんでした",
+              `「${p.title}」は残高不足です（必要 ${amount}pt）`
+            );
+          }
+        }
+      } catch (err) {
+        console.error("支払い処理エラー:", err);
+      }
+    }
+  } finally {
+    isProcessingPayments = false;
+  }
+}
 
 applyFuriganaState();
 
@@ -221,6 +396,7 @@ function setupListeners() {
   unsubscribes = [];
   state.tasksReady = false;
   state.isInitialLoad = true;
+  startDeadlineWatcher();
   
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => { 
     if (d.exists()) { 
@@ -247,20 +423,57 @@ function setupListeners() {
       
       if (!state.isInitialLoad) {
         s.docChanges().forEach(change => {
-          if (change.type === "added" && k === "tasks") {
-            const t = change.doc.data();
-            if (t.status === 'deleted') return;
+          if (k !== "tasks") return;
+          const t = change.doc.data();
+          if (!t || t.status === 'deleted') return;
+          const prev = state.tasks.find(x => x.id === change.doc.id);
+
+          if (change.type === "added") {
+            // 親が発注 → 子供へ
             if (state.role === 'child' && t.status === 'open') {
-              sendPushNotification("新しいお仕事！", `「${t.title}」が追加されました！`);
+              sendPushNotification(
+                "新しいお仕事！",
+                `「${t.title}」（${t.points}pt）が発注されました！`
+              );
+            }
+            // 子供が見積・報酬提案 → 親へ
+            if (state.role === 'parent' && t.status === 'proposed') {
+              const name = state.childName || 'こども';
+              sendPushNotification(
+                "報酬の見積が届きました",
+                `${name}ちゃんから「${t.title}」（希望 ${t.points}pt）の提案です`
+              );
             }
           }
-          if (change.type === "modified" && k === "tasks") {
-            const t = change.doc.data();
-            if (state.role === 'parent' && t.status === 'completed') {
-              sendPushNotification("お仕事完了！", `${state.childName}ちゃんが「${t.title}」を完了しました！`);
+
+          if (change.type === "modified") {
+            // 親が提案を承認して発注状態に → 子供へ
+            if (state.role === 'child' && t.status === 'open' && prev?.status === 'proposed') {
+              sendPushNotification(
+                "提案が承認されました！",
+                `「${t.title}」がお仕事として発注されました`
+              );
             }
-            if (state.role === 'child' && t.status === 'accepted' && change.doc.data().statusBefore === 'completed') {
-              sendPushNotification("やり直し指示", `「${t.title}」のやり直し（差し戻し）が届きました。`);
+            // 子供が完了報告 → 親へ
+            if (state.role === 'parent' && t.status === 'completed' && prev?.status !== 'completed') {
+              sendPushNotification(
+                "お仕事完了！",
+                `${state.childName || 'こども'}ちゃんが「${t.title}」を完了しました！`
+              );
+            }
+            // 親が差し戻し → 子供へ
+            if (state.role === 'child' && t.status === 'accepted' && prev?.status === 'completed') {
+              sendPushNotification(
+                "やり直し指示",
+                `「${t.title}」のやり直し（差し戻し）が届きました。`
+              );
+            }
+            // 親が付与・承認 → 子供へ
+            if (state.role === 'child' && t.status === 'approved' && prev?.status === 'completed') {
+              sendPushNotification(
+                "お仕事が承認されました！",
+                `「${t.title}」で ${t.points}pt ゲット！`
+              );
             }
           }
         });
@@ -274,16 +487,21 @@ function setupListeners() {
         // 初回読込時のみ自動発注（削除のたびに再生成しない）
         if (firstLoad) checkAndGenerateRepeatedTasks();
         else dedupeRepeatedTasks();
+        checkDeadlineReminders();
+      }
+      if (k === "scheduledPayments") {
+        processScheduledPayments();
       }
       render(); 
     });
     unsubscribes.push(unsub);
   };
-  w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons");
+  w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
 }
 
 window.setView = (viewName) => {
   if (viewName !== 'templateEdit') state.editingTemplateId = null;
+  if (viewName !== 'paymentEdit') state.editingPaymentId = null;
   state.view = viewName;
   render();
 };
@@ -425,7 +643,45 @@ window.approveTask = async (id, p) => {
 
 window.rejectTask = async (id) => { if (confirm("このお仕事をお断り（拒否）しますか？")) { await updateDoc(doc(db, "tasks", id), { status: 'rejected' }); } };
 window.returnTask = async (id) => { if (confirm("やり直し（差し戻し）を指示しますか？")) { await updateDoc(doc(db, "tasks", id), { status: 'accepted', statusBefore: 'completed' }); } };
-window.saveNewPassword = async () => { const pass = document.getElementById('new-password').value, passConf = document.getElementById('new-password-confirm').value; if (pass.length < 6) return alert("パスワードは6文字以上にしてください。"); if (pass !== passConf) return alert("パスワードが一致しません！"); const childName = prompt("管理するお子様の名前を入力してください") || "こども"; try { const user = auth.currentUser; await updatePassword(user, pass); await setDoc(doc(db, "users", user.uid), { role: 'parent' }); await setDoc(doc(db, "families", Math.random().toString(36).substring(2, 8).toUpperCase()), { parentUid: user.uid, childName: childName, points: 0, childLinked: false, createdAt: Date.now() }); state.requirePasswordSetup = false; state.role = 'parent'; state.view = 'home'; alert("設定完了！イエノミクスを開始します。"); runMigrationAndLoadChildren(user.uid); } catch (error) { alert("エラー: " + error.message); } };
+window.saveNewPassword = async () => {
+  const pass = document.getElementById('new-password').value;
+  const passConf = document.getElementById('new-password-confirm').value;
+  if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
+  if (pass !== passConf) return alert("パスワードが一致しません！");
+
+  const childName = prompt("管理するお子様の名前を入力してください") || "こども";
+
+  state.isSending = true;
+  state.setupLoadingMessage = 'アカウントを準備しています...';
+  render();
+
+  try {
+    const user = auth.currentUser;
+    await updatePassword(user, pass);
+    state.setupLoadingMessage = 'お子様の口座を作成しています...';
+    render();
+    await setDoc(doc(db, "users", user.uid), { role: 'parent' });
+    await setDoc(doc(db, "families", Math.random().toString(36).substring(2, 8).toUpperCase()), {
+      parentUid: user.uid,
+      childName: childName,
+      points: 0,
+      childLinked: false,
+      createdAt: Date.now()
+    });
+    state.requirePasswordSetup = false;
+    state.isSending = false;
+    state.setupLoadingMessage = '';
+    state.role = 'parent';
+    state.view = 'home';
+    alert("設定完了！イエノミクスを開始します。");
+    runMigrationAndLoadChildren(user.uid);
+  } catch (error) {
+    state.isSending = false;
+    state.setupLoadingMessage = '';
+    render();
+    alert("エラー: " + error.message);
+  }
+};
 window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); } };
 window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status: 'open' });
 window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
@@ -462,7 +718,7 @@ window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const 
 window.sendBalloon = async () => { const p = parseInt(document.getElementById('balloon-points').value), m = document.getElementById('balloon-message').value; if(p){ await addDoc(collection(db, "balloons"), { familyCode: state.familyCode, points: p, message: m, status: 'unread', createdAt: Date.now() }); alert('放ちました🎈'); setView('home'); } };
 window.openBalloon = async (id, p, m) => { alert(`🎈ギフト到着！\n\n「${m}」\n\nボーナス ${p} pt 獲得！`); await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); await deleteDoc(doc(db, "balloons", id)); };
 window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
-window.unlinkAccount = async () => { if (confirm("連携を解除（またはログアウト）しますか？")) { try { await signOut(auth); } catch (e) {} localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode'); state.role = null; state.familyCode = null; state.children = []; if (window.unsubChildren) window.unsubChildren(); unsubscribes.forEach(unsub => unsub()); unsubscribes = []; window.location.reload(); } };
+window.unlinkAccount = async () => { if (confirm("連携を解除（またはログアウト）しますか？")) { try { await signOut(auth); } catch (e) {} localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode'); state.role = null; state.familyCode = null; state.children = []; if (window.unsubChildren) window.unsubChildren(); unsubscribes.forEach(unsub => unsub()); unsubscribes = []; stopDeadlineWatcher(); window.location.reload(); } };
 
 window.deleteTask = async (id) => { 
   if (!confirm("このお仕事を削除しますか？")) return;
@@ -482,6 +738,125 @@ window.deleteTask = async (id) => {
 };
 
 window.deleteTicket = async (id) => { if (confirm("このチケットを削除しますか？")) { await deleteDoc(doc(db, "tickets", id)); } };
+
+window.openPaymentEdit = (id) => {
+  if (state.role !== 'parent') return;
+  const p = state.scheduledPayments.find(x => x.id === id);
+  if (!p) return alert("支払い設定が見つかりません");
+  state.editingPaymentId = id;
+  state.view = 'paymentEdit';
+  render();
+};
+
+window.togglePaymentModeUI = () => {
+  const mode = document.querySelector('input[name="pay-mode"]:checked')?.value || 'once';
+  document.getElementById('pay-once-ui')?.classList.toggle('hidden', mode !== 'once');
+  document.getElementById('pay-repeat-ui')?.classList.toggle('hidden', mode !== 'repeat');
+};
+
+window.togglePaymentCountUI = () => {
+  const mode = document.querySelector('input[name="pay-count-mode"]:checked')?.value || 'infinite';
+  document.getElementById('pay-count-input-wrap')?.classList.toggle('hidden', mode !== 'finite');
+};
+
+window.setPayInterval = (type) => {
+  window.payInterval = type;
+  const isWeekly = type === 'weekly';
+  document.getElementById('pay-weekly-select')?.classList.toggle('hidden', !isWeekly);
+  document.getElementById('pay-monthly-select')?.classList.toggle('hidden', isWeekly);
+  document.getElementById('btn-pay-weekly')?.classList.toggle('primary-btn', isWeekly);
+  document.getElementById('btn-pay-monthly')?.classList.toggle('primary-btn', !isWeekly);
+};
+
+window.addScheduledPayment = async () => {
+  if (state.role !== 'parent') return;
+  const title = document.getElementById('pay-title')?.value.trim();
+  const amount = parseInt(document.getElementById('pay-amount')?.value);
+  if (!title) return alert("支払いの名目を入力してください");
+  if (!amount || amount <= 0) return alert("正しい金額を入力してください");
+
+  const mode = document.querySelector('input[name="pay-mode"]:checked')?.value || 'once';
+  const data = {
+    familyCode: state.familyCode,
+    title,
+    amount,
+    mode,
+    status: 'active',
+    lastChargedKey: null,
+    createdAt: Date.now()
+  };
+
+  if (mode === 'once') {
+    const due = document.getElementById('pay-due-date')?.value;
+    if (!due) return alert("引落日を選んでください");
+    const d = new Date(due + 'T00:00:00');
+    data.dueDate = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+  } else {
+    const interval = window.payInterval || 'monthly';
+    let days = [];
+    if (interval === 'weekly') {
+      document.querySelectorAll('input[name="pay-weeks"]:checked').forEach(cb => days.push(parseInt(cb.value)));
+      if (days.length === 0) return alert("曜日を1つ以上選んでください");
+    } else {
+      days.push(parseInt(document.getElementById('pay-day-select').value));
+    }
+    const countMode = document.querySelector('input[name="pay-count-mode"]:checked')?.value || 'infinite';
+    data.interval = interval;
+    data.days = days;
+    data.countMode = countMode;
+    if (countMode === 'finite') {
+      const n = parseInt(document.getElementById('pay-count')?.value);
+      if (!n || n < 1) return alert("回数は1以上にしてください");
+      data.totalCount = n;
+      data.remainingCount = n;
+    } else {
+      data.totalCount = null;
+      data.remainingCount = null;
+    }
+  }
+
+  try {
+    await addDoc(collection(db, "scheduledPayments"), data);
+    setView('payments');
+    alert("支払いを設定しました");
+    processScheduledPayments();
+  } catch (error) {
+    alert("設定できませんでした: " + error.message);
+  }
+};
+
+window.updateScheduledPayment = async () => {
+  if (state.role !== 'parent') return;
+  const id = state.editingPaymentId;
+  if (!id) return;
+  const title = document.getElementById('pay-edit-title')?.value.trim();
+  const amount = parseInt(document.getElementById('pay-edit-amount')?.value);
+  if (!title) return alert("名目を入力してください");
+  if (!amount || amount <= 0) return alert("正しい金額を入力してください");
+  try {
+    await updateDoc(doc(db, "scheduledPayments", id), { title, amount });
+    state.editingPaymentId = null;
+    setView('payments');
+    alert("支払い設定を更新しました");
+  } catch (error) {
+    alert("更新できませんでした: " + error.message);
+  }
+};
+
+window.deleteScheduledPayment = async (id) => {
+  if (state.role !== 'parent') return;
+  const targetId = id || state.editingPaymentId;
+  if (!targetId) return;
+  if (!confirm("この支払い設定を削除しますか？")) return;
+  try {
+    await deleteDoc(doc(db, "scheduledPayments", targetId));
+    state.editingPaymentId = null;
+    setView('payments');
+  } catch (error) {
+    alert("削除できませんでした: " + error.message);
+  }
+};
+
 window.joinFamily = async () => { try { const emailInput = document.getElementById('setup-family-code'); if (!emailInput) return alert("システムエラー"); const code = emailInput.value.toUpperCase().trim(); if (!code) return alert("IDを入力してください"); const docRef = doc(db, "families", code); const docSnap = await getDoc(docRef); if (docSnap.exists()) { state.familyCode = code; state.role = 'child'; localStorage.setItem('ienomics_familyCode', code); localStorage.setItem('ienomics_role', 'child'); try { await updateDoc(docRef, { childLinked: true }); } catch (e) { } setupListeners(); render(); } else { alert("無効なIDです"); } } catch (error) { alert("エラー: " + error.message); } };
 window.sendRealEmailLink = async () => { try { const emailInput = document.getElementById('setup-email'); if (!emailInput) return; const email = emailInput.value.trim(); if (!email) return alert("メールアドレスを入力してください"); state.isSending = true; render(); const actionCodeSettings = { url: APP_URL, handleCodeInApp: true }; await sendSignInLinkToEmail(auth, email, actionCodeSettings); window.localStorage.setItem('emailForSignIn', email); state.message = email; state.setupStep = 2; } catch (error) { alert("エラー: " + error.message); } finally { state.isSending = false; render(); } };
 

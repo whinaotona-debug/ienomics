@@ -1,5 +1,5 @@
-import { state } from './state.js?v=106';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel } from './utils.js?v=106';
+import { state } from './state.js?v=110';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule } from './utils.js?v=110';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -22,7 +22,11 @@ export function render() {
   }
   if (state.requirePasswordSetup) {
     bottomNav.classList.add('hidden');
-    appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordSetup()}</div>`;
+    if (state.isSending) {
+      appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetupLoading(state.setupLoadingMessage || '設定を保存しています...')}</div>`;
+    } else {
+      appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordSetup()}</div>`;
+    }
     return;
   }
   if (!state.role || !state.familyCode) {
@@ -59,6 +63,9 @@ export function render() {
       else if(state.view === 'exchange') content = renderExchange();
       else if(state.view === 'invest') content = renderInvest();
       else if(state.view === 'bank') content = renderBank();
+      else if(state.view === 'payments') content = renderPayments();
+      else if(state.view === 'paymentCreate') content = renderPaymentCreate();
+      else if(state.view === 'paymentEdit') content = renderPaymentEdit();
       else if(state.view === 'calendar') content = renderCalendar();
       else if(state.view === 'balloonSend') content = renderBalloonSend();
       else if(state.view === 'tickets') content = renderTickets();
@@ -229,6 +236,9 @@ function renderHome() {
             <div>
               <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1 tracking-wider">${rb('支出','ししゅつ')}</p>
               <div class="grid grid-cols-1 gap-2">
+                <button onclick="setView('payments')" class="solid-btn w-full py-2.5 flex-row gap-2 hover:bg-slate-50">
+                  <div class="w-4 h-4 text-indigo-500">${getIcon('pay')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${rb('支払い','しはらい')}</span>
+                </button>
                 <button onclick="setView('exchange')" class="solid-btn w-full py-2.5 flex-row gap-2 hover:bg-slate-50">
                   <div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${tEx}</span>
                 </button>
@@ -413,6 +423,135 @@ window.setRepeatType = (type) => {
 };
 
 function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.001 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-widest">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">pt</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}pt (月0.1%)</p></div>${state.role === 'child' ? `<div class="flex gap-2 mb-4"><input type="number" id="bank-amount" placeholder="金額を入力" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-6 font-bold text-sm">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
+
+function renderPayments() {
+  const active = (state.scheduledPayments || []).filter(p => p.status === 'active');
+  const done = (state.scheduledPayments || []).filter(p => p.status === 'done');
+  const logs = (state.paymentLogs || []).slice(0, 8);
+
+  const card = (p) => {
+    const sched = formatPaymentSchedule(p);
+    const editBtn = state.role === 'parent'
+      ? `<button onclick="openPaymentEdit('${p.id}')" class="text-[10px] font-bold text-indigo-500 hover:text-indigo-700">編集</button>`
+      : '';
+    const delBtn = state.role === 'parent'
+      ? `<button onclick="deleteScheduledPayment('${p.id}')" class="text-[10px] font-bold text-slate-400 hover:text-red-500">削除</button>`
+      : '';
+    return `
+      <div class="p-4 bg-white border border-slate-100 rounded-xl">
+        <div class="flex justify-between items-start gap-2 mb-1">
+          <p class="font-bold text-sm text-slate-800">${p.title}</p>
+          <span class="text-sm font-black text-indigo-600 shrink-0">−${p.amount}pt</span>
+        </div>
+        <p class="text-[10px] font-bold text-slate-400 mb-2">${sched}</p>
+        <div class="flex gap-3 justify-end">${editBtn}${delBtn}</div>
+      </div>
+    `;
+  };
+
+  return `
+    <h2 class="text-lg font-bold mb-2 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-indigo-500">${getIcon('pay')}</div>${rb('自動支払い','じどうしはらい')}
+    </h2>
+    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">
+      ${state.role === 'parent' ? '期日になると子供の口座から自動で引き落とされます。' : '設定された支払いが、期日に口座から引き落とされます。'}
+    </p>
+    ${state.role === 'parent' ? `<button onclick="setView('paymentCreate')" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-5">＋ 支払いを設定</button>` : ''}
+    <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">設定中</p>
+    <div class="space-y-2 mb-5">
+      ${active.length ? active.map(card).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">設定中の支払いはありません</p>`}
+    </div>
+    ${done.length ? `
+      <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">完了済み</p>
+      <div class="space-y-2 mb-5 opacity-60">${done.map(card).join('')}</div>
+    ` : ''}
+    <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">最近の引落</p>
+    <div class="space-y-1">
+      ${logs.length ? logs.map(l => {
+        const d = new Date(l.chargedAt || l.createdAt);
+        return `<div class="py-2 border-b border-slate-50 flex justify-between text-xs font-bold"><span class="text-slate-600 truncate">${l.title}</span><span class="text-slate-800 shrink-0">−${l.amount}pt <span class="text-[9px] text-slate-400 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
+      }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">まだ引落履歴はありません</p>`}
+    </div>
+  `;
+}
+
+function renderPaymentCreate() {
+  window.payInterval = window.payInterval || 'monthly';
+  const today = new Date();
+  const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">支払いを設定</h2>
+    <input type="text" id="pay-title" placeholder="名目（例: お小遣い返済・スマホ代）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <div class="flex items-center gap-3 mb-4">
+      <input type="number" id="pay-amount" placeholder="金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+      <span class="font-bold text-sm text-slate-500">pt</span>
+    </div>
+
+    <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+      <p class="text-[9px] font-bold text-slate-400">種類</p>
+      <div class="flex gap-4 text-xs font-bold text-slate-700">
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-mode" value="once" checked onchange="togglePaymentModeUI()"> 単発</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-mode" value="repeat" onchange="togglePaymentModeUI()"> 定期</label>
+      </div>
+
+      <div id="pay-once-ui">
+        <p class="text-[9px] font-bold text-slate-400 mb-2">引落日</p>
+        <input type="date" id="pay-due-date" value="${todayIso}" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" />
+      </div>
+
+      <div id="pay-repeat-ui" class="hidden space-y-3">
+        <div class="flex gap-2">
+          <button type="button" onclick="setPayInterval('weekly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-pay-weekly">毎週</button>
+          <button type="button" onclick="setPayInterval('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px] primary-btn" id="btn-pay-monthly">毎月</button>
+        </div>
+        <div id="pay-weekly-select" class="hidden">
+          <p class="text-[9px] font-bold text-slate-400 mb-2">曜日</p>
+          <div class="flex gap-2 flex-wrap">
+            ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="pay-weeks" value="${i}"> ${w}</label>`).join('')}
+          </div>
+        </div>
+        <div id="pay-monthly-select">
+          <p class="text-[9px] font-bold text-slate-400 mb-2">日付</p>
+          <select id="pay-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
+            ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}
+          </select>
+        </div>
+        <p class="text-[9px] font-bold text-slate-400">回数</p>
+        <div class="flex gap-4 text-xs font-bold text-slate-700">
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-count-mode" value="infinite" checked onchange="togglePaymentCountUI()"> 無限</label>
+          <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-count-mode" value="finite" onchange="togglePaymentCountUI()"> 回数指定</label>
+        </div>
+        <div id="pay-count-input-wrap" class="hidden">
+          <input type="number" id="pay-count" min="1" placeholder="何回引落するか" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" />
+        </div>
+      </div>
+    </div>
+
+    <button onclick="addScheduledPayment()" class="solid-btn primary-btn w-full py-4 font-bold">設定する</button>
+  `;
+}
+
+function renderPaymentEdit() {
+  const p = state.scheduledPayments.find(x => x.id === state.editingPaymentId);
+  if (!p) {
+    return `<h2 class="text-lg font-bold mb-4">支払い編集</h2><p class="text-sm text-slate-500 text-center py-8">見つかりません</p><button onclick="setView('payments')" class="solid-btn w-full py-3 font-bold text-sm">戻る</button>`;
+  }
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-indigo-500">${getIcon('pay')}</div>支払いを編集
+    </h2>
+    <p class="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-4">${formatPaymentSchedule(p)}</p>
+    <p class="text-[9px] font-bold text-slate-400 mb-2">名目</p>
+    <input type="text" id="pay-edit-title" value="${String(p.title || '').replace(/"/g, '&quot;')}" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <p class="text-[9px] font-bold text-slate-400 mb-2">金額</p>
+    <div class="flex items-center gap-3 mb-6">
+      <input type="number" id="pay-edit-amount" value="${p.amount || ''}" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+      <span class="font-bold text-sm text-slate-500">pt</span>
+    </div>
+    <button onclick="updateScheduledPayment()" class="solid-btn primary-btn w-full py-4 font-bold mb-3">変更を保存</button>
+    <button onclick="deleteScheduledPayment()" class="solid-btn w-full py-3 font-bold text-sm text-red-500 hover:bg-red-50 border-red-100">この支払いを削除</button>
+  `;
+}
 function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
 export function drawInvestChart() { const canvas = document.getElementById('investChart'); if (!canvas) return; const rates = getMarketRates(); const ctx = canvas.getContext('2d'); const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ'); const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0; const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0; const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r)); const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r)); if (investChartInstance) investChartInstance.destroy(); const isDetail = state.view === 'invest'; investChartInstance = new Chart(ctx, { type: 'line', data: { labels: rates.labels, datasets: [ { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }, { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } }, scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } }, layout: { padding: isDetail ? 0 : 5 } } }); }
 function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
@@ -421,6 +560,19 @@ function renderExchange() { const p = state.exchanges.filter(e => e.status === '
 function renderTickets() { const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div>チケット${state.role==='parent'?'管理':'購入'}</h2>${state.role==='parent'?'<div class="flex gap-2 mb-6"><input id="t-title" placeholder="品名" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/><input id="t-pts" type="number" placeholder="pt" class="w-24 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/></div><button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-6">追加する</button>':''}<div class="space-y-3">${ts.map(t=>{ let b = ''; if(state.role==='child'){ if(t.status==='available') b=`<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold">購入</button>`; else b=`<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md">所持中</span>`; } else { if(t.status==='available') b=`<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition">削除</button>`; else if(t.status==='bought') b=`<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">使用済にする</button>`; else b=`<span class="text-[9px] text-slate-300 font-bold">使用済</span>`; } return `<div class="p-4 rounded-xl border ${t.status==='bought'?'bg-slate-50 border-slate-200':'bg-white border-slate-100'} flex justify-between items-center"><div><p class="font-bold text-sm text-slate-700">${t.title}</p><p class="text-[10px] font-bold mt-0.5 ${t.status==='bought'?'text-slate-400':'text-rose-500'}">${t.price} pt</p></div>${b}</div>`; }).join('')}</div>`; }
 function renderHistory() { const app = state.tasks.filter(t => t.status === 'approved'); const t = app.reduce((s, t) => s + t.points, 0); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p><p class="text-3xl font-black text-slate-800 tracking-tight">${t.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p></div><div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>`; }
 function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
+function renderSetupLoading(message) {
+  return `
+    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
+      <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
+      <div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10">
+        <div class="w-12 h-12 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-5"></div>
+        <p class="text-sm font-black text-slate-800 mb-2">しばらくお待ちください</p>
+        <p class="text-[10px] font-bold text-slate-500 leading-relaxed">${message || '処理中...'}</p>
+      </div>
+    </div>
+  `;
+}
+
 function renderPasswordSetup() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">パスワードを設定</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">次回以降のログインに使う<br>パスワードを決めてください。</p><div class="password-wrapper"><input type="password" id="new-password" placeholder="パスワード（6文字以上）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" /><div id="eye-new" class="password-eye" onclick="togglePassword('new-password', 'eye-new')">${getIcon('eye')}</div></div><div class="password-wrapper"><input type="password" id="new-password-confirm" placeholder="もう一度入力（確認用）" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-blue-400 focus:bg-white transition" /><div id="eye-confirm" class="password-eye" onclick="togglePassword('new-password-confirm', 'eye-confirm')">${getIcon('eye')}</div></div><button onclick="saveNewPassword()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md shadow-blue-200">設定して開始</button></div></div>`; }
 
 function renderPasswordResetForm() {

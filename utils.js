@@ -1,4 +1,4 @@
-import { state } from './state.js?v=106';
+import { state } from './state.js?v=110';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -15,7 +15,7 @@ export function requestPushPermission() {
     console.warn("このブラウザはプッシュ通知をサポートしていません。");
     return;
   }
-  if (Notification.permission !== "denied" && Notification.permission !== "granted") {
+  if (Notification.permission === "default") {
     Notification.requestPermission().then((permission) => {
       if (permission === "granted") console.log("プッシュ通知の許可が得られました。");
     });
@@ -25,7 +25,20 @@ export function requestPushPermission() {
 export function sendPushNotification(title, body) {
   if (!("Notification" in window)) return;
   if (Notification.permission === "granted") {
-    new Notification(title, { body: body, icon: 'logo.png' });
+    try {
+      new Notification(title, { body: body, icon: 'logo.png' });
+    } catch (e) {
+      console.warn("通知の表示に失敗:", e);
+    }
+  } else if (Notification.permission === "default") {
+    // まだ許可前なら一度聞いてから送る
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        try {
+          new Notification(title, { body: body, icon: 'logo.png' });
+        } catch (e) {}
+      }
+    });
   }
 }
 
@@ -46,7 +59,8 @@ export function getIcon(name) {
     'eye': `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`,
     'eye-off': `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`,
     'trash': `<polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>`,
-    'repeat': `<polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>`
+    'repeat': `<polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path>`,
+    'pay': `<rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line>`
   };
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${icons[name] || ''}</svg>`;
 }
@@ -84,6 +98,32 @@ export function formatRepeatLabel(temp) {
   }
   const day = (temp.days && temp.days[0]) || '?';
   return `毎月${day}日 ${temp.time || ''}`;
+}
+
+export function formatPaymentSchedule(p) {
+  if (!p) return '';
+  const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
+  if (p.mode === 'once') {
+    return `単発 ${p.dueDate || ''}`;
+  }
+  let sched = '';
+  if (p.interval === 'weekly') {
+    const days = (p.days || []).slice().sort((a, b) => a - b).map(d => weekNames[d]).join('');
+    sched = `毎週${days || '？'}`;
+  } else {
+    const day = (p.days && p.days[0]) || '?';
+    sched = `毎月${day}日`;
+  }
+  if (p.countMode === 'infinite') return `${sched}・無限`;
+  const left = p.remainingCount ?? p.totalCount ?? '?';
+  return `${sched}・残り${left}回`;
+}
+
+/** 日付キー YYYY-M-D を比較用数値に */
+export function dateKeyToValue(key) {
+  if (!key) return 0;
+  const [y, m, d] = String(key).split('-').map(Number);
+  return y * 10000 + m * 100 + d;
 }
 
 export function getMarketRates() {

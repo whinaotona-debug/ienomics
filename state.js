@@ -14,7 +14,9 @@ export const state = {
   message: '',
   requirePasswordSetup: false,
   resetPasswordCode: null,
+  setupLoadingMessage: '',
   editingTemplateId: null,
+  editingPaymentId: null,
   
   // 親が管理する複数子供用データ（新規機能）
   children: [], 
@@ -30,6 +32,8 @@ export const state = {
   exchanges: [],
   banks: [],    
   balloons: [],
+  scheduledPayments: [],
+  paymentLogs: [],
   isInitialLoad: true,
   tasksReady: false
 };
