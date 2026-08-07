@@ -1,6 +1,6 @@
-import { state } from './state.js?v=110';
-import { render } from './ui.js?v=110';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue } from './utils.js?v=110';
+import { state } from './state.js?v=112';
+import { render } from './ui.js?v=112';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue } from './utils.js?v=112';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -64,9 +64,11 @@ function startDeadlineWatcher() {
   requestPushPermission();
   checkDeadlineReminders();
   processScheduledPayments();
+  cleanupExpiredDeadlineTasks();
   deadlineTimer = setInterval(() => {
     checkDeadlineReminders();
     processScheduledPayments();
+    cleanupExpiredDeadlineTasks();
   }, DEADLINE_CHECK_MS);
 }
 
@@ -74,6 +76,57 @@ function stopDeadlineWatcher() {
   if (deadlineTimer) {
     clearInterval(deadlineTimer);
     deadlineTimer = null;
+  }
+}
+
+let isCleaningExpiredTasks = false;
+
+/** 期限が切れた当日の仕事を、その日 23:59 以降に自動削除 */
+async function cleanupExpiredDeadlineTasks() {
+  if (state.role !== 'parent' || !state.familyCode || isCleaningExpiredTasks) return;
+  if (!Array.isArray(state.tasks) || state.tasks.length === 0) return;
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  const targets = [];
+
+  for (const t of state.tasks) {
+    if (!t.deadline) continue;
+    // 進行中・提案・お断りのみ（完了待ち・承認済みは残す）
+    if (!['open', 'accepted', 'proposed', 'rejected'].includes(t.status)) continue;
+    // まだ期限前
+    if (t.deadline > nowMs) continue;
+
+    const dl = new Date(t.deadline);
+    // 期限日の 23:59:00
+    const dayEnd = new Date(dl.getFullYear(), dl.getMonth(), dl.getDate(), 23, 59, 0, 0);
+    if (nowMs < dayEnd.getTime()) continue;
+
+    targets.push(t);
+  }
+
+  if (targets.length === 0) return;
+
+  isCleaningExpiredTasks = true;
+  try {
+    for (const t of targets) {
+      try {
+        if (t.generatedKey) {
+          generatedToday[t.generatedKey] = true;
+          await updateDoc(doc(db, "tasks", t.id), {
+            status: 'deleted',
+            deletedAt: Date.now(),
+            autoDeleted: true
+          });
+        } else {
+          await deleteDoc(doc(db, "tasks", t.id));
+        }
+      } catch (err) {
+        console.error("期限切れタスク削除エラー:", err);
+      }
+    }
+  } finally {
+    isCleaningExpiredTasks = false;
   }
 }
 
@@ -488,6 +541,7 @@ function setupListeners() {
         if (firstLoad) checkAndGenerateRepeatedTasks();
         else dedupeRepeatedTasks();
         checkDeadlineReminders();
+        cleanupExpiredDeadlineTasks();
       }
       if (k === "scheduledPayments") {
         processScheduledPayments();
@@ -635,7 +689,7 @@ window.completeTask = async (id) => {
 };
 
 window.approveTask = async (id, p) => { 
-  await updateDoc(doc(db, "tasks", id), { status: 'approved' }); 
+  await updateDoc(doc(db, "tasks", id), { status: 'approved', approvedAt: Date.now() }); 
   if (p > 0) {
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); 
   }

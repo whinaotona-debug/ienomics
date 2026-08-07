@@ -1,5 +1,5 @@
-import { state } from './state.js?v=110';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule } from './utils.js?v=110';
+import { state } from './state.js?v=112';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=112';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -102,11 +102,23 @@ function renderHeader() {
     `;
   } else { nameTag = `<p class="text-[10px] text-slate-300 font-semibold tracking-[0.1em]">${state.childName} の${rb('資産','しさん')}</p>`; }
 
+  const nextPay = getNextPaymentInfo(state.scheduledPayments);
+  let payHint = '';
+  if (nextPay) {
+    const leftTxt = nextPay.daysLeft === 0 ? '本日' : `残り${nextPay.daysLeft}日`;
+    payHint = `<p class="text-[9px] font-bold text-amber-200/90 mt-1.5 leading-snug truncate" title="${nextPay.title}">${nextPay.title}まで${leftTxt}</p>`;
+  }
+
+  const stamp = getHelpStampData(state.tasks);
+  const streakHint = stamp.streak > 0
+    ? `<p class="text-[9px] font-bold text-emerald-300/90 mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
+    : '';
+
   return `
     <div class="flex-none p-3 pb-0">
-      <div class="bg-slate-900 text-white rounded-[16px] p-5 flex items-center justify-between shadow-lg relative h-[105px] overflow-hidden">
+      <div class="bg-slate-900 text-white rounded-[16px] p-5 flex items-center justify-between shadow-lg relative min-h-[105px] overflow-hidden">
         <img src="logo.png" class="absolute -right-8 -top-8 w-40 h-40 opacity-[0.08] object-cover pointer-events-none" onerror="this.style.display='none'" />
-        <div class="flex-1 relative z-10">
+        <div class="flex-1 relative z-10 min-w-0 pr-2">
           <div class="flex items-center gap-1.5 mb-1.5">
              <div class="w-4 h-4 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
                <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
@@ -117,9 +129,11 @@ function renderHeader() {
             <span class="text-4xl font-black tracking-tight">${state.points.toLocaleString()}</span>
             <span class="text-xs font-medium text-slate-400">pt</span>
           </div>
+          ${payHint}
+          ${streakHint}
         </div>
-        <div class="w-px h-10 bg-white/10 mx-5 relative z-10"></div>
-        <div class="flex-1 text-right relative z-10 flex flex-col justify-center">
+        <div class="w-px h-10 bg-white/10 mx-3 relative z-10 shrink-0"></div>
+        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%]">
           <p class="text-[9px] text-slate-400 font-semibold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
           <p class="text-sm font-mono font-bold tracking-widest text-white/80">${state.familyCode}</p>
         </div>
@@ -167,21 +181,13 @@ function renderHome() {
       }
       
       if (t.status === 'completed') {
-        if (t.isExpired) {
-          btn = `
-            <div class="flex gap-1.5 items-center">
-              <span class="text-[9px] text-red-500 font-bold shrink-0">期限切れ(0pt)</span>
-              <button onclick="approveTask('${t.id}', 0)" class="solid-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm text-red-600 border-red-200 bg-red-50">確認</button>
-            </div>
-          `;
-        } else {
-          btn = `
-            <div class="flex gap-1.5">
-              <button onclick="returnTask('${t.id}')" class="solid-btn px-2.5 py-1.5 text-[9px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">やり直し</button>
-              <button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>
-            </div>
-          `;
-        }
+        btn = `
+          <div class="flex gap-1.5 items-center">
+            ${t.isExpired ? `<span class="text-[9px] text-amber-500 font-bold shrink-0">期限後</span>` : ''}
+            <button onclick="returnTask('${t.id}')" class="solid-btn px-2.5 py-1.5 text-[9px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">やり直し</button>
+            <button onclick="approveTask('${t.id}', ${t.points})" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">付与</button>
+          </div>
+        `;
       } else if (t.status === 'rejected') {
         btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">お断りされました</span>`;
       } else if (t.status === 'proposed') {
@@ -558,7 +564,43 @@ function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-
 function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
 function renderExchange() { const p = state.exchanges.filter(e => e.status === 'pending'); if (state.role === 'child') return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div>${rb('換金申請','かんきんしんせい')}</h2><div class="flex items-center gap-3 mb-6"><input type="number" id="exchange-amount" placeholder="金額" class="flex-1 p-4 bg-white border border-slate-200 rounded-xl font-black text-xl text-right focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">円</span></div><button onclick="requestExchange()" class="solid-btn primary-btn w-full py-4 font-bold mb-6">申請する</button><div class="space-y-2">${p.map(e => `<div class="p-3 rounded-xl text-sm font-bold flex justify-between bg-slate-50 border border-slate-100"><span class="text-slate-700">${e.yen} 円</span><span class="text-slate-400 text-[10px] bg-white px-2 py-1 rounded border border-slate-200">承認待ち</span></div>`).join('')}</div>`; else return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`; }
 function renderTickets() { const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div>チケット${state.role==='parent'?'管理':'購入'}</h2>${state.role==='parent'?'<div class="flex gap-2 mb-6"><input id="t-title" placeholder="品名" class="flex-1 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/><input id="t-pts" type="number" placeholder="pt" class="w-24 p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none"/></div><button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-6">追加する</button>':''}<div class="space-y-3">${ts.map(t=>{ let b = ''; if(state.role==='child'){ if(t.status==='available') b=`<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold">購入</button>`; else b=`<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md">所持中</span>`; } else { if(t.status==='available') b=`<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition">削除</button>`; else if(t.status==='bought') b=`<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">使用済にする</button>`; else b=`<span class="text-[9px] text-slate-300 font-bold">使用済</span>`; } return `<div class="p-4 rounded-xl border ${t.status==='bought'?'bg-slate-50 border-slate-200':'bg-white border-slate-100'} flex justify-between items-center"><div><p class="font-bold text-sm text-slate-700">${t.title}</p><p class="text-[10px] font-bold mt-0.5 ${t.status==='bought'?'text-slate-400':'text-rose-500'}">${t.price} pt</p></div>${b}</div>`; }).join('')}</div>`; }
-function renderHistory() { const app = state.tasks.filter(t => t.status === 'approved'); const t = app.reduce((s, t) => s + t.points, 0); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p><p class="text-3xl font-black text-slate-800 tracking-tight">${t.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p></div><div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>`; }
+function renderHistory() {
+  const app = state.tasks.filter(t => t.status === 'approved');
+  const total = app.reduce((s, t) => s + t.points, 0);
+  const { cardDays, stamped, streak, month } = getHelpStampData(state.tasks);
+  const monthLabel = `${month + 1}月`;
+  const stampCells = Array.from({ length: cardDays }, (_, i) => {
+    const day = i + 1;
+    const on = stamped.has(day);
+    return `<div class="aspect-square rounded-lg flex flex-col items-center justify-center border text-[9px] font-black ${on ? 'bg-amber-400 border-amber-500 text-white shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-300'}">${on ? '✓' : day}</div>`;
+  }).join('');
+
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}
+    </h2>
+    <div class="p-6 bg-slate-50 rounded-2xl text-center mb-5 border border-slate-100">
+      <p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p>
+      <p class="text-3xl font-black text-slate-800 tracking-tight">${total.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p>
+    </div>
+
+    <div class="mb-6 p-4 bg-gradient-to-b from-amber-50 to-white rounded-2xl border border-amber-100">
+      <div class="flex items-end justify-between mb-3 gap-2">
+        <div>
+          <p class="text-[10px] font-bold text-amber-700/80 tracking-wider mb-0.5">${monthLabel}のスタンプカード</p>
+          <p class="text-sm font-black text-slate-800">${streak > 0 ? `${streak}日連続お手伝い達成中！` : '今日からスタンプを集めよう'}</p>
+        </div>
+        <p class="text-[10px] font-bold text-slate-400 shrink-0">${stamped.size}/${cardDays}日</p>
+      </div>
+      <div class="grid grid-cols-6 gap-1.5 sm:grid-cols-6">
+        ${stampCells}
+      </div>
+      <p class="text-[9px] font-bold text-slate-400 mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
+    </div>
+
+    <div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>
+  `;
+}
 function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
 function renderSetupLoading(message) {
   return `

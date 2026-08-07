@@ -1,4 +1,4 @@
-import { state } from './state.js?v=110';
+import { state } from './state.js?v=112';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -124,6 +124,106 @@ export function dateKeyToValue(key) {
   if (!key) return 0;
   const [y, m, d] = String(key).split('-').map(Number);
   return y * 10000 + m * 100 + d;
+}
+
+function startOfLocalDay(d = new Date()) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function toDateKey(d) {
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** 次の自動支払いまでの情報 { title, daysLeft } */
+export function getNextPaymentInfo(payments) {
+  const active = (payments || []).filter(p => p.status === 'active');
+  if (active.length === 0) return null;
+
+  const today = startOfLocalDay();
+  const todayStr = toDateKey(today);
+  let best = null;
+
+  for (const p of active) {
+    const next = calcNextPaymentDate(p, today, todayStr);
+    if (!next) continue;
+    const daysLeft = Math.max(0, Math.round((startOfLocalDay(next) - today) / 86400000));
+    if (!best || daysLeft < best.daysLeft || (daysLeft === best.daysLeft && (p.amount || 0) > (best.amount || 0))) {
+      best = { title: p.title || '支払い', daysLeft, amount: p.amount || 0 };
+    }
+  }
+  return best;
+}
+
+function calcNextPaymentDate(p, today, todayStr) {
+  if (p.mode === 'once') {
+    if (!p.dueDate) return null;
+    const [y, m, d] = String(p.dueDate).split('-').map(Number);
+    const due = new Date(y, m - 1, d);
+    if (p.lastChargedKey) return null;
+    return due;
+  }
+
+  if (p.interval === 'weekly') {
+    const days = p.days || [];
+    for (let i = 0; i <= 7; i++) {
+      const cand = new Date(today);
+      cand.setDate(cand.getDate() + i);
+      if (!days.includes(cand.getDay())) continue;
+      if (i === 0 && p.lastChargedKey === todayStr) continue;
+      return cand;
+    }
+    return null;
+  }
+
+  if (p.interval === 'monthly') {
+    const day = (p.days && p.days[0]) || 1;
+    const build = (y, m) => {
+      const last = new Date(y, m + 1, 0).getDate();
+      return new Date(y, m, Math.min(day, last));
+    };
+    let cand = build(today.getFullYear(), today.getMonth());
+    if (cand < today || (toDateKey(cand) === todayStr && p.lastChargedKey === todayStr)) {
+      cand = build(today.getFullYear(), today.getMonth() + 1);
+    }
+    return cand;
+  }
+  return null;
+}
+
+/** 今月のスタンプ(1〜30)と連続お手伝い日数 */
+export function getHelpStampData(tasks) {
+  const approved = (tasks || []).filter(t => t.status === 'approved');
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cardDays = Math.min(30, daysInMonth);
+
+  const workDayKeys = new Set();
+  const stamped = new Set();
+
+  for (const t of approved) {
+    const ts = t.completedAt || t.approvedAt || t.createdAt;
+    if (!ts) continue;
+    const d = new Date(ts);
+    workDayKeys.add(toDateKey(d));
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const day = d.getDate();
+      if (day >= 1 && day <= cardDays) stamped.add(day);
+    }
+  }
+
+  let streak = 0;
+  const cursor = startOfLocalDay(now);
+  if (!workDayKeys.has(toDateKey(cursor))) {
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  while (workDayKeys.has(toDateKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return { cardDays, stamped, streak, year, month };
 }
 
 export function getMarketRates() {
