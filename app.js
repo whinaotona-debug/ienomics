@@ -1,6 +1,6 @@
-import { state } from './state.js?v=113';
-import { render } from './ui.js?v=113';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=113';
+import { state } from './state.js?v=115';
+import { render } from './ui.js?v=115';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=115';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -93,7 +93,7 @@ async function cleanupExpiredDeadlineTasks() {
   for (const t of state.tasks) {
     if (!t.deadline) continue;
     // 進行中・提案・お断りのみ（完了待ち・承認済みは残す）
-    if (!['open', 'accepted', 'proposed', 'rejected'].includes(t.status)) continue;
+    if (!['open', 'accepted', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status)) continue;
     // まだ期限前
     if (t.deadline > nowMs) continue;
 
@@ -487,22 +487,30 @@ function setupListeners() {
                 `「${t.title}」（${t.points}pt）が発注されました！`
               );
             }
-            // 子供が見積・報酬提案 → 親へ
+            // 子供が見積り → 親へ
             if (state.role === 'parent' && t.status === 'proposed') {
               const name = state.childName || 'こども';
+              requestPushPermission();
               sendPushNotification(
-                "報酬の見積が届きました",
-                `${name}ちゃんから「${t.title}」（希望 ${t.points}pt）の提案です`
+                "見積りが届きました",
+                `${name}ちゃんから「${t.title}」（希望 ${t.points}pt）`
               );
             }
           }
 
           if (change.type === "modified") {
-            // 親が提案を承認して発注状態に → 子供へ
+            // 親が見積りを承認して発注状態に → 子供へ
             if (state.role === 'child' && t.status === 'open' && prev?.status === 'proposed') {
               sendPushNotification(
-                "提案が承認されました！",
+                "見積りが承認されました！",
                 `「${t.title}」がお仕事として発注されました`
+              );
+            }
+            // 親が見積りを却下 → 子供へ
+            if (state.role === 'child' && t.status === 'proposal_rejected' && prev?.status === 'proposed') {
+              sendPushNotification(
+                "見積りが却下されました",
+                `「${t.title}」の見積りは却下されました`
               );
             }
             // 子供が完了報告 → 親へ
@@ -734,8 +742,27 @@ window.saveNewPassword = async () => {
     alert("エラー: " + error.message);
   }
 };
-window.proposeTask = async () => { const t = document.getElementById('prop-title').value, p = parseInt(document.getElementById('prop-points').value), d = document.getElementById('prop-deadline').value; if(t&&p) { await addDoc(collection(db, "tasks"), { familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'proposed', createdAt: Date.now() }); setView('home'); } };
+window.proposeTask = async () => {
+  const t = document.getElementById('prop-title').value;
+  const p = parseInt(document.getElementById('prop-points').value);
+  const d = document.getElementById('prop-deadline').value;
+  if (t && p) {
+    await addDoc(collection(db, "tasks"), {
+      familyCode: state.familyCode,
+      title: t,
+      points: p,
+      deadline: d ? new Date(d).getTime() : null,
+      status: 'proposed',
+      createdAt: Date.now()
+    });
+    setView('home');
+  }
+};
 window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status: 'open' });
+window.rejectProposal = async (id) => {
+  if (!confirm("この見積りを却下しますか？")) return;
+  await updateDoc(doc(db, "tasks", id), { status: 'proposal_rejected', rejectedAt: Date.now() });
+};
 window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
 window.addTicket2 = async () => { const t = document.getElementById('t-title').value, p = parseInt(document.getElementById('t-pts').value); if(t&&p) await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title: t, price: p, status: 'available', createdAt: Date.now() }); };
 window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); };

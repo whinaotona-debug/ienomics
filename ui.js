@@ -1,5 +1,5 @@
-import { state } from './state.js?v=113';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=113';
+import { state } from './state.js?v=115';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=115';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -44,11 +44,11 @@ export function render() {
 
   bottomNav.classList.remove('hidden');
   bottomNav.innerHTML = `
-    <div class="w-full h-full flex justify-around items-center bg-white shadow-[0_-5px_20px_rgba(0,0,0,0.02)] pb-2 pt-1">
-      <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span class="mt-0.5">ホーム</span></button>
-      <button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span class="mt-0.5">チケット</span></button>
-      <button onclick="setView('history')" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span class="mt-0.5">${rb('履歴','りれき')}</span></button>
-      <button onclick="setView('settings')" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span class="mt-0.5">${rb('設定','せってい')}</span></button>
+    <div class="ie-nav-shell">
+      <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
+      <button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>
+      <button onclick="setView('history')" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
+      <button onclick="setView('settings')" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
     </div>
   `;
 
@@ -95,48 +95,50 @@ function renderHeader() {
   let nameTag = '';
   if (state.role === 'parent') {
     nameTag = `
-      <select onchange="switchActiveChild(this.value)" class="bg-transparent text-[10px] text-slate-300 font-semibold tracking-[0.1em] outline-none appearance-none cursor-pointer hover:text-white transition">
+      <select onchange="switchActiveChild(this.value)" class="bg-transparent text-[10px] text-white/75 font-bold tracking-[0.08em] outline-none appearance-none cursor-pointer hover:text-white transition">
         ${state.children.map(c => `<option value="${c.id}" ${c.id === state.familyCode ? 'selected' : ''} class="text-slate-800">${c.childName} の口座</option>`).join('')}
       </select>
-      <button onclick="addNewChild()" class="text-[8px] bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 rounded-full transition ml-1">＋追加</button>
+      <button onclick="addNewChild()" class="text-[8px] bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-lg transition ml-1 font-bold border border-white/20">＋追加</button>
     `;
-  } else { nameTag = `<p class="text-[10px] text-slate-300 font-semibold tracking-[0.1em]">${state.childName} の${rb('資産','しさん')}</p>`; }
+  } else {
+    nameTag = `<p class="text-[10px] text-white/75 font-bold tracking-[0.08em]">${state.childName} の${rb('資産','しさん')}</p>`;
+  }
 
   const nextPay = getNextPaymentInfo(state.scheduledPayments);
   let payHint = '';
   if (nextPay) {
     const leftTxt = nextPay.daysLeft === 0 ? '本日' : `残り${nextPay.daysLeft}日`;
-    payHint = `<p class="text-[9px] font-bold text-amber-200/90 mt-1.5 leading-snug truncate" title="${nextPay.title}">${nextPay.title}まで${leftTxt}</p>`;
+    payHint = `<p class="text-[9px] font-bold text-[#ffe2b8] mt-1.5 leading-snug truncate" title="${nextPay.title}">${nextPay.title}まで${leftTxt}</p>`;
   }
 
   const stamp = getHelpStampData(state.tasks);
   const streakHint = stamp.streak > 0
-    ? `<p class="text-[9px] font-bold text-emerald-300/90 mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
+    ? `<p class="text-[9px] font-bold text-[#b8f0e4] mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
     : '';
 
   return `
     <div class="flex-none p-3 pb-0">
-      <div class="bg-slate-900 text-white rounded-[16px] p-5 flex items-center justify-between shadow-lg relative min-h-[105px] overflow-hidden">
-        <img src="logo.png" class="absolute -right-8 -top-8 w-40 h-40 opacity-[0.08] object-cover pointer-events-none" onerror="this.style.display='none'" />
+      <div class="ie-hero flex items-center justify-between">
+        <img src="logo.png" class="absolute -right-8 -top-8 w-40 h-40 opacity-[0.12] object-cover pointer-events-none" onerror="this.style.display='none'" />
         <div class="flex-1 relative z-10 min-w-0 pr-2">
           <div class="flex items-center gap-1.5 mb-1.5">
-             <div class="w-4 h-4 rounded-full overflow-hidden bg-white/10 flex items-center justify-center">
+             <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20">
                <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
              </div>
              ${nameTag}
           </div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-4xl font-black tracking-tight ${state.points < 0 ? 'text-red-400' : ''}">${state.points.toLocaleString()}</span>
-            <span class="text-xs font-medium ${state.points < 0 ? 'text-red-400/80' : 'text-slate-400'}">pt</span>
+            <span class="text-4xl font-black tracking-tight ${state.points < 0 ? 'text-red-300' : 'text-white'}">${state.points.toLocaleString()}</span>
+            <span class="text-xs font-bold ${state.points < 0 ? 'text-red-300/80' : 'text-white/60'}">pt</span>
           </div>
-          ${state.points < 0 ? `<p class="text-[9px] font-bold text-red-400 mt-1">残高不足（株・換金はロック中）</p>` : ''}
+          ${state.points < 0 ? `<p class="text-[9px] font-bold text-red-300 mt-1">残高不足（株・換金はロック中）</p>` : ''}
           ${payHint}
           ${streakHint}
         </div>
-        <div class="w-px h-10 bg-white/10 mx-3 relative z-10 shrink-0"></div>
+        <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
         <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%]">
-          <p class="text-[9px] text-slate-400 font-semibold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
-          <p class="text-sm font-mono font-bold tracking-widest text-white/80">${state.familyCode}</p>
+          <p class="text-[9px] text-white/55 font-bold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
+          <p class="text-sm font-mono font-bold tracking-widest text-white/90">${state.familyCode}</p>
         </div>
       </div>
     </div>
@@ -144,8 +146,8 @@ function renderHeader() {
 }
 
 function renderHome() {
-  const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected'].includes(t.status));
-  const tJob = state.role === 'child' ? { id: 'propose', title: rb('報酬','ほうしゅう')+'を'+rb('提案','ていあん') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
+  const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status));
+  const tJob = state.role === 'child' ? { id: 'propose', title: rb('見積り','みつもり') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
   const tEx = state.role === 'child' ? rb('換金申請','かんきんしんせい') : rb('換金承認','かんきんしょうにん');
 
   let taskHtml = activeTasks.length > 0 ? activeTasks.map(t => {
@@ -173,11 +175,15 @@ function renderHome() {
         `;
       } else if (t.status === 'accepted') {
         btn = `<button onclick="completeTask('${t.id}')" class="solid-btn px-3 py-1.5 text-[9px] font-bold shrink-0 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100">完了</button>`;
+      } else if (t.status === 'proposed') {
+        btn = `<span class="text-[9px] text-sky-500 font-bold shrink-0">見積り審査中</span>`;
+      } else if (t.status === 'proposal_rejected') {
+        btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">見積り却下</span>`;
       } else {
         btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">確認待ち</span>`;
       }
     } else {
-      if (t.status === 'open' || t.status === 'rejected') {
+      if (t.status === 'open' || t.status === 'rejected' || t.status === 'proposal_rejected') {
         trashBtn = `<button onclick="deleteTask('${t.id}')" class="text-red-400 hover:text-red-600 w-4 h-4 shrink-0 transition">${getIcon('trash')}</button>`;
       }
       
@@ -192,31 +198,38 @@ function renderHome() {
       } else if (t.status === 'rejected') {
         btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">お断りされました</span>`;
       } else if (t.status === 'proposed') {
-        btn = `<button onclick="approveProposal('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">承認</button>`;
+        btn = `
+          <div class="flex gap-1.5">
+            <button onclick="rejectProposal('${t.id}')" class="solid-btn px-2.5 py-1.5 text-[9px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">却下</button>
+            <button onclick="approveProposal('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 text-[9px] font-bold shrink-0 shadow-sm">承認</button>
+          </div>
+        `;
+      } else if (t.status === 'proposal_rejected') {
+        btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">見積りを却下済み</span>`;
       } else {
         btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">進行中</span>`;
       }
     }
     
     return `
-      <div class="p-3 flex flex-col gap-1.5 min-w-0 bg-white hover:bg-slate-50 rounded-xl transition border border-transparent hover:border-slate-100">
+      <div class="ie-job-item">
         <div class="flex justify-between items-center gap-2 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0 flex-1">
             ${repeatMark}
-            <span class="font-bold text-xs text-slate-700 truncate">${t.title}</span>
+            <span class="font-bold text-xs text-[#3d524c] truncate">${t.title}</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="text-[9px] font-medium ${timeTxt.includes('切れ')?'text-red-500':'text-slate-400'} shrink-0">${timeTxt}</span>
+            <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
             ${trashBtn}
           </div>
         </div>
         <div class="flex justify-between items-center mt-0.5">
-          <span class="text-xs font-black text-slate-800 shrink-0">${t.points} <span class="text-[9px] font-semibold text-slate-400">pt</span></span>
+          <span class="text-xs font-black text-[#1c2b27] shrink-0">${t.points} <span class="text-[9px] font-bold text-[#7a8f88]">pt</span></span>
           ${btn}
         </div>
       </div>
     `;
-  }).join('') : `<div class="flex flex-col items-center justify-center h-full opacity-40"><div class="w-6 h-6 mb-2 text-slate-400">${getIcon('task')}</div><p class="text-[10px] font-bold text-slate-400">仕事はありません</p></div>`;
+  }).join('') : `<div class="flex flex-col items-center justify-center h-full opacity-50"><div class="w-6 h-6 mb-2 text-[#7a8f88]">${getIcon('task')}</div><p class="text-[10px] font-bold text-[#7a8f88]">仕事はありません</p></div>`;
 
   return `
     <div class="flex-1 min-h-0 p-3">
@@ -224,52 +237,52 @@ function renderHome() {
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex-1 p-2.5 space-y-3 overflow-y-auto">
             <div>
-              <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1 tracking-wider">${rb('仕事','しごと')}</p>
-              <button onclick="setView('${tJob.id}')" class="solid-btn w-full py-3 hover:bg-slate-50 flex-row gap-2">
-                <div class="w-4 h-4 text-slate-600">${getIcon('propose')}</div><span class="text-[9px] font-bold text-slate-700 mt-0.5">${tJob.title}</span>
+              <p class="ie-section-label">${rb('仕事','しごと')}</p>
+              <button onclick="setView('${tJob.id}')" class="solid-btn w-full py-3 flex-row gap-2">
+                <div class="w-4 h-4 text-[#2f8f82]">${getIcon('propose')}</div><span class="text-[9px] font-bold text-[#3d524c] mt-0.5">${tJob.title}</span>
               </button>
             </div>
             <div>
-              <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1 tracking-wider">${rb('管理','かんり')}</p>
+              <p class="ie-section-label">${rb('管理','かんり')}</p>
               <div class="grid grid-cols-1 gap-2">
-                <button onclick="setView('bank')" class="solid-btn py-2.5 flex-row gap-2 hover:bg-slate-50">
-                  <div class="w-4 h-4 text-emerald-600">${getIcon('bank')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${rb('銀行','ぎんこう')}</span>
+                <button onclick="setView('bank')" class="solid-btn py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#2f8f82]">${getIcon('bank')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('銀行','ぎんこう')}</span>
                 </button>
-                <button onclick="setView('invest')" class="solid-btn py-2.5 flex-row gap-2 hover:bg-slate-50">
-                  <div class="w-4 h-4 text-purple-600">${getIcon('invest')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${rb('運用','うんよう')}</span>
+                <button onclick="setView('invest')" class="solid-btn py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#5b8def]">${getIcon('invest')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('運用','うんよう')}</span>
                 </button>
               </div>
             </div>
             <div>
-              <p class="text-[9px] font-bold text-slate-400 mb-1.5 ml-1 tracking-wider">${rb('支出','ししゅつ')}</p>
+              <p class="ie-section-label">${rb('支出','ししゅつ')}</p>
               <div class="grid grid-cols-1 gap-2">
-                <button onclick="setView('payments')" class="solid-btn w-full py-2.5 flex-row gap-2 hover:bg-slate-50">
-                  <div class="w-4 h-4 text-indigo-500">${getIcon('pay')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${rb('支払い','しはらい')}</span>
+                <button onclick="setView('payments')" class="solid-btn w-full py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#2f8f82]">${getIcon('pay')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('支払い','しはらい')}</span>
                 </button>
-                <button onclick="setView('exchange')" class="solid-btn w-full py-2.5 flex-row gap-2 hover:bg-slate-50">
-                  <div class="w-4 h-4 text-amber-500">${getIcon('exchange')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">${tEx}</span>
+                <button onclick="setView('exchange')" class="solid-btn w-full py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#e09a4a]">${getIcon('exchange')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${tEx}</span>
                 </button>
-                <button onclick="setView('tickets')" class="solid-btn w-full py-2.5 flex-row gap-2 hover:bg-slate-50">
-                  <div class="w-4 h-4 text-rose-500">${getIcon('ticket')}</div><span class="text-[10px] font-bold text-slate-700 mt-0.5">チケット</span>
+                <button onclick="setView('tickets')" class="solid-btn w-full py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#d9655b]">${getIcon('ticket')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">チケット</span>
                 </button>
               </div>
             </div>
             ${state.role === 'parent' ? `
-              <button onclick="setView('balloonSend')" class="solid-btn w-full py-2.5 mt-2 bg-slate-900 border-slate-900 text-white hover:bg-slate-800">
+              <button onclick="setView('balloonSend')" class="solid-btn primary-btn w-full py-2.5 mt-2">
                 <div class="flex items-center gap-1.5"><div class="w-3 h-3">${getIcon('gift')}</div><span class="text-[10px] font-bold">ギフト送信</span></div>
               </button>
             ` : ''}
           </div>
-          <div class="solid-box h-[90px] relative p-1 cursor-pointer hover:bg-slate-50 transition" onclick="setView('invest')">
+          <div class="solid-box h-[90px] relative p-1 cursor-pointer transition hover:brightness-[0.99]" onclick="setView('invest')">
             <canvas id="investChart"></canvas>
           </div>
         </div>
         <div class="solid-box flex flex-col min-h-0 relative overflow-hidden min-w-0">
-          <div class="flex-none p-3 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-2xl">
-            <h2 class="text-xs font-bold text-slate-800 flex items-center gap-1.5"><div class="w-3 h-3 text-slate-400">${getIcon('task')}</div>JOB LIST</h2>
-            <button onclick="setView('calendar')" class="w-4 h-4 text-slate-400 hover:text-slate-800 transition">${getIcon('calendar')}</button>
+          <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
+            <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
+            <button onclick="setView('calendar')" class="w-4 h-4 text-[#7a8f88] hover:text-[#2f8f82] transition">${getIcon('calendar')}</button>
           </div>
-          <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1">
+          <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
             ${taskHtml}
           </div>
         </div>
@@ -280,9 +293,9 @@ function renderHome() {
 
 function renderModal(content) {
   return `
-    <div class="flex-1 flex items-center justify-center p-4 bg-slate-900/20 backdrop-blur-md z-30 absolute inset-0">
-      <div class="solid-box w-full max-h-[90%] flex flex-col relative shadow-[0_20px_40px_rgba(0,0,0,0.08)] animate-in zoom-in-95 duration-200">
-        <button onclick="setView('home')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 font-bold text-slate-500 z-10 transition">✕</button>
+    <div class="flex-1 flex items-center justify-center p-4 ie-modal-backdrop z-30 absolute inset-0">
+      <div class="ie-modal-panel w-full max-h-[90%] flex flex-col relative animate-in zoom-in-95 duration-200">
+        <button onclick="setView('home')" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-xl bg-[#eef5f2] hover:bg-[#dff3ef] font-bold text-[#7a8f88] z-10 transition">✕</button>
         <div class="flex-1 overflow-y-auto p-6 min-h-0">
           ${content}
         </div>
@@ -564,7 +577,19 @@ function renderPaymentEdit() {
 function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
 export function drawInvestChart() { const canvas = document.getElementById('investChart'); if (!canvas) return; const rates = getMarketRates(); const ctx = canvas.getContext('2d'); const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ'); const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0; const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0; const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r)); const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r)); if (investChartInstance) investChartInstance.destroy(); const isDetail = state.view === 'invest'; investChartInstance = new Chart(ctx, { type: 'line', data: { labels: rates.labels, datasets: [ { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }, { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } }, scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } }, layout: { padding: isDetail ? 0 : 5 } } }); }
 function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
-function renderPropose() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('報酬提案','ほうしゅうていあん')}</h2><input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><div class="flex items-center gap-3 mb-4"><input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" /><span class="font-bold text-sm text-slate-500">pt</span></div><input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" /><button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">提案を送信</button>`; }
+function renderPropose() {
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('見積り','みつもり')}</h2>
+    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">仕事の内容と希望の報酬を親に送ります。</p>
+    <input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
+    <div class="flex items-center gap-3 mb-4">
+      <input type="number" id="prop-points" placeholder="希望金額" class="w-1/2 p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" />
+      <span class="font-bold text-sm text-slate-500">pt</span>
+    </div>
+    <input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" />
+    <button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">見積りを送信</button>
+  `;
+}
 function renderExchange() {
   const p = state.exchanges.filter(e => e.status === 'pending');
   const locked = state.points < 0;
@@ -589,44 +614,43 @@ function renderHistory() {
   const stampCells = Array.from({ length: cardDays }, (_, i) => {
     const day = i + 1;
     const on = stamped.has(day);
-    return `<div class="aspect-square rounded-lg flex flex-col items-center justify-center border text-[9px] font-black ${on ? 'bg-amber-400 border-amber-500 text-white shadow-sm' : 'bg-slate-50 border-slate-100 text-slate-300'}">${on ? '✓' : day}</div>`;
+    return `<div class="aspect-square rounded-xl flex flex-col items-center justify-center border text-[9px] font-black ${on ? 'ie-stamp-on' : 'bg-[#f7faf9] border-[#eaf1ee] text-[#b9cdc6]'}">${on ? '✓' : day}</div>`;
   }).join('');
 
   return `
-    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
-      <div class="w-4 h-4 text-slate-400">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}
+    <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
+      <div class="w-4 h-4 text-[#2f8f82]">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}
     </h2>
-    <div class="p-6 bg-slate-50 rounded-2xl text-center mb-5 border border-slate-100">
-      <p class="text-[10px] font-semibold text-slate-400 mb-1 tracking-widest">獲得累計</p>
-      <p class="text-3xl font-black text-slate-800 tracking-tight">${total.toLocaleString()} <span class="text-[10px] font-bold text-slate-400">pt</span></p>
+    <div class="p-6 bg-[#f4f9f7] rounded-2xl text-center mb-5 border border-[#eaf1ee]">
+      <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">獲得累計</p>
+      <p class="text-3xl font-black text-[#1c2b27] tracking-tight">${total.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
     </div>
 
-    <div class="mb-6 p-4 bg-gradient-to-b from-amber-50 to-white rounded-2xl border border-amber-100">
+    <div class="mb-6 p-4 ie-stamp-board">
       <div class="flex items-end justify-between mb-3 gap-2">
         <div>
-          <p class="text-[10px] font-bold text-amber-700/80 tracking-wider mb-0.5">${monthLabel}のスタンプカード</p>
-          <p class="text-sm font-black text-slate-800">${streak > 0 ? `${streak}日連続お手伝い達成中！` : '今日からスタンプを集めよう'}</p>
+          <p class="text-[10px] font-bold text-[#c4873f] tracking-wider mb-0.5">${monthLabel}のスタンプカード</p>
+          <p class="text-sm font-black text-[#1c2b27]">${streak > 0 ? `${streak}日連続お手伝い達成中！` : '今日からスタンプを集めよう'}</p>
         </div>
-        <p class="text-[10px] font-bold text-slate-400 shrink-0">${stamped.size}/${cardDays}日</p>
+        <p class="text-[10px] font-bold text-[#7a8f88] shrink-0">${stamped.size}/${cardDays}日</p>
       </div>
-      <div class="grid grid-cols-6 gap-1.5 sm:grid-cols-6">
+      <div class="grid grid-cols-6 gap-1.5">
         ${stampCells}
       </div>
-      <p class="text-[9px] font-bold text-slate-400 mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
+      <p class="text-[9px] font-bold text-[#7a8f88] mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
     </div>
 
-    <div class="space-y-1">${app.map(t => `<div class="border-b border-slate-50 py-3 flex justify-between items-center text-xs font-bold"><span class="text-slate-600">${t.title}</span><span class="text-slate-800 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">+${t.points} pt</span></div>`).join('')}</div>
+    <div class="space-y-1">${app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-center text-xs font-bold"><span class="text-[#3d524c]">${t.title}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee]">+${t.points} pt</span></div>`).join('')}</div>
   `;
 }
 function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
 function renderSetupLoading(message) {
   return `
-    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
-      <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
-      <div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10">
-        <div class="w-12 h-12 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-5"></div>
-        <p class="text-sm font-black text-slate-800 mb-2">しばらくお待ちください</p>
-        <p class="text-[10px] font-bold text-slate-500 leading-relaxed">${message || '処理中...'}</p>
+    <div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">
+      <div class="w-full max-w-sm ie-setup-card p-12 text-center relative z-10">
+        <div class="w-12 h-12 border-4 border-[#dff3ef] border-t-[#2f8f82] rounded-full animate-spin mx-auto mb-5"></div>
+        <p class="text-sm font-black text-[#1c2b27] mb-2">しばらくお待ちください</p>
+        <p class="text-[10px] font-bold text-[#7a8f88] leading-relaxed">${message || '処理中...'}</p>
       </div>
     </div>
   `;
@@ -661,8 +685,8 @@ function renderWaitingChild() { return `<div class="h-full flex flex-col items-c
 
 function renderSetup() {
   let content = '';
-  if (state.isSending) { content = `<div class="w-full max-w-sm bg-white p-12 rounded-3xl shadow-xl border border-slate-100 text-center relative z-10"><div class="w-10 h-10 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-slate-500">通信中...</p></div>`; } 
-  else if (!state.setupMode) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 mb-6 relative z-10 text-center"><h3 class="font-black text-slate-800 mb-6 text-lg">どちらで始めますか？</h3><button onclick="setSetupMode('parent_select')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">親として開始</button><button onclick="setSetupMode('child')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">子供として開始</button></div>`; } 
+  if (state.isSending) { content = `<div class="w-full max-w-sm ie-setup-card p-12 text-center relative z-10"><div class="w-10 h-10 border-4 border-[#dff3ef] border-t-[#2f8f82] rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-[#7a8f88]">通信中...</p></div>`; } 
+  else if (!state.setupMode) { content = `<div class="w-full max-w-sm ie-setup-card p-8 mb-6 relative z-10 text-center"><h3 class="font-black text-[#1c2b27] mb-6 text-lg">どちらで始めますか？</h3><button onclick="setSetupMode('parent_select')" class="solid-btn primary-btn w-full py-4 font-bold mb-3">親として開始</button><button onclick="setSetupMode('child')" class="solid-btn w-full py-4 font-bold text-[#3d524c]">子供として開始</button></div>`; } 
   else if (state.setupMode === 'parent_select') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">親のアカウント設定</h3><button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める（メール認証）</button><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">既存のアカウントにログイン</button></div>`; } 
   else if (state.setupMode === 'parent_register' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>登録用URLを送信しました。<br><br>メールアプリを開き、<br>リンクをクリックしてください。</p><p class="text-[10px] text-slate-400">※この画面は閉じて構いません</p></div>`; } 
   else if (state.setupMode === 'parent_register') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">新規登録（親）</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">入力したアドレスに認証リンクを送信します。<br>パスワードは認証後に設定します。</p><input type="email" id="setup-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendRealEmailLink()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">認証メールを送信する</button></div>`; } 
@@ -670,5 +694,5 @@ function renderSetup() {
   else if (state.setupMode === 'parent_forgot' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>パスワード再設定用のリンクを送信しました。<br><br>メールアプリを開き、<br>リンクをタップしてください。</p><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50">ログイン画面へ戻る</button></div>`; }
   else if (state.setupMode === 'parent_forgot') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_login')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">パスワード再設定</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">登録しているメールアドレスを入力してください。<br>再設定用のリンクを送信します。</p><input type="email" id="reset-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendPasswordReset()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">再設定メールを送信</button></div>`; }
   else if (state.setupMode === 'child') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">親の同期IDを入力</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">親のアプリの設定画面にある<br>「同期ID」を入力して連携します。</p><input id="setup-family-code" placeholder="IDを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-2xl uppercase tracking-widest focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="joinFamily()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">同期してスタート</button></div>`; }
-  return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-24 h-24 mb-8 rounded-full overflow-hidden bg-white shadow-[0_10px_30px_rgba(0,0,0,0.08)] flex items-center justify-center relative z-10 border border-slate-100"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-slate-800 mb-10 tracking-tighter relative z-10">イエノミクス</h1>${content}</div>`;
+  return `<div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden"><div class="w-24 h-24 mb-8 rounded-[28px] overflow-hidden bg-white shadow-[0_12px_32px_rgba(47,143,130,0.18)] flex items-center justify-center relative z-10 border border-[#eaf1ee]"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-[#1c2b27] mb-10 tracking-tight relative z-10">イエノミクス</h1>${content}</div>`;
 }
