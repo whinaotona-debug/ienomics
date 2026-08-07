@@ -210,6 +210,20 @@ html, body {
   pointer-events: none;
 }
 
+.ie-refresh-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.ie-refresh-btn:active svg {
+  animation: ieSpin 0.6s linear;
+}
+@keyframes ieSpin {
+  to { transform: rotate(360deg); }
+}
+
 .ie-section-label {
   font-size: 9px;
   font-weight: 800;
@@ -319,18 +333,45 @@ input[type="date"],
 input[type="time"],
 input[type="datetime-local"],
 textarea,
-select {
+select:not(.ie-hero-select) {
   border-radius: 14px !important;
   border-color: var(--ie-line) !important;
   background: #f7faf9 !important;
   color: var(--ie-ink) !important;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-input:focus, textarea:focus, select:focus {
+input:focus, textarea:focus, select:not(.ie-hero-select):focus {
   outline: none !important;
   border-color: var(--ie-accent) !important;
   background: #fff !important;
   box-shadow: 0 0 0 3px rgba(47, 143, 130, 0.15);
+}
+
+/* ヘッダーの子供名セレクトは枠・背景なし */
+.ie-hero-select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 140px;
+  cursor: pointer;
+  outline: none !important;
+}
+.ie-hero-select:focus {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.ie-hero-select option {
+  color: #1c2b27 !important;
+  background: #fff !important;
 }
 
 .password-wrapper {

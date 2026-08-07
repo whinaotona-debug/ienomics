@@ -1,5 +1,5 @@
-import { state } from './state.js?v=116';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=116';
+import { state } from './state.js?v=118';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=118';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -85,8 +85,8 @@ function renderHeader() {
   let nameTag = '';
   if (state.role === 'parent') {
     nameTag = `
-      <select onchange="switchActiveChild(this.value)" class="bg-transparent text-[10px] text-white/75 font-bold tracking-[0.08em] outline-none appearance-none cursor-pointer hover:text-white transition">
-        ${state.children.map(c => `<option value="${c.id}" ${c.id === state.familyCode ? 'selected' : ''} class="text-slate-800">${c.childName} の口座</option>`).join('')}
+      <select onchange="switchActiveChild(this.value)" class="ie-hero-select hover:text-white transition">
+        ${state.children.map(c => `<option value="${c.id}" ${c.id === state.familyCode ? 'selected' : ''}>${c.childName} の口座</option>`).join('')}
       </select>
       <button onclick="addNewChild()" class="text-[8px] bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-lg transition ml-1 font-bold border border-white/20">＋追加</button>
     `;
@@ -109,7 +109,10 @@ function renderHeader() {
   return `
     <div class="flex-none p-3 pb-0">
       <div class="ie-hero flex items-center justify-between">
-        <div class="flex-1 relative z-10 min-w-0 pr-2">
+        <button type="button" onclick="reloadApp()" title="最新版を読み込む" class="ie-refresh-btn absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white transition active:scale-95" aria-label="更新">
+          <span class="w-4 h-4">${getIcon('refresh')}</span>
+        </button>
+        <div class="flex-1 relative z-10 min-w-0 pr-10">
           <div class="flex items-center gap-1.5 mb-1.5">
              <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20">
                <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
@@ -125,7 +128,7 @@ function renderHeader() {
           ${streakHint}
         </div>
         <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
-        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%]">
+        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1">
           <p class="text-[9px] text-white/55 font-bold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
           <p class="text-sm font-mono font-bold tracking-widest text-white/90">${state.familyCode}</p>
         </div>
@@ -246,6 +249,25 @@ function renderHome() {
   const tJob = state.role === 'child' ? { id: 'propose', title: rb('見積り','みつもり') } : { id: 'taskCreate', title: rb('仕事','しごと')+'の'+rb('発注','はっちゅう') };
   const tEx = state.role === 'child' ? rb('換金申請','かんきんしんせい') : rb('換金承認','かんきんしょうにん');
 
+  let bankTotal = 0;
+  (state.banks || []).forEach(b => {
+    const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
+    bankTotal += b.amount + Math.floor(b.amount * (0.001 * months));
+  });
+  const rates = getMarketRates();
+  let investTotal = 0;
+  (state.investments || []).forEach(inv => {
+    const cur = inv.name === '日本' ? rates.日本[12] : rates.アメリカ[12];
+    investTotal += Math.round((inv.shares || (inv.investedPoints / cur)) * cur);
+  });
+  const showAssetAmt = state.role === 'parent';
+  const bankAmtHtml = showAssetAmt
+    ? `<span class="text-[8px] font-black text-[#2f8f82] leading-none mt-0.5">${bankTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
+    : '';
+  const investAmtHtml = showAssetAmt
+    ? `<span class="text-[8px] font-black text-[#5b8def] leading-none mt-0.5">${investTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
+    : '';
+
   let taskHtml = activeTasks.length > 0 ? activeTasks.map(t => {
     const timeTxt = formatTimeLeft(t.deadline);
     let btn = ''; let trashBtn = '';
@@ -342,10 +364,18 @@ function renderHome() {
               <p class="ie-section-label">${rb('管理','かんり')}</p>
               <div class="grid grid-cols-1 gap-2">
                 <button onclick="setView('bank')" class="solid-btn py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#2f8f82]">${getIcon('bank')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('銀行','ぎんこう')}</span>
+                  <div class="flex flex-col items-center shrink-0">
+                    <div class="w-4 h-4 text-[#2f8f82]">${getIcon('bank')}</div>
+                    ${bankAmtHtml}
+                  </div>
+                  <span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('銀行','ぎんこう')}</span>
                 </button>
                 <button onclick="setView('invest')" class="solid-btn py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#5b8def]">${getIcon('invest')}</div><span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('運用','うんよう')}</span>
+                  <div class="flex flex-col items-center shrink-0">
+                    <div class="w-4 h-4 text-[#5b8def]">${getIcon('invest')}</div>
+                    ${investAmtHtml}
+                  </div>
+                  <span class="text-[10px] font-bold text-[#3d524c] mt-0.5">${rb('運用','うんよう')}</span>
                 </button>
               </div>
             </div>

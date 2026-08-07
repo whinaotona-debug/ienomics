@@ -1,6 +1,6 @@
-import { state } from './state.js?v=116';
-import { render } from './ui.js?v=116';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=116';
+import { state } from './state.js?v=118';
+import { render } from './ui.js?v=119';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getMarketRates } from './utils.js?v=118';
 import { db, auth } from './firebase.js'; 
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -564,6 +564,14 @@ window.setView = (viewName) => {
   if (viewName !== 'paymentEdit') state.editingPaymentId = null;
   state.view = viewName;
   render();
+};
+
+/** キャッシュを避けて最新のアプリを読み込み直す */
+window.reloadApp = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('_upd', String(Date.now()));
+  // 認証用のクエリは残しつつ強制リロード
+  window.location.replace(url.toString());
 };
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
