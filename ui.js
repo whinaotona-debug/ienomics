@@ -1,5 +1,5 @@
-import { state } from './state.js?v=115';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=115';
+import { state } from './state.js?v=116';
+import { getIcon, rb, formatTimeLeft, getMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=116';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -75,16 +75,6 @@ export function render() {
       break;
   }
 
-  if (state.role === 'child' && state.view === 'home' && state.balloons.length > 0) {
-    const b = state.balloons[0];
-    html += `
-      <div class="absolute bottom-28 right-6 z-40 float-balloon" onclick="openBalloon('${b.id}', ${b.points}, '${b.message}')">
-        <div class="w-16 h-16 rounded-full overflow-hidden shadow-lg bg-white flex items-center justify-center border border-slate-100">
-          <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none';" />
-          <span class="text-2xl text-pink-500">${getIcon('gift')}</span>
-        </div>
-      </div>
-    `;
   }
 
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
@@ -119,7 +109,6 @@ function renderHeader() {
   return `
     <div class="flex-none p-3 pb-0">
       <div class="ie-hero flex items-center justify-between">
-        <img src="logo.png" class="absolute -right-8 -top-8 w-40 h-40 opacity-[0.12] object-cover pointer-events-none" onerror="this.style.display='none'" />
         <div class="flex-1 relative z-10 min-w-0 pr-2">
           <div class="flex items-center gap-1.5 mb-1.5">
              <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20">
@@ -140,6 +129,113 @@ function renderHeader() {
           <p class="text-[9px] text-white/55 font-bold mb-1 tracking-widest">${rb('同期','どうき')}ID</p>
           <p class="text-sm font-mono font-bold tracking-widest text-white/90">${state.familyCode}</p>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+/** 相手から届いているお知らせ一覧 */
+function buildInboxItems() {
+  const items = [];
+  if (state.role === 'parent') {
+    (state.exchanges || []).filter(e => e.status === 'pending').forEach(e => {
+      items.push({
+        id: `ex-${e.id}`,
+        tone: 'warm',
+        title: '換金申請が届きました',
+        body: `${e.yen}円の申請`,
+        action: `setView('exchange')`
+      });
+    });
+    (state.tasks || []).filter(t => t.status === 'proposed').forEach(t => {
+      items.push({
+        id: `prop-${t.id}`,
+        tone: 'accent',
+        title: '見積りが届きました',
+        body: `「${t.title}」希望 ${t.points}pt`,
+        action: `setView('home')`
+      });
+    });
+    (state.tasks || []).filter(t => t.status === 'completed').forEach(t => {
+      items.push({
+        id: `done-${t.id}`,
+        tone: 'accent',
+        title: 'お仕事完了の報告',
+        body: `「${t.title}」の確認・付与待ち`,
+        action: null
+      });
+    });
+  } else {
+    (state.balloons || []).forEach(b => {
+      const msg = JSON.stringify(b.message || '');
+      items.push({
+        id: `gift-${b.id}`,
+        tone: 'gift',
+        title: 'ギフトが届きました',
+        body: b.message ? `「${b.message}」 +${b.points}pt` : `ボーナス ${b.points}pt`,
+        action: `openBalloon('${b.id}', ${b.points}, ${msg})`
+      });
+    });
+    (state.tasks || []).filter(t => t.status === 'open').forEach(t => {
+      items.push({
+        id: `open-${t.id}`,
+        tone: 'accent',
+        title: '新しいお仕事',
+        body: `「${t.title}」 ${t.points}pt`,
+        action: null
+      });
+    });
+    (state.tasks || []).filter(t => t.status === 'proposal_rejected').forEach(t => {
+      items.push({
+        id: `rej-${t.id}`,
+        tone: 'danger',
+        title: '見積りが却下されました',
+        body: `「${t.title}」`,
+        action: null
+      });
+    });
+    (state.tasks || []).filter(t => t.status === 'accepted' && t.statusBefore === 'completed').forEach(t => {
+      items.push({
+        id: `redo-${t.id}`,
+        tone: 'danger',
+        title: 'やり直しの指示',
+        body: `「${t.title}」`,
+        action: null
+      });
+    });
+  }
+  return items;
+}
+
+function renderInboxPanel() {
+  const items = buildInboxItems();
+  const toneClass = {
+    warm: 'border-[#f3e0c8] bg-[#fff8ef]',
+    accent: 'border-[#dff3ef] bg-[#f3fbf9]',
+    gift: 'border-[#f3d4e0] bg-[#fff5f9]',
+    danger: 'border-[#f5d4d0] bg-[#fff6f5]'
+  };
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const list = items.length
+    ? items.slice(0, 6).map(it => `
+        <button type="button" ${it.action ? `onclick="${it.action}"` : ''} class="w-full text-left p-2.5 rounded-xl border ${toneClass[it.tone] || toneClass.accent} ${it.action ? 'cursor-pointer hover:brightness-[0.98]' : 'cursor-default'}">
+          <p class="text-[10px] font-black text-[#1c2b27] leading-tight">${esc(it.title)}</p>
+          <p class="text-[9px] font-bold text-[#7a8f88] mt-0.5 truncate">${esc(it.body)}</p>
+        </button>
+      `).join('')
+    : `<p class="text-[10px] font-bold text-[#7a8f88] text-center py-3">いまお知らせはありません</p>`;
+
+  return `
+    <div class="solid-box flex flex-col min-h-0 max-h-[38%] overflow-hidden">
+      <div class="flex-none px-3 py-2 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#fff8ef] to-white">
+        <h2 class="text-[11px] font-black text-[#1c2b27] flex items-center gap-1.5">
+          <span class="inline-flex w-2 h-2 rounded-full ${items.length ? 'bg-[#e09a4a]' : 'bg-[#c5d8d1]'}"></span>
+          ${rb('お知らせ','おしらせ')}
+        </h2>
+        ${items.length ? `<span class="text-[9px] font-black text-[#e09a4a]">${items.length}</span>` : ''}
+      </div>
+      <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+        ${list}
       </div>
     </div>
   `;
@@ -277,14 +373,17 @@ function renderHome() {
             <canvas id="investChart"></canvas>
           </div>
         </div>
-        <div class="solid-box flex flex-col min-h-0 relative overflow-hidden min-w-0">
-          <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
-            <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
-            <button onclick="setView('calendar')" class="w-4 h-4 text-[#7a8f88] hover:text-[#2f8f82] transition">${getIcon('calendar')}</button>
+        <div class="flex flex-col gap-3 min-h-0 min-w-0">
+          <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden">
+            <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
+              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
+              <button onclick="setView('calendar')" class="w-4 h-4 text-[#7a8f88] hover:text-[#2f8f82] transition">${getIcon('calendar')}</button>
+            </div>
+            <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
+              ${taskHtml}
+            </div>
           </div>
-          <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
-            ${taskHtml}
-          </div>
+          ${renderInboxPanel()}
         </div>
       </div>
     </div>
@@ -576,7 +675,16 @@ function renderPaymentEdit() {
 }
 function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
 export function drawInvestChart() { const canvas = document.getElementById('investChart'); if (!canvas) return; const rates = getMarketRates(); const ctx = canvas.getContext('2d'); const jpInv = state.investments.find(i => i.name === '日本'), amInv = state.investments.find(i => i.name === 'アメリカ'); const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / rates.日本[12])) : 0; const amShares = amInv ? (amInv.shares || (amInv.investedPoints / rates.アメリカ[12])) : 0; const datasetJp = (state.view==='invest'&&!jpInv&&!amInv) ? rates.日本.map(r => Math.round(100 * r)) : rates.日本.map(r => Math.round(jpShares * r)); const datasetAm = (state.view==='invest'&&!jpInv&&!amInv) ? rates.アメリカ.map(r => Math.round(100 * r)) : rates.アメリカ.map(r => Math.round(amShares * r)); if (investChartInstance) investChartInstance.destroy(); const isDetail = state.view === 'invest'; investChartInstance = new Chart(ctx, { type: 'line', data: { labels: rates.labels, datasets: [ { label: '日本', data: datasetJp, borderColor: '#334155', backgroundColor: 'rgba(51,65,85,0.05)', borderWidth: 1.5, tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail }, { label: '米国', data: datasetAm, borderColor: '#94a3b8', backgroundColor: 'rgba(148,163,184,0.05)', borderWidth: 1.5, borderDash: [4, 4], tension: 0.3, pointRadius: isDetail?2:0, fill: isDetail } ] }, options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { display: isDetail, position: 'bottom', labels: { usePointStyle: true, boxWidth: 6, font: {size: 10} } }, tooltip: { enabled: isDetail, backgroundColor: 'rgba(15,23,42,0.9)', padding: 10, cornerRadius: 8 } }, scales: { x: { display: isDetail, grid: {display: false}, ticks: { font: {size: 9}, color: '#94a3b8' } }, y: { display: isDetail, border:{dash:[4,4]}, grid: {color: '#f8fafc'}, ticks: { font: {size: 9}, color: '#94a3b8' } } }, layout: { padding: isDetail ? 0 : 5 } } }); }
-function renderBalloonSend() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-800">${getIcon('gift')}</div>ギフト送信</h2><input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" /><textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea><button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">空へ放つ</button>`; }
+function renderBalloonSend() {
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
+      <div class="w-4 h-4 text-[#2f8f82]">${getIcon('gift')}</div>ギフト送信
+    </h2>
+    <input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
+    <textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea>
+    <button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">送る</button>
+  `;
+}
 function renderPropose() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('見積り','みつもり')}</h2>
