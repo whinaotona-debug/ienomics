@@ -1,9 +1,10 @@
-import { state } from './state.js?v=128';
-import { render } from './ui.js?v=128';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=128';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=128';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=128';
-import { db, auth } from './firebase.js'; 
+import { state } from './state.js?v=129';
+import { render } from './ui.js?v=129';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=129';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=129';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=129';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush } from './push.js?v=129';
+import { db, auth } from './firebase.js?v=129';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -66,6 +67,56 @@ async function ensureAnonymousAuth() {
   return cred.user;
 }
 
+/**
+ * 端末内だけで出す通知。
+ * サーバー通知（FCM）が動いているときは、同じ内容が2回出るので何もしない。
+ * FCM が使えない環境（未設定・許可なし・古いブラウザ）のときの控えとして残している。
+ */
+function localNotify(title, body) {
+  if (isPushActive()) return;
+  sendPushNotification(title, body);
+}
+
+/** 通知の受け取りを準備する。すでに許可済みならそのまま有効になる。 */
+async function setupPush() {
+  if (!state.familyCode || !state.role) return;
+  const ok = await initPush({ familyCode: state.familyCode, role: state.role });
+  if (ok) console.log('[push] サーバー通知が有効になりました');
+}
+
+/** 設定画面の「通知をオンにする」から呼ぶ。iOS はタップ経由でないと許可が取れない。 */
+window.enablePushNotifications = async () => {
+  if (!(await isPushSupported())) {
+    return showAlert(
+      'この画面では通知を使えません。\n\niPhone・iPad の場合は、Safari の共有ボタンから「ホーム画面に追加」をして、追加されたアイコンからアプリを開き直してください。',
+      { title: '通知に対応していません' }
+    );
+  }
+
+  const permission = await askPushPermission();
+  if (permission === 'denied') {
+    return showAlert(
+      '通知がブロックされています。\n\n端末の設定 → 通知（またはブラウザのサイト設定）から、イエノミクスの通知を許可してください。',
+      { title: '通知がオフになっています' }
+    );
+  }
+  if (permission !== 'granted') return;
+
+  const ok = await initPush({ familyCode: state.familyCode, role: state.role });
+  render();
+  if (ok) {
+    await showAlert(
+      'アプリを閉じていても、新しいお仕事やギフトが通知センターに届きます。',
+      { title: '通知をオンにしました' }
+    );
+  } else {
+    await showAlert(
+      '許可は取れましたが、通知サーバーの準備ができていません。\n（開発者向け: push.js の VAPID_KEY と Cloud Functions のデプロイを確認してください）',
+      { title: 'あと少し設定が必要です' }
+    );
+  }
+};
+
 /** この端末を、その家族のメンバーとして登録する */
 async function claimChildMembership(code) {
   const user = await ensureAnonymousAuth();
@@ -98,6 +149,9 @@ function saveDeadlineNotifiedMap(map) {
 }
 
 function checkDeadlineReminders() {
+  // 期限の見張りはサーバー側（remindDeadlines）が10分ごとにやってくれる。
+  // アプリを閉じていても届くので、両方動くと二重になる。
+  if (isPushActive()) return;
   if (!state.familyCode || !Array.isArray(state.tasks) || state.tasks.length === 0) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
 
@@ -121,9 +175,9 @@ function checkDeadlineReminders() {
     const mins = Math.max(1, Math.ceil(remaining / 60000));
     const timeTxt = mins >= 60 ? 'あと1時間' : `あと約${mins}分`;
     if (state.role === 'child') {
-      sendPushNotification("期限が近づいています！", `「${t.title}」の期限が${timeTxt}です。急ぎましょう！`);
+      localNotify("期限が近づいています！", `「${t.title}」の期限が${timeTxt}です。急ぎましょう！`);
     } else {
-      sendPushNotification("期限アラーム", `「${t.title}」の期限が${timeTxt}です`);
+      localNotify("期限アラーム", `「${t.title}」の期限が${timeTxt}です`);
     }
   }
 
@@ -132,7 +186,7 @@ function checkDeadlineReminders() {
 
 function startDeadlineWatcher() {
   stopDeadlineWatcher();
-  requestPushPermission();
+  setupPush();
   checkDeadlineReminders();
   processScheduledPayments();
   cleanupExpiredDeadlineTasks();
@@ -288,12 +342,12 @@ async function processScheduledPayments() {
 
         if (charged) {
           if (wentNegative) {
-            sendPushNotification(
+            localNotify(
               "支払い引落（残高不足）",
               `「${p.title}」 −${amount}pt。口座がマイナスになりました`
             );
           } else {
-            sendPushNotification(
+            localNotify(
               "支払いが引き落とされました",
               `「${p.title}」 −${amount}pt`
             );
@@ -570,7 +624,7 @@ function setupListeners() {
           if (change.type === "added") {
             // 親が発注 → 子供へ
             if (state.role === 'child' && t.status === 'open') {
-              sendPushNotification(
+              localNotify(
                 "新しいお仕事！",
                 `「${t.title}」（${t.points}pt）が発注されました！`
               );
@@ -578,8 +632,7 @@ function setupListeners() {
             // 子供が見積り → 親へ
             if (state.role === 'parent' && t.status === 'proposed') {
               const name = state.childName || 'こども';
-              requestPushPermission();
-              sendPushNotification(
+              localNotify(
                 "見積りが届きました",
                 `${name}ちゃんから「${t.title}」（希望 ${t.points}pt）`
               );
@@ -589,35 +642,35 @@ function setupListeners() {
           if (change.type === "modified") {
             // 親が見積りを承認して発注状態に → 子供へ
             if (state.role === 'child' && t.status === 'open' && prev?.status === 'proposed') {
-              sendPushNotification(
+              localNotify(
                 "見積りが承認されました！",
                 `「${t.title}」がお仕事として発注されました`
               );
             }
             // 親が見積りを却下 → 子供へ
             if (state.role === 'child' && t.status === 'proposal_rejected' && prev?.status === 'proposed') {
-              sendPushNotification(
+              localNotify(
                 "見積りが却下されました",
                 `「${t.title}」の見積りは却下されました`
               );
             }
             // 子供が完了報告 → 親へ
             if (state.role === 'parent' && t.status === 'completed' && prev?.status !== 'completed') {
-              sendPushNotification(
+              localNotify(
                 "お仕事完了！",
                 `${state.childName || 'こども'}ちゃんが「${t.title}」を完了しました！`
               );
             }
             // 親が差し戻し → 子供へ
             if (state.role === 'child' && t.status === 'accepted' && prev?.status === 'completed') {
-              sendPushNotification(
+              localNotify(
                 "やり直し指示",
                 `「${t.title}」のやり直し（差し戻し）が届きました。`
               );
             }
             // 親が付与・承認 → 子供へ
             if (state.role === 'child' && t.status === 'approved' && prev?.status === 'completed') {
-              sendPushNotification(
+              localNotify(
                 "お仕事が承認されました！",
                 `「${t.title}」で ${t.points}pt ゲット！`
               );
@@ -1151,6 +1204,8 @@ window.addNewChild = async () => {
 window.unlinkAccount = async () => {
   const ok = await showConfirm("この端末からデータが見えなくなります。同期IDを入れ直せば元に戻せます。", { title: '連携を解除しますか？', okLabel: '解除する', tone: 'danger' });
   if (!ok) return;
+  // 解除後の端末に通知が届き続けないよう、先に宛先を消す
+  await unregisterPush();
   try { await signOut(auth); } catch (e) {}
   localStorage.removeItem('ienomics_role');
   localStorage.removeItem('ienomics_familyCode');

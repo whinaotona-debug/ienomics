@@ -149,6 +149,20 @@ service cloud.firestore {
       allow delete: if isMember(resource.data.familyCode);
     }
 
+    // ---- 通知の宛先（端末ごとの1件） ----
+    // 通知を送るのは Cloud Functions（Admin SDK）で、ルールの対象外。
+    // 端末側は自分の分を書き込むだけ。他人の宛先は読めない。
+    match /pushTokens/{deviceId} {
+      allow get: if canReadDoc();
+      allow list: if false;
+      allow create: if canCreateDoc()
+                    && request.resource.data.token is string
+                    && request.resource.data.role in ['parent', 'child'];
+      allow update: if canModifyDoc()
+                    && request.resource.data.token is string;
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
     // 上で明示していないものはすべて拒否
     match /{document=**} {
       allow read, write: if false;

@@ -33,9 +33,76 @@
 
 - 残高が変わると数字がスロットのように回るアニメーション
 - お手伝いスタンプカードと連続達成日数
-- 期限1時間前のプッシュ通知、発注・完了・承認の相互通知
+- **プッシュ通知**：アプリを閉じていても、新しい仕事・見積り・完了報告・ギフト・換金申請・期限1時間前が通知センターに届く
 - フリガナ（ルビ）表示の切り替え
 - **使い方ガイド**：設定から起動すると、ホーム画面の機能を1つずつスポットライトで案内する
+
+---
+
+## プッシュ通知の仕組みと設定
+
+### なぜサーバーが必要か
+
+ブラウザの `new Notification()` は、ページが開いている間しか動きません。アプリを閉じるとJavaScriptが止まるので、通知を作る人がいなくなります。
+
+そこで **Firebase Cloud Messaging（FCM）** を使い、Firestore の変化を **Cloud Functions** が見張って、サーバー側から通知を送るようにしました。受け取り役はブラウザが裏で動かすサービスワーカー（`firebase-messaging-sw.js`）なので、スマホがスリープ中でも通知センターに届きます。
+
+端末は `pushTokens` コレクションに自分の宛先（トークン・同期ID・役割）を登録します。Cloud Functions は「この家族の子供の端末ぜんぶ」を検索して送ります。無効になった宛先は自動で削除されます。
+
+### 設定手順
+
+**1. 匿名ログインを有効にする**
+
+Firebaseコンソール → Authentication → Sign-in method → 「匿名」を有効化。
+
+**2. ウェブプッシュ証明書を作り、鍵を貼る**
+
+Firebaseコンソール → プロジェクトの設定 → Cloud Messaging → 「ウェブプッシュ証明書」→ 鍵ペアを生成。
+
+表示された文字列を `push.js` の `VAPID_KEY` に貼ります。
+
+```js
+const VAPID_KEY = 'BB....(生成された鍵)';
+```
+
+**3. Cloud Functions をデプロイする**
+
+Node.js（20以上）と Firebase CLI が必要です。
+
+```bash
+npm install -g firebase-tools
+firebase login
+
+cd functions
+npm install
+cd ..
+
+firebase deploy --only functions
+```
+
+**4. セキュリティルールをデプロイする**
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+**5. アプリ側で通知をオンにする**
+
+アプリの設定画面にある「通知を受け取る」をタップします。**iPhone / iPad では、Safari の共有ボタンから「ホーム画面に追加」して、そのアイコンから開いた場合のみ通知が使えます**（iOS 16.4 以降）。ブラウザのタブから開いている状態では許可が取れません。
+
+### 動作確認
+
+Cloud Functions のログで送信結果が見られます。
+
+```bash
+firebase functions:log
+```
+
+`[notify] 成功1 / 失敗0` のように出れば届いています。`[notify] 宛先なし` の場合は、その端末で「通知を受け取る」をまだ押していません。
+
+### 設定が済んでいないときの動き
+
+VAPIDキーが未設定、または通知が許可されていない場合は、これまでどおり**アプリを開いている間だけの通知**に自動で切り替わります（`app.js` の `localNotify`）。サーバー通知が有効になったときは、同じ内容が2回出ないよう端末側の通知は止まります。
 
 ---
 
@@ -65,6 +132,7 @@
 | グラフ | Chart.js |
 | 認証 | Firebase Authentication（親はメール＋パスワード、子どもは匿名認証） |
 | データベース | Cloud Firestore |
+| 通知 | Firebase Cloud Messaging ＋ Cloud Functions（アプリを閉じていても届く） |
 | オフライン対応 | Service Worker（PWA） |
 
 フレームワークもビルドツールも使わず、ブラウザがそのまま解釈できるコードだけで作っています。ファイルを置けば動くため、仕組みを最初から最後まで自分で追いかけられることを重視しました。
@@ -72,18 +140,21 @@
 ### ファイル構成
 
 ```
-index.html          画面の土台と読み込み
-app.js              アプリの中心。Firebase との通信、各操作の処理
-ui.js               画面の描画。state を見てHTMLを組み立てる
-state.js            アプリ全体の状態をまとめて持つ
-utils.js            アイコン、ルビ、株価計算などの部品
-dialog.js           alert/confirm/prompt の代わりになるダイアログ
-tutorial.js         使い方ガイド（スポットライト案内）
-firebase.js         Firebase の初期化
-style.css           見た目の調整
-sw.js               Service Worker（オフライン対応）
-manifest.json       PWA の設定
-firestore.rules     Firestore のセキュリティルール
+index.html                画面の土台と読み込み
+app.js                    アプリの中心。Firebase との通信、各操作の処理
+ui.js                     画面の描画。state を見てHTMLを組み立てる
+state.js                  アプリ全体の状態をまとめて持つ
+utils.js                  アイコン、ルビ、株価計算などの部品
+dialog.js                 alert/confirm/prompt の代わりになるダイアログ
+tutorial.js               使い方ガイド（スポットライト案内）
+push.js                   プッシュ通知の受け取り準備
+firebase.js               Firebase の初期化
+style.css                 見た目の調整
+sw.js                     Service Worker（オフライン対応）
+firebase-messaging-sw.js  通知をバックグラウンドで受け取る
+manifest.json             PWA の設定
+firestore.rules           Firestore のセキュリティルール
+functions/index.js        通知を送るサーバー処理（Cloud Functions）
 ```
 
 ---
@@ -136,9 +207,9 @@ npx serve .
 
 ### 開発中の注意
 
-各ファイルの読み込みには `?v=128` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、`state.js` が二重に読み込まれて状態が共有されなくなります。
+各ファイルの読み込みには `?v=129` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
 
-対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js` の冒頭にある import 文です。
+対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js`、`push.js` の冒頭にある import 文と、`sw.js` の `VERSION` です。`firebase.js` の import にも番号が必要です（ここを忘れると `firebaseApp` が見つからないというエラーになります）。
 
 ---
 

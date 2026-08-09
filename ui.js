@@ -1,7 +1,7 @@
-import { state } from './state.js?v=128';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=128';
-import { refreshTutorial } from './tutorial.js?v=128';
-import { auth } from './firebase.js';
+import { state } from './state.js?v=129';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=129';
+import { refreshTutorial } from './tutorial.js?v=129';
+import { auth } from './firebase.js?v=129';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -897,6 +897,27 @@ function renderPaymentEdit() {
 }
 function renderSettings() {
   const isChild = state.role === 'child';
+  const permission = ('Notification' in window) ? Notification.permission : 'unsupported';
+  const pushOn = permission === 'granted';
+
+  const pushRow = `
+    <button onclick="enablePushNotifications()" class="ie-guide-btn w-full mb-4" ${pushOn ? 'aria-disabled="true"' : ''}
+            aria-label="通知を受け取る設定">
+      <span class="ie-guide-icon ${pushOn ? 'text-[#2f8f82]' : 'text-[#c47a20]'}">${getIcon('bell')}</span>
+      <span class="ie-guide-text">
+        <span class="ie-guide-title">${rb('通知','つうち')}を${rb('受け取る','うけとる')}</span>
+        <span class="ie-guide-sub">
+          ${pushOn
+            ? 'オンになっています。アプリを閉じていても届きます'
+            : (permission === 'denied'
+                ? 'ブロック中です。端末の設定から許可してください'
+                : 'タップして許可すると、閉じていても届きます')}
+        </span>
+      </span>
+      <span class="ie-push-state ${pushOn ? 'on' : ''}">${pushOn ? 'オン' : 'オフ'}</span>
+    </button>
+  `;
+
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-slate-500">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}
@@ -906,6 +927,8 @@ function renderSettings() {
       <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-widest">同期ID</p>
       <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
     </div>
+
+    ${pushRow}
 
     <button onclick="startAppTutorial()" class="ie-guide-btn w-full mb-4" aria-label="使い方ガイドを最初から見る">
       <span class="ie-guide-icon">${getIcon('help')}</span>

@@ -2,7 +2,7 @@
 // 電波が弱い場所でもアプリが開けるように、画面を作るファイルを手元に置いておく。
 // Firestore への読み書きはキャッシュせず、必ずネットワークに任せる。
 
-const VERSION = 'v128';
+const VERSION = 'v129';
 const SHELL_CACHE = `ienomics-shell-${VERSION}`;
 const RUNTIME_CACHE = `ienomics-runtime-${VERSION}`;
 
@@ -16,6 +16,7 @@ const SHELL_ASSETS = [
   './utils.js',
   './dialog.js',
   './tutorial.js',
+  './push.js',
   './firebase.js',
   './manifest.json',
   './logo.png'
@@ -64,6 +65,8 @@ self.addEventListener('fetch', (event) => {
   }
   if (!/^https?:$/.test(url.protocol)) return;
   if (NEVER_CACHE_HOSTS.some(host => url.hostname.endsWith(host))) return;
+  // 通知用サービスワーカーは常に最新を取りに行かせる
+  if (url.pathname.endsWith('/firebase-messaging-sw.js')) return;
 
   const sameOrigin = url.origin === self.location.origin;
 

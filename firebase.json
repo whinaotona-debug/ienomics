@@ -3,14 +3,21 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "hosting": {
     "public": ".",
     "ignore": [
       "firebase.json",
       "firestore.rules",
       "firestore.indexes.json",
+      "functions/**",
       "**/.*",
       "**/node_modules/**",
+      "package.json",
+      "package-lock.json",
       "README.md"
     ],
     "headers": [

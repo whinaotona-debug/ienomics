@@ -1,0 +1,15 @@
+{
+  "name": "ienomics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "イエノミクス - 家族のおてつだい経済アプリ",
+  "scripts": {
+    "deploy:rules": "firebase deploy --only firestore:rules",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy": "firebase deploy --only firestore:rules,functions",
+    "login": "firebase login"
+  },
+  "devDependencies": {
+    "firebase-tools": "^14.0.0"
+  }
+}

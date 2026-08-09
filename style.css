@@ -577,6 +577,23 @@ textarea:focus-visible,
 .ie-guide-sub { font-size: 11px; font-weight: 700; color: var(--ie-muted); line-height: 1.45; }
 .ie-guide-arrow { flex: none; font-size: 20px; font-weight: 800; color: var(--ie-accent); }
 
+/* 通知のオン・オフ表示 */
+.ie-push-state {
+  flex: none;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f1f6f4;
+  color: var(--ie-muted);
+  border: 1px solid var(--ie-line-soft);
+}
+.ie-push-state.on {
+  background: var(--ie-accent-soft);
+  color: var(--ie-accent-deep);
+  border-color: #bfe4dd;
+}
+
 /* ===== ダイアログ（alert / confirm / prompt の置き換え） ===== */
 #ie-dialog-root:empty,
 #ie-busy-root:empty { display: none; }
