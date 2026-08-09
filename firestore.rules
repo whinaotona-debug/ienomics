@@ -1,0 +1,157 @@
+rules_version = '2';
+
+// イエノミクスのセキュリティルール
+//
+// 考え方:
+//   families/{同期ID} が「ひとつの家族の口座」で、すべてのデータはこの同期IDにひもづく。
+//   親はメール＋パスワードでログインし、その家族の parentUid になる。
+//   子供は匿名ログインし、同期IDを入力したときに childUids へ自分の uid を登録する。
+//   自分がメンバーである家族のデータしか読み書きできない。
+//
+// デプロイ:
+//   firebase deploy --only firestore:rules
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function familyData(code) {
+      return get(/databases/$(database)/documents/families/$(code)).data;
+    }
+
+    function familyExists(code) {
+      return exists(/databases/$(database)/documents/families/$(code));
+    }
+
+    // 親本人か、その家族に登録済みの子供端末か
+    function isMemberOf(fam) {
+      return signedIn() && (
+        fam.parentUid == request.auth.uid ||
+        (fam.keys().hasAny(['childUids']) && fam.childUids is list && request.auth.uid in fam.childUids)
+      );
+    }
+
+    function isMember(code) {
+      return code is string && familyExists(code) && isMemberOf(familyData(code));
+    }
+
+    // 子供が同期IDを入力して自分を登録するときだけ許す更新
+    function isJoiningAsChild() {
+      return signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['childUids', 'childLinked'])
+        && request.resource.data.childUids is list
+        && request.auth.uid in request.resource.data.childUids
+        // 既存メンバーを消したり他人を追加したりはできない
+        && request.resource.data.childUids.removeAll(
+             (resource.data.keys().hasAny(['childUids']) ? resource.data.childUids : [])
+           ).hasOnly([request.auth.uid]);
+    }
+
+    // ---- 利用者プロフィール ----
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---- 家族（口座）----
+    match /families/{code} {
+      // 同期IDを知っている人だけが1件取得できる。一覧での総なめは禁止。
+      allow get: if signedIn();
+      allow list: if signedIn() && resource.data.parentUid == request.auth.uid;
+
+      // 口座を作れるのは、自分を親として登録する本人のみ
+      allow create: if signedIn()
+                    && request.resource.data.parentUid == request.auth.uid
+                    && request.resource.data.points == 0;
+
+      allow update: if isMemberOf(resource.data) || isJoiningAsChild();
+
+      // 口座の削除は親だけ
+      allow delete: if signedIn() && resource.data.parentUid == request.auth.uid;
+    }
+
+    // ---- 同期IDにひもづく共有データ ----
+    // クエリは必ず where("familyCode","==",…) で絞るため、1件ずつ判定できる。
+    function canReadDoc() {
+      return isMember(resource.data.familyCode);
+    }
+    function canCreateDoc() {
+      return isMember(request.resource.data.familyCode);
+    }
+    function canModifyDoc() {
+      // familyCode の付け替えで他人の家族に移すのを防ぐ
+      return isMember(resource.data.familyCode)
+             && request.resource.data.familyCode == resource.data.familyCode;
+    }
+
+    match /tasks/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /taskTemplates/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /tickets/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /exchanges/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /investments/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /banks/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /balloons/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /scheduledPayments/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    match /paymentLogs/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
+    // 上で明示していないものはすべて拒否
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

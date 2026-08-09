@@ -1,12 +1,83 @@
-import { state } from './state.js?v=118';
-import { render } from './ui.js?v=127';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=124';
+import { state } from './state.js?v=128';
+import { render } from './ui.js?v=128';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=128';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=128';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=128';
 import { db, auth } from './firebase.js'; 
-import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
-import { signInWithEmailAndPassword, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
 let unsubscribes = [];
+
+/**
+ * 同じ処理が同時に走らないようにする。
+ * 二重タップでポイントが二重に増減するのを防ぐ。
+ */
+const runningActions = new Set();
+async function guard(key, fn, { busy = true, busyLabel = '通信中...' } = {}) {
+  if (runningActions.has(key)) return;
+  runningActions.add(key);
+  if (busy) setBusy(true, busyLabel);
+  try {
+    return await fn();
+  } catch (error) {
+    console.error(`[${key}]`, error);
+    await showAlert(friendlyError(error), { title: 'うまくいきませんでした' });
+  } finally {
+    runningActions.delete(key);
+    if (busy) setBusy(false);
+  }
+}
+
+/** Firebase のエラーコードを、家族が読んで分かる文にする */
+function friendlyError(error) {
+  const code = error?.code || '';
+  if (code === 'permission-denied') {
+    return 'このデータを操作する権限がありません。同期IDやログイン状態を確認してください。';
+  }
+  if (code === 'unavailable' || code === 'auth/network-request-failed') {
+    return 'ネットワークにつながりませんでした。通信状況を確認してもう一度お試しください。';
+  }
+  if (code === 'auth/too-many-requests') {
+    return '試行回数が多すぎます。しばらく待ってからお試しください。';
+  }
+  return error?.message || '不明なエラーが発生しました。';
+}
+
+/** 紛らわしい文字（0/O、1/I/L）を避けた6文字の同期IDを、重複しないように作る */
+async function generateFamilyCode() {
+  const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const buf = new Uint32Array(6);
+    crypto.getRandomValues(buf);
+    let code = '';
+    for (let i = 0; i < 6; i++) code += CHARS[buf[i] % CHARS.length];
+    const snap = await getDoc(doc(db, "families", code));
+    if (!snap.exists()) return code;
+  }
+  throw new Error('同期IDを作れませんでした。もう一度お試しください。');
+}
+
+/** 子供端末は匿名アカウントでログインする（Firestoreのルールで守るため） */
+async function ensureAnonymousAuth() {
+  if (auth.currentUser) return auth.currentUser;
+  const cred = await signInAnonymously(auth);
+  return cred.user;
+}
+
+/** この端末を、その家族のメンバーとして登録する */
+async function claimChildMembership(code) {
+  const user = await ensureAnonymousAuth();
+  try {
+    await updateDoc(doc(db, "families", code), {
+      childUids: arrayUnion(user.uid),
+      childLinked: true
+    });
+  } catch (error) {
+    console.warn("メンバー登録に失敗:", error);
+  }
+}
 
 // ★ 追加：今日追加したテンプレートのIDを記憶しておく箱（セッション中の一時記憶）
 let generatedToday = {};
@@ -254,7 +325,7 @@ window.onload = async () => {
       render();
       return;
     } catch (error) {
-      alert("パスワード再設定リンクが無効、または期限切れです。もう一度お試しください。");
+      await showAlert("パスワード再設定リンクが無効、または期限切れです。もう一度お試しください。", { title: 'リンクが使えません' });
       window.history.replaceState(null, null, window.location.pathname);
       state.setupMode = 'parent_forgot';
       render();
@@ -265,10 +336,13 @@ window.onload = async () => {
   if (isSignInWithEmailLink(auth, window.location.href)) {
     let email = window.localStorage.getItem('emailForSignIn');
     if (!email) {
-      email = window.prompt("セキュリティ確認のため、登録したメールアドレスをもう一度入力してください。");
+      email = await showPrompt("セキュリティ確認のため、登録したメールアドレスをもう一度入力してください。", {
+        title: 'メールアドレスの確認',
+        placeholder: 'you@example.com'
+      });
     }
     if (!email) {
-      alert("認証がキャンセルされました。");
+      await showAlert("認証がキャンセルされました。");
       render(); return;
     }
     try {
@@ -287,16 +361,30 @@ window.onload = async () => {
         window.history.replaceState(null, null, window.location.pathname);
         await runMigrationAndLoadChildren(uid);
       }
-    } catch (error) { alert("エラー: " + error.message); render(); }
+    } catch (error) { await showAlert(friendlyError(error), { title: 'ログインできませんでした' }); render(); }
   } else {
     auth.onAuthStateChanged(async (user) => {
       if (state.role === 'parent') {
-        if (user) { await runMigrationAndLoadChildren(user.uid); } 
+        if (user && !user.isAnonymous) { await runMigrationAndLoadChildren(user.uid); } 
         else {
           localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
           state.role = null; state.familyCode = null; render();
         }
-      } else if (state.role === 'child' && state.familyCode) { setupListeners(); } 
+      } else if (state.role === 'child' && state.familyCode) {
+        // 子供端末は匿名ログインしてからデータを読む
+        if (!user) {
+          try {
+            await ensureAnonymousAuth();
+          } catch (error) {
+            console.error("匿名ログイン失敗:", error);
+            await showAlert(friendlyError(error), { title: '接続できませんでした' });
+            render();
+          }
+          return; // ログイン成功時はこのリスナーがもう一度呼ばれる
+        }
+        await claimChildMembership(state.familyCode);
+        setupListeners();
+      } 
       else { render(); }
     });
   }
@@ -582,13 +670,20 @@ window.reloadApp = () => {
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };
 
-window.openTemplateEdit = (templateId) => {
+window.openTemplateEdit = async (templateId) => {
   if (state.role !== 'parent') return;
   const temp = state.taskTemplates.find(t => t.id === templateId);
-  if (!temp) return alert("この定期設定は見つかりません（すでに削除された可能性があります）");
+  if (!temp) return showAlert("この定期設定は見つかりません（すでに削除された可能性があります）");
   state.editingTemplateId = templateId;
   state.view = 'templateEdit';
   render();
+};
+
+/** 設定から使い方ガイドを開く。ホームに戻ってから案内を始める。 */
+window.startAppTutorial = () => {
+  state.view = 'home';
+  render();
+  startTutorial(state.role === 'parent' ? 'parent' : 'child');
 };
 
 function readRepeatFormDays() {
@@ -607,11 +702,11 @@ window.updateTemplate = async () => {
   if (!id) return;
   const title = document.getElementById('tmpl-title').value.trim();
   const points = parseInt(document.getElementById('tmpl-points').value);
-  if (!title || !points) return alert("内容と報酬を入力してください");
+  if (!title || !points) return showAlert("内容と報酬を入力してください");
   const { repeatType, days, time } = readRepeatFormDays();
-  if (repeatType === 'weekly' && days.length === 0) return alert("曜日を1つ以上選んでください");
+  if (repeatType === 'weekly' && days.length === 0) return showAlert("曜日を1つ以上選んでください");
 
-  try {
+  await guard(`updateTemplate:${id}`, async () => {
     await updateDoc(doc(db, "taskTemplates", id), {
       title, points, type: repeatType, days, time
     });
@@ -633,24 +728,24 @@ window.updateTemplate = async () => {
 
     state.editingTemplateId = null;
     setView('templates');
-    alert("定期発注を更新しました");
-  } catch (error) {
-    alert("更新できませんでした: " + error.message);
-  }
+    showToast("定期発注を更新しました");
+  }, { busyLabel: '更新しています...' });
 };
 
 window.deleteTemplate = async () => {
   const id = state.editingTemplateId;
   if (!id) return;
-  if (!confirm("この定期発注を削除しますか？\n今後は自動で追加されなくなります。\n（今日すでに出ている仕事は残ります）")) return;
-  try {
+  const ok = await showConfirm(
+    "今後は自動で追加されなくなります。\n（今日すでに出ている仕事は残ります）",
+    { title: 'この定期発注を削除しますか？', okLabel: '削除する', tone: 'danger' }
+  );
+  if (!ok) return;
+  await guard(`deleteTemplate:${id}`, async () => {
     await deleteDoc(doc(db, "taskTemplates", id));
     state.editingTemplateId = null;
     setView('templates');
-    alert("定期発注を削除しました");
-  } catch (error) {
-    alert("削除できませんでした: " + error.message);
-  }
+    showToast("定期発注を削除しました");
+  }, { busyLabel: '削除しています...' });
 };
 
 // ★ 修正：切り替えた時に「作ったよスタンプ」をリセットする
@@ -664,66 +759,103 @@ window.switchActiveChild = (code) => {
 window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.setItem('ienomics_furigana', state.furigana); applyFuriganaState(); render(); };
 
 window.addTask = async () => { 
-  const t = document.getElementById('task-title').value;
+  const t = document.getElementById('task-title').value.trim();
   const p = parseInt(document.getElementById('task-points').value);
   const isRepeat = document.getElementById('task-repeat-toggle').checked;
 
-  if (t && p) { 
+  if (!t) return showAlert("仕事の内容を入力してください");
+  if (!p || p <= 0) return showAlert("報酬は1pt以上で入力してください");
+
+  const repeatType = window.repeatType || 'weekly';
+  let days = [];
+  if (isRepeat) {
+    if (repeatType === 'weekly') {
+      document.querySelectorAll('input[name="repeat-weeks"]:checked').forEach(cb => days.push(parseInt(cb.value)));
+      if (days.length === 0) return showAlert("繰り返す曜日を1つ以上選んでください");
+    } else {
+      days.push(parseInt(document.getElementById('repeat-day-select').value));
+    }
+  }
+
+  await guard('addTask', async () => {
     if (isRepeat) {
-      const repeatType = window.repeatType || 'weekly';
-      let days = [];
-      if (repeatType === 'weekly') {
-        const checked = document.querySelectorAll('input[name="repeat-weeks"]:checked');
-        checked.forEach(cb => days.push(parseInt(cb.value)));
-      } else {
-        days.push(parseInt(document.getElementById('repeat-day-select').value));
-      }
-      const time = document.getElementById('repeat-time').value;
+      const time = document.getElementById('repeat-time').value || '19:00';
 
       await addDoc(collection(db, "taskTemplates"), {
         familyCode: state.familyCode, title: t, points: p, type: repeatType, days: days, time: time, createdAt: Date.now()
       });
-      alert("繰り返し発注として保存しました！該当する日の0時に自動追加されます。");
+      setView('home');
+      showToast("定期発注として保存しました");
     } else {
       const d = document.getElementById('task-deadline').value; 
       await addDoc(collection(db, "tasks"), { 
         familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() 
       }); 
+      setView('home');
+      showToast("お仕事を発注しました");
     }
-    setView('home'); 
-  } 
+  }, { busyLabel: '発注しています...' });
 };
 
-window.completeTask = async (id) => { 
+window.completeTask = async (id) => guard(`completeTask:${id}`, async () => {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
-  let isExpired = false;
-  if (task.deadline && Date.now() > task.deadline) {
-    isExpired = true; 
-  }
+  const isExpired = Boolean(task.deadline && Date.now() > task.deadline);
   await updateDoc(doc(db, "tasks", id), { 
     status: 'completed', 
     completedAt: Date.now(),
-    isExpired: isExpired 
+    isExpired
   }); 
+  showToast("完了を報告しました");
+}, { busyLabel: '送信しています...' });
+
+/**
+ * 承認とポイント付与を1つのトランザクションで行う。
+ * 途中で失敗しても「承認だけ済んでポイントが増えない」状態にならない。
+ */
+window.approveTask = async (id, p) => guard(`approveTask:${id}`, async () => {
+  const taskRef = doc(db, "tasks", id);
+  const famRef = doc(db, "families", state.familyCode);
+  const amount = Number(p) || 0;
+  let granted = 0;
+
+  await runTransaction(db, async (tx) => {
+    const taskSnap = await tx.get(taskRef);
+    if (!taskSnap.exists()) throw new Error('この仕事は見つかりませんでした');
+    if (taskSnap.data().status === 'approved') return; // 二重付与を防ぐ
+
+    const famSnap = await tx.get(famRef);
+    if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+
+    tx.update(taskRef, { status: 'approved', approvedAt: Date.now() });
+    if (amount > 0) {
+      tx.update(famRef, { points: (famSnap.data().points || 0) + amount });
+      granted = amount;
+    }
+  });
+
+  if (granted > 0) showToast(`${granted}pt を付与しました`);
+}, { busyLabel: '付与しています...' });
+
+window.rejectTask = async (id) => {
+  const ok = await showConfirm("お断りすると、この仕事は受注されません。", { title: 'このお仕事をお断りしますか？', okLabel: 'お断りする' });
+  if (!ok) return;
+  await guard(`rejectTask:${id}`, () => updateDoc(doc(db, "tasks", id), { status: 'rejected' }));
 };
 
-window.approveTask = async (id, p) => { 
-  await updateDoc(doc(db, "tasks", id), { status: 'approved', approvedAt: Date.now() }); 
-  if (p > 0) {
-    await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) }); 
-  }
+window.returnTask = async (id) => {
+  const ok = await showConfirm("もう一度やってもらうよう、子供に差し戻します。", { title: 'やり直しを指示しますか？', okLabel: '差し戻す' });
+  if (!ok) return;
+  await guard(`returnTask:${id}`, () => updateDoc(doc(db, "tasks", id), { status: 'accepted', statusBefore: 'completed' }));
 };
-
-window.rejectTask = async (id) => { if (confirm("このお仕事をお断り（拒否）しますか？")) { await updateDoc(doc(db, "tasks", id), { status: 'rejected' }); } };
-window.returnTask = async (id) => { if (confirm("やり直し（差し戻し）を指示しますか？")) { await updateDoc(doc(db, "tasks", id), { status: 'accepted', statusBefore: 'completed' }); } };
 window.saveNewPassword = async () => {
   const pass = document.getElementById('new-password').value;
   const passConf = document.getElementById('new-password-confirm').value;
-  if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
-  if (pass !== passConf) return alert("パスワードが一致しません！");
+  if (pass.length < 6) return showAlert("パスワードは6文字以上にしてください。");
+  if (pass !== passConf) return showAlert("パスワードが一致しません！");
 
-  const childName = prompt("管理するお子様の名前を入力してください") || "こども";
+  const entered = await showPrompt("管理するお子様の名前を入力してください", { title: 'お子様の登録', placeholder: '例: はなこ' });
+  const childName = (entered || '').trim() || "こども";
 
   state.isSending = true;
   state.setupLoadingMessage = 'アカウントを準備しています...';
@@ -735,8 +867,10 @@ window.saveNewPassword = async () => {
     state.setupLoadingMessage = 'お子様の口座を作成しています...';
     render();
     await setDoc(doc(db, "users", user.uid), { role: 'parent' });
-    await setDoc(doc(db, "families", Math.random().toString(36).substring(2, 8).toUpperCase()), {
+    const code = await generateFamilyCode();
+    await setDoc(doc(db, "families", code), {
       parentUid: user.uid,
+      childUids: [],
       childName: childName,
       points: 0,
       childLinked: false,
@@ -747,20 +881,24 @@ window.saveNewPassword = async () => {
     state.setupLoadingMessage = '';
     state.role = 'parent';
     state.view = 'home';
-    alert("設定完了！イエノミクスを開始します。");
+    await showAlert(`同期IDは【 ${code} 】です。\nお子様の端末でこのIDを入力すると連携できます。`, { title: '設定が完了しました' });
     runMigrationAndLoadChildren(user.uid);
   } catch (error) {
     state.isSending = false;
     state.setupLoadingMessage = '';
     render();
-    alert("エラー: " + error.message);
+    await showAlert(friendlyError(error), { title: '設定できませんでした' });
   }
 };
+
 window.proposeTask = async () => {
-  const t = document.getElementById('prop-title').value;
+  const t = document.getElementById('prop-title').value.trim();
   const p = parseInt(document.getElementById('prop-points').value);
   const d = document.getElementById('prop-deadline').value;
-  if (t && p) {
+  if (!t) return showAlert("やりたいことを入力してください");
+  if (!p || p <= 0) return showAlert("ほしいポイントを1以上で入力してください");
+
+  await guard('proposeTask', async () => {
     await addDoc(collection(db, "tasks"), {
       familyCode: state.familyCode,
       title: t,
@@ -770,56 +908,180 @@ window.proposeTask = async () => {
       createdAt: Date.now()
     });
     setView('home');
-  }
+    showToast("見積りを送りました");
+  }, { busyLabel: '送信しています...' });
 };
-window.approveProposal = async (id) => updateDoc(doc(db, "tasks", id), { status: 'open' });
+
+window.approveProposal = async (id) => guard(`approveProposal:${id}`, async () => {
+  await updateDoc(doc(db, "tasks", id), { status: 'open' });
+  showToast("見積りを承認しました");
+});
+
 window.rejectProposal = async (id) => {
-  if (!confirm("この見積りを却下しますか？")) return;
-  await updateDoc(doc(db, "tasks", id), { status: 'proposal_rejected', rejectedAt: Date.now() });
+  const ok = await showConfirm("却下すると、この見積りは仕事になりません。", { title: 'この見積りを却下しますか？', okLabel: '却下する' });
+  if (!ok) return;
+  await guard(`rejectProposal:${id}`, () => updateDoc(doc(db, "tasks", id), { status: 'proposal_rejected', rejectedAt: Date.now() }));
 };
-window.acceptTask = async (id) => updateDoc(doc(db, "tasks", id), { status: 'accepted' });
-window.addTicket2 = async () => { const t = document.getElementById('t-title').value, p = parseInt(document.getElementById('t-pts').value); if(t&&p) await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title: t, price: p, status: 'available', createdAt: Date.now() }); };
-window.buyTicket = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "tickets", id), { status: 'bought' }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); };
-window.useTicket = async (id) => updateDoc(doc(db, "tickets", id), { status: 'used' });
-window.sellCustom = async (id, v) => { if(confirm(`今の価値【${v}pt】で売却して、ポイントに戻しますか？`)) { await updateDoc(doc(db, "families", state.familyCode), { points: increment(v) }); await deleteDoc(doc(db, "investments", id)); setView('invest'); } };
+
+window.acceptTask = async (id) => guard(`acceptTask:${id}`, async () => {
+  await updateDoc(doc(db, "tasks", id), { status: 'accepted' });
+  showToast("受注しました");
+});
+
+window.addTicket2 = async () => {
+  const t = document.getElementById('t-title').value.trim();
+  const p = parseInt(document.getElementById('t-pts').value);
+  if (!t) return showAlert("チケットの品名を入力してください");
+  if (!p || p <= 0) return showAlert("必要なポイントを1以上で入力してください");
+  await guard('addTicket', async () => {
+    await addDoc(collection(db, "tickets"), { familyCode: state.familyCode, title: t, price: p, status: 'available', createdAt: Date.now() });
+    document.getElementById('t-title').value = '';
+    document.getElementById('t-pts').value = '';
+    showToast("チケットを追加しました");
+  }, { busyLabel: '追加しています...' });
+};
+
+window.buyTicket = async (id, p) => {
+  const price = Number(p) || 0;
+  if (state.points < price) return showAlert(`ポイントが足りません（所持: ${state.points}pt / 必要: ${price}pt）`);
+  const ok = await showConfirm(`${price}pt を使って購入します。`, { title: 'このチケットを買いますか？', okLabel: '購入する' });
+  if (!ok) return;
+
+  await guard(`buyTicket:${id}`, async () => {
+    const ticketRef = doc(db, "tickets", id);
+    const famRef = doc(db, "families", state.familyCode);
+    await runTransaction(db, async (tx) => {
+      const tSnap = await tx.get(ticketRef);
+      if (!tSnap.exists() || tSnap.data().status !== 'available') throw new Error('このチケットはすでに購入されています');
+      const famSnap = await tx.get(famRef);
+      const pts = famSnap.data().points || 0;
+      if (pts < price) throw new Error('ポイントが足りません');
+      tx.update(ticketRef, { status: 'bought', boughtAt: Date.now() });
+      tx.update(famRef, { points: pts - price });
+    });
+    showToast("チケットを買いました");
+  }, { busyLabel: '購入しています...' });
+};
+
+window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
+  await updateDoc(doc(db, "tickets", id), { status: 'used', usedAt: Date.now() });
+  showToast("使用済みにしました");
+});
+
+window.sellCustom = async (id, v) => {
+  const value = Number(v) || 0;
+  const ok = await showConfirm(`今の価値は ${value}pt です。売ってポイントに戻します。`, { title: '売却しますか？', okLabel: '売却する' });
+  if (!ok) return;
+  await guard(`sellCustom:${id}`, async () => {
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(value) });
+    await deleteDoc(doc(db, "investments", id));
+    setView('invest');
+    showToast(`${value}pt になりました`);
+  }, { busyLabel: '売却しています...' });
+};
 
 window.investCustom = async (n) => { 
-  if (state.points < 0) return alert("残高がマイナスのため、株の購入はできません。お手伝いでポイントを取り戻しましょう！");
+  if (state.points < 0) return showAlert("残高がマイナスのため、株の購入はできません。お手伝いでポイントを取り戻しましょう！");
   const valStr = document.getElementById('invest-amount').value;
-  if (!valStr) return alert("投資する金額(pt)を入力してください");
+  if (!valStr) return showAlert("投資する金額(pt)を入力してください");
   const a = parseInt(valStr); 
-  if (isNaN(a) || a <= 0) return alert("正しい金額を入力してください");
-  if (state.points < a) return alert(`ptが不足しています（所持: ${state.points}pt）`); 
-  
-  const cur = getCurrentMarketRates();
-  const r = n === 'japan' ? cur.日本 : cur.アメリカ; 
-  const dbName = n === 'japan' ? '日本' : 'アメリカ'; 
-  
-  await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
-  const ex = state.investments.find(i => i.name === dbName); 
-  if (ex) { 
-    await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); 
-  } else { 
-    await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: dbName, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
-  } 
-  setView('invest'); 
+  if (isNaN(a) || a <= 0) return showAlert("正しい金額を入力してください");
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`); 
+
+  await guard(`invest:${n}`, async () => {
+    const cur = getCurrentMarketRates();
+    const r = n === 'japan' ? cur.日本 : cur.アメリカ; 
+    const dbName = n === 'japan' ? '日本' : 'アメリカ'; 
+
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
+    const ex = state.investments.find(i => i.name === dbName); 
+    if (ex) { 
+      await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); 
+    } else { 
+      await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: dbName, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
+    } 
+    setView('invest'); 
+    showToast(`${dbName}株を ${a}pt 買いました`);
+  }, { busyLabel: '購入しています...' });
 };
 
 window.requestExchange = async () => {
-  if (state.points < 0) return alert("残高がマイナスのため、換金申請はできません。お手伝いでポイントを取り戻しましょう！");
+  if (state.points < 0) return showAlert("残高がマイナスのため、換金申請はできません。お手伝いでポイントを取り戻しましょう！");
   const a = parseInt(document.getElementById('exchange-amount').value);
-  if (!a || state.points < a) return alert("pt不足");
-  await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() });
-  setView('home');
+  if (!a || a <= 0) return showAlert("換金したいポイントを入力してください");
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`);
+  await guard('requestExchange', async () => {
+    await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() });
+    setView('home');
+    showToast("換金を申請しました");
+  }, { busyLabel: '申請しています...' });
 };
-window.approveExchange = async (id, p) => { if (state.points < p) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-p) }); await updateDoc(doc(db, "exchanges", id), { status: 'approved' }); };
-window.rejectExchange = async (id) => updateDoc(doc(db, "exchanges", id), { status: 'rejected' });
-window.depositBank = async () => { const a = parseInt(document.getElementById('bank-amount').value); if (!a || state.points < a) return alert("pt不足"); await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() }); setView('bank'); };
-window.withdrawBank = async () => { let t = 0; state.banks.forEach(b => { const m = (Date.now() - b.createdAt) / (1000*60*60*24*30); t += b.amount + Math.floor(b.amount * (0.001 * m)); deleteDoc(doc(db, "banks", b.id)); }); await updateDoc(doc(db, "families", state.familyCode), { points: increment(t) }); setView('home'); alert(`${t}pt 引き出しました`); };
+
+window.approveExchange = async (id, p) => {
+  const amount = Number(p) || 0;
+  if (state.points < amount) return showAlert(`ポイントが足りません（残高: ${state.points}pt）`);
+  const ok = await showConfirm(`${amount}pt を引いて、${amount}円をお子さまに渡します。`, { title: 'この換金を承認しますか？', okLabel: '承認する' });
+  if (!ok) return;
+
+  await guard(`approveExchange:${id}`, async () => {
+    const exRef = doc(db, "exchanges", id);
+    const famRef = doc(db, "families", state.familyCode);
+    await runTransaction(db, async (tx) => {
+      const exSnap = await tx.get(exRef);
+      if (!exSnap.exists() || exSnap.data().status !== 'pending') throw new Error('この申請はすでに処理されています');
+      const famSnap = await tx.get(famRef);
+      const pts = famSnap.data().points || 0;
+      if (pts < amount) throw new Error('ポイントが足りません');
+      tx.update(famRef, { points: pts - amount });
+      tx.update(exRef, { status: 'approved', approvedAt: Date.now() });
+    });
+    showToast("換金を承認しました");
+  }, { busyLabel: '承認しています...' });
+};
+
+window.rejectExchange = async (id) => {
+  const ok = await showConfirm("お子さまに却下として通知されます。", { title: 'この換金申請を却下しますか？', okLabel: '却下する' });
+  if (!ok) return;
+  await guard(`rejectExchange:${id}`, () => updateDoc(doc(db, "exchanges", id), { status: 'rejected' }));
+};
+
+window.depositBank = async () => {
+  const a = parseInt(document.getElementById('bank-amount').value);
+  if (!a || a <= 0) return showAlert("預ける金額を入力してください");
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`);
+  await guard('depositBank', async () => {
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) });
+    await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() });
+    setView('bank');
+    showToast(`${a}pt を預けました`);
+  }, { busyLabel: '預けています...' });
+};
+
+window.withdrawBank = async () => {
+  if (!state.banks.length) return showAlert("預けているポイントがありません");
+  const ok = await showConfirm("預金と利息をまとめてポイントに戻します。", { title: '全額を引き出しますか？', okLabel: '引き出す' });
+  if (!ok) return;
+  await guard('withdrawBank', async () => {
+    let total = 0;
+    const deposits = state.banks.slice();
+    for (const b of deposits) {
+      const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
+      total += b.amount + Math.floor(b.amount * (0.001 * months));
+    }
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(total) });
+    for (const b of deposits) {
+      await deleteDoc(doc(db, "banks", b.id));
+    }
+    setView('home');
+    showToast(`${total}pt 引き出しました`);
+  }, { busyLabel: '引き出しています...' });
+};
+
 window.sendBalloon = async () => {
   const p = parseInt(document.getElementById('balloon-points').value);
-  const m = document.getElementById('balloon-message').value;
-  if (p) {
+  const m = document.getElementById('balloon-message').value.trim();
+  if (!p || p <= 0) return showAlert("贈るポイントを入力してください");
+  await guard('sendBalloon', async () => {
     await addDoc(collection(db, "balloons"), {
       familyCode: state.familyCode,
       points: p,
@@ -827,21 +1089,83 @@ window.sendBalloon = async () => {
       status: 'unread',
       createdAt: Date.now()
     });
-    alert('送りました');
     setView('home');
+    showToast("ギフトを送りました");
+  }, { busyLabel: '送っています...' });
+};
+
+/** ギフトを受け取る。メッセージは state から読むので、属性に本文を埋め込まなくてよい。 */
+window.openBalloon = async (id) => {
+  const gift = (state.balloons || []).find(b => b.id === id);
+  if (!gift) return showAlert("このギフトはもう受け取り済みです");
+  const amount = Number(gift.points) || 0;
+
+  const received = await guard(`openBalloon:${id}`, async () => {
+    const giftRef = doc(db, "balloons", id);
+    const famRef = doc(db, "families", state.familyCode);
+    let ok = false;
+    await runTransaction(db, async (tx) => {
+      const gSnap = await tx.get(giftRef);
+      if (!gSnap.exists()) return; // ほかの端末で受け取り済み
+      const famSnap = await tx.get(famRef);
+      tx.update(famRef, { points: (famSnap.data().points || 0) + amount });
+      tx.delete(giftRef);
+      ok = true;
+    });
+    return ok;
+  }, { busyLabel: '受け取っています...' });
+
+  if (received) {
+    const body = gift.message
+      ? `「${gift.message}」\n\nボーナス ${amount}pt を受け取りました！`
+      : `ボーナス ${amount}pt を受け取りました！`;
+    await showAlert(body, { title: 'ギフトが届きました', tone: 'gift' });
   }
 };
-window.openBalloon = async (id, p, m) => {
-  alert(`ギフト到着！\n\n「${m || ''}」\n\nボーナス ${p} pt 獲得！`);
-  await updateDoc(doc(db, "families", state.familyCode), { points: increment(p) });
-  await deleteDoc(doc(db, "balloons", id));
+
+window.addNewChild = async () => {
+  const entered = await showPrompt("追加するお子様の名前を入力してください", { title: 'お子様を追加', placeholder: '例: たろう' });
+  const name = (entered || '').trim();
+  if (!name) return;
+  const user = auth.currentUser;
+  if (!user) return showAlert("ログインしていません。もう一度ログインしてください。");
+
+  const code = await guard('addNewChild', async () => {
+    const newCode = await generateFamilyCode();
+    await setDoc(doc(db, "families", newCode), {
+      parentUid: user.uid,
+      childUids: [],
+      childName: name,
+      points: 0,
+      childLinked: false,
+      createdAt: Date.now()
+    });
+    return newCode;
+  }, { busyLabel: '登録しています...' });
+
+  if (!code) return;
+  await showAlert(`お子様の端末で同期ID【 ${code} 】を入力してください。`, { title: `「${name}」を登録しました` });
+  switchActiveChild(code);
 };
-window.addNewChild = async () => { const name = prompt("追加するお子様の名前を入力してください"); if (!name) return; const user = auth.currentUser; if (!user) return alert("エラー：ログインしていません"); const c = Math.random().toString(36).substring(2, 8).toUpperCase(); try { await setDoc(doc(db, "families", c), { parentUid: user.uid, childName: name, points: 0, childLinked: false, createdAt: Date.now() }); alert(`「${name}」を登録しました！\n子供の端末で同期ID【 ${c} 】を入力してください。`); switchActiveChild(c); } catch (error) { alert("追加エラー: " + error.message); } };
-window.unlinkAccount = async () => { if (confirm("連携を解除（またはログアウト）しますか？")) { try { await signOut(auth); } catch (e) {} localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode'); state.role = null; state.familyCode = null; state.children = []; if (window.unsubChildren) window.unsubChildren(); unsubscribes.forEach(unsub => unsub()); unsubscribes = []; stopDeadlineWatcher(); window.location.reload(); } };
+
+window.unlinkAccount = async () => {
+  const ok = await showConfirm("この端末からデータが見えなくなります。同期IDを入れ直せば元に戻せます。", { title: '連携を解除しますか？', okLabel: '解除する', tone: 'danger' });
+  if (!ok) return;
+  try { await signOut(auth); } catch (e) {}
+  localStorage.removeItem('ienomics_role');
+  localStorage.removeItem('ienomics_familyCode');
+  state.role = null; state.familyCode = null; state.children = [];
+  if (window.unsubChildren) window.unsubChildren();
+  unsubscribes.forEach(unsub => unsub());
+  unsubscribes = [];
+  stopDeadlineWatcher();
+  window.location.reload();
+};
 
 window.deleteTask = async (id) => { 
-  if (!confirm("このお仕事を削除しますか？")) return;
-  try {
+  const ok = await showConfirm("削除すると元に戻せません。", { title: 'このお仕事を削除しますか？', okLabel: '削除する', tone: 'danger' });
+  if (!ok) return;
+  await guard(`deleteTask:${id}`, async () => {
     const task = state.tasks.find(t => t.id === id);
     if (task?.generatedKey) {
       // 繰り返し発注分は論理削除（ドキュメントを残して今日の再発注を防ぐ）
@@ -851,17 +1175,19 @@ window.deleteTask = async (id) => {
       await deleteDoc(doc(db, "tasks", id));
     }
     setView('home');
-  } catch (error) {
-    alert("削除できませんでした: " + error.message);
-  }
+  }, { busyLabel: '削除しています...' });
 };
 
-window.deleteTicket = async (id) => { if (confirm("このチケットを削除しますか？")) { await deleteDoc(doc(db, "tickets", id)); } };
+window.deleteTicket = async (id) => {
+  const ok = await showConfirm("削除すると元に戻せません。", { title: 'このチケットを削除しますか？', okLabel: '削除する', tone: 'danger' });
+  if (!ok) return;
+  await guard(`deleteTicket:${id}`, () => deleteDoc(doc(db, "tickets", id)));
+};
 
-window.openPaymentEdit = (id) => {
+window.openPaymentEdit = async (id) => {
   if (state.role !== 'parent') return;
   const p = state.scheduledPayments.find(x => x.id === id);
-  if (!p) return alert("支払い設定が見つかりません");
+  if (!p) return showAlert("支払い設定が見つかりません");
   state.editingPaymentId = id;
   state.view = 'paymentEdit';
   render();
@@ -891,8 +1217,8 @@ window.addScheduledPayment = async () => {
   if (state.role !== 'parent') return;
   const title = document.getElementById('pay-title')?.value.trim();
   const amount = parseInt(document.getElementById('pay-amount')?.value);
-  if (!title) return alert("支払いの名目を入力してください");
-  if (!amount || amount <= 0) return alert("正しい金額を入力してください");
+  if (!title) return showAlert("支払いの名目を入力してください");
+  if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
 
   const mode = document.querySelector('input[name="pay-mode"]:checked')?.value || 'once';
   const data = {
@@ -907,7 +1233,7 @@ window.addScheduledPayment = async () => {
 
   if (mode === 'once') {
     const due = document.getElementById('pay-due-date')?.value;
-    if (!due) return alert("引落日を選んでください");
+    if (!due) return showAlert("引落日を選んでください");
     const d = new Date(due + 'T00:00:00');
     data.dueDate = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
   } else {
@@ -915,7 +1241,7 @@ window.addScheduledPayment = async () => {
     let days = [];
     if (interval === 'weekly') {
       document.querySelectorAll('input[name="pay-weeks"]:checked').forEach(cb => days.push(parseInt(cb.value)));
-      if (days.length === 0) return alert("曜日を1つ以上選んでください");
+      if (days.length === 0) return showAlert("曜日を1つ以上選んでください");
     } else {
       days.push(parseInt(document.getElementById('pay-day-select').value));
     }
@@ -925,7 +1251,7 @@ window.addScheduledPayment = async () => {
     data.countMode = countMode;
     if (countMode === 'finite') {
       const n = parseInt(document.getElementById('pay-count')?.value);
-      if (!n || n < 1) return alert("回数は1以上にしてください");
+      if (!n || n < 1) return showAlert("回数は1以上にしてください");
       data.totalCount = n;
       data.remainingCount = n;
     } else {
@@ -934,14 +1260,12 @@ window.addScheduledPayment = async () => {
     }
   }
 
-  try {
+  await guard('addScheduledPayment', async () => {
     await addDoc(collection(db, "scheduledPayments"), data);
     setView('payments');
-    alert("支払いを設定しました");
+    showToast("支払いを設定しました");
     processScheduledPayments();
-  } catch (error) {
-    alert("設定できませんでした: " + error.message);
-  }
+  }, { busyLabel: '設定しています...' });
 };
 
 window.updateScheduledPayment = async () => {
@@ -950,41 +1274,84 @@ window.updateScheduledPayment = async () => {
   if (!id) return;
   const title = document.getElementById('pay-edit-title')?.value.trim();
   const amount = parseInt(document.getElementById('pay-edit-amount')?.value);
-  if (!title) return alert("名目を入力してください");
-  if (!amount || amount <= 0) return alert("正しい金額を入力してください");
-  try {
+  if (!title) return showAlert("名目を入力してください");
+  if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
+  await guard(`updatePayment:${id}`, async () => {
     await updateDoc(doc(db, "scheduledPayments", id), { title, amount });
     state.editingPaymentId = null;
     setView('payments');
-    alert("支払い設定を更新しました");
-  } catch (error) {
-    alert("更新できませんでした: " + error.message);
-  }
+    showToast("支払い設定を更新しました");
+  }, { busyLabel: '更新しています...' });
 };
 
 window.deleteScheduledPayment = async (id) => {
   if (state.role !== 'parent') return;
   const targetId = id || state.editingPaymentId;
   if (!targetId) return;
-  if (!confirm("この支払い設定を削除しますか？")) return;
-  try {
+  const ok = await showConfirm("今後この支払いは引き落とされなくなります。", { title: 'この支払い設定を削除しますか？', okLabel: '削除する', tone: 'danger' });
+  if (!ok) return;
+  await guard(`deletePayment:${targetId}`, async () => {
     await deleteDoc(doc(db, "scheduledPayments", targetId));
     state.editingPaymentId = null;
     setView('payments');
-  } catch (error) {
-    alert("削除できませんでした: " + error.message);
+  }, { busyLabel: '削除しています...' });
+};
+
+window.joinFamily = async () => {
+  const input = document.getElementById('setup-family-code');
+  if (!input) return;
+  const code = input.value.toUpperCase().trim();
+  if (!code) return showAlert("同期IDを入力してください");
+
+  const joined = await guard('joinFamily', async () => {
+    await ensureAnonymousAuth();
+    const docRef = doc(db, "families", code);
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) return false;
+
+    state.familyCode = code;
+    state.role = 'child';
+    localStorage.setItem('ienomics_familyCode', code);
+    localStorage.setItem('ienomics_role', 'child');
+    await claimChildMembership(code);
+    setupListeners();
+    render();
+    return true;
+  }, { busyLabel: '連携しています...' });
+
+  if (joined === false) {
+    await showAlert("その同期IDの口座は見つかりませんでした。文字をもう一度確認してください。", { title: 'IDが違うようです' });
+  } else if (joined && !hasSeenTutorial()) {
+    // 初回だけ、つながった直後に使い方を案内する
+    setTimeout(() => startTutorial('child'), 700);
   }
 };
 
-window.joinFamily = async () => { try { const emailInput = document.getElementById('setup-family-code'); if (!emailInput) return alert("システムエラー"); const code = emailInput.value.toUpperCase().trim(); if (!code) return alert("IDを入力してください"); const docRef = doc(db, "families", code); const docSnap = await getDoc(docRef); if (docSnap.exists()) { state.familyCode = code; state.role = 'child'; localStorage.setItem('ienomics_familyCode', code); localStorage.setItem('ienomics_role', 'child'); try { await updateDoc(docRef, { childLinked: true }); } catch (e) { } setupListeners(); render(); } else { alert("無効なIDです"); } } catch (error) { alert("エラー: " + error.message); } };
-window.sendRealEmailLink = async () => { try { const emailInput = document.getElementById('setup-email'); if (!emailInput) return; const email = emailInput.value.trim(); if (!email) return alert("メールアドレスを入力してください"); state.isSending = true; render(); const actionCodeSettings = { url: APP_URL, handleCodeInApp: true }; await sendSignInLinkToEmail(auth, email, actionCodeSettings); window.localStorage.setItem('emailForSignIn', email); state.message = email; state.setupStep = 2; } catch (error) { alert("エラー: " + error.message); } finally { state.isSending = false; render(); } };
+window.sendRealEmailLink = async () => {
+  const emailInput = document.getElementById('setup-email');
+  if (!emailInput) return;
+  const email = emailInput.value.trim();
+  if (!email) return showAlert("メールアドレスを入力してください");
+  try {
+    state.isSending = true; render();
+    const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    window.localStorage.setItem('emailForSignIn', email);
+    state.message = email;
+    state.setupStep = 2;
+  } catch (error) {
+    await showAlert(friendlyError(error), { title: 'メールを送れませんでした' });
+  } finally {
+    state.isSending = false; render();
+  }
+};
 
 window.sendPasswordReset = async () => {
   try {
     const emailInput = document.getElementById('reset-email');
     if (!emailInput) return;
     const email = emailInput.value.trim();
-    if (!email) return alert("メールアドレスを入力してください");
+    if (!email) return showAlert("メールアドレスを入力してください");
     state.isSending = true;
     render();
     const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
@@ -994,11 +1361,11 @@ window.sendPasswordReset = async () => {
   } catch (error) {
     const code = error?.code || '';
     if (code === 'auth/user-not-found') {
-      alert("このメールアドレスのアカウントが見つかりません");
+      await showAlert("このメールアドレスのアカウントが見つかりません");
     } else if (code === 'auth/invalid-email') {
-      alert("メールアドレスの形式が正しくありません");
+      await showAlert("メールアドレスの形式が正しくありません");
     } else {
-      alert("送信エラー: " + error.message);
+      await showAlert(friendlyError(error), { title: '送信できませんでした' });
     }
   } finally {
     state.isSending = false;
@@ -1008,11 +1375,11 @@ window.sendPasswordReset = async () => {
 
 window.submitPasswordReset = async () => {
   const code = state.resetPasswordCode;
-  if (!code) return alert("再設定コードがありません。メールのリンクから再度開いてください。");
+  if (!code) return showAlert("再設定コードがありません。メールのリンクから再度開いてください。");
   const pass = document.getElementById('reset-new-password')?.value || '';
   const passConf = document.getElementById('reset-new-password-confirm')?.value || '';
-  if (pass.length < 6) return alert("パスワードは6文字以上にしてください。");
-  if (pass !== passConf) return alert("パスワードが一致しません！");
+  if (pass.length < 6) return showAlert("パスワードは6文字以上にしてください。");
+  if (pass !== passConf) return showAlert("パスワードが一致しません！");
   try {
     state.isSending = true;
     render();
@@ -1021,13 +1388,36 @@ window.submitPasswordReset = async () => {
     state.setupMode = 'parent_login';
     state.setupStep = 1;
     state.message = '';
-    alert("パスワードを変更しました。新しいパスワードでログインしてください。");
+    await showAlert("新しいパスワードでログインしてください。", { title: 'パスワードを変更しました' });
   } catch (error) {
-    alert("再設定に失敗しました: " + (error.message || error));
+    await showAlert(friendlyError(error), { title: '再設定に失敗しました' });
   } finally {
     state.isSending = false;
     render();
   }
 };
 
-window.loginParent = async () => { try { const email = document.getElementById('login-email').value.trim(); const pass = document.getElementById('login-password').value; if (!email || !pass) return alert("メールアドレスとパスワードを入力してください"); state.isSending = true; render(); const result = await signInWithEmailAndPassword(auth, email, pass); state.role = 'parent'; localStorage.setItem('ienomics_role', 'parent'); await runMigrationAndLoadChildren(result.user.uid); } catch (error) { alert("ログイン失敗: パスワードまたはメールアドレスが違います"); } finally { state.isSending = false; render(); } };
+window.loginParent = async () => {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  if (!email || !pass) return showAlert("メールアドレスとパスワードを入力してください");
+  try {
+    state.isSending = true; render();
+    const result = await signInWithEmailAndPassword(auth, email, pass);
+    state.role = 'parent';
+    localStorage.setItem('ienomics_role', 'parent');
+    await runMigrationAndLoadChildren(result.user.uid);
+    if (!hasSeenTutorial()) setTimeout(() => startTutorial('parent'), 900);
+  } catch (error) {
+    await showAlert("パスワードまたはメールアドレスが違います", { title: 'ログインできませんでした' });
+  } finally {
+    state.isSending = false; render();
+  }
+};
+
+// PWA: オフラインでも開けるようにサービスワーカーを登録する
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('SW登録失敗:', err));
+  });
+}

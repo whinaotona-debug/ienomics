@@ -1,5 +1,6 @@
-import { state } from './state.js?v=118';
-import { getIcon, rb, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=124';
+import { state } from './state.js?v=128';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=128';
+import { refreshTutorial } from './tutorial.js?v=128';
 import { auth } from './firebase.js';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -149,14 +150,14 @@ export function render() {
 
   bottomNav.classList.remove('hidden');
   const midTab = state.role === 'parent'
-    ? `<button onclick="setView('balloonSend')" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
-    : `<button onclick="setView('tickets')" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>`;
+    ? `<button onclick="setView('balloonSend')" data-tour="nav-mid" aria-current="${state.view==='balloonSend'?'page':'false'}" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
+    : `<button onclick="setView('tickets')" data-tour="nav-mid" aria-current="${state.view==='tickets'?'page':'false'}" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>`;
   bottomNav.innerHTML = `
-    <div class="ie-nav-shell">
-      <button onclick="setView('home')" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
+    <div class="ie-nav-shell" role="tablist" aria-label="メインメニュー">
+      <button onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
       ${midTab}
-      <button onclick="setView('history')" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
-      <button onclick="setView('settings')" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
+      <button onclick="setView('history')" data-tour="nav-history" aria-current="${state.view==='history'?'page':'false'}" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
+      <button onclick="setView('settings')" data-tour="nav-settings" aria-current="${state.view==='settings'?'page':'false'}" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
     </div>
   `;
 
@@ -187,6 +188,8 @@ export function render() {
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
   animatePointsDisplay();
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
+  // 画面が作り直されたので、ガイドの枠を測り直す
+  refreshTutorial();
 }
 
 function renderHeader() {
@@ -194,19 +197,19 @@ function renderHeader() {
   if (state.role === 'parent') {
     nameTag = `
       <select onchange="switchActiveChild(this.value)" class="ie-hero-select hover:text-white transition">
-        ${state.children.map(c => `<option value="${c.id}" ${c.id === state.familyCode ? 'selected' : ''}>${c.childName} の口座</option>`).join('')}
+        ${state.children.map(c => `<option value="${esc(c.id)}" ${c.id === state.familyCode ? 'selected' : ''}>${esc(c.childName)} の口座</option>`).join('')}
       </select>
       <button onclick="addNewChild()" class="text-[8px] bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-lg transition ml-1 font-bold border border-white/20">＋追加</button>
     `;
   } else {
-    nameTag = `<p class="text-[10px] text-white/75 font-bold tracking-[0.08em]">${state.childName} の${rb('資産','しさん')}</p>`;
+    nameTag = `<p class="text-[10px] text-white/85 font-bold tracking-[0.08em]">${esc(state.childName)} の${rb('資産','しさん')}</p>`;
   }
 
   const nextPay = getNextPaymentInfo(state.scheduledPayments);
   let payHint = '';
   if (nextPay) {
     const leftTxt = nextPay.daysLeft === 0 ? '本日' : `残り${nextPay.daysLeft}日`;
-    payHint = `<p class="text-[9px] font-bold text-[#ffe2b8] mt-1.5 leading-snug truncate" title="${nextPay.title}">${nextPay.title}まで${leftTxt}</p>`;
+    payHint = `<p class="text-[10px] font-bold text-[#ffe2b8] mt-1.5 leading-snug truncate" title="${esc(nextPay.title)}">${esc(nextPay.title)}まで${leftTxt}</p>`;
   }
 
   const stamp = getHelpStampData(state.tasks);
@@ -227,18 +230,18 @@ function renderHeader() {
              </div>
              ${nameTag}
           </div>
-          <div class="flex items-baseline gap-1.5">
+          <div class="flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
             <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
-            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/80' : 'text-white/60'}">pt</span>
+            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
           </div>
-          ${state.points < 0 ? `<p class="text-[9px] font-bold text-red-300 mt-1">残高不足（株・換金はロック中）</p>` : ''}
+          ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
           ${payHint}
           ${streakHint}
         </div>
         <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
-        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1">
-          <p class="text-[9px] text-white/55 font-bold mb-1.5 tracking-widest leading-none">${rb('同期','どうき')}ID</p>
-          <p class="text-sm font-mono font-bold tracking-wider text-white/90 leading-none translate-y-px">${state.familyCode}</p>
+        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1" data-tour="synccode">
+          <p class="text-[10px] text-white/70 font-bold mb-1.5 tracking-widest leading-none">${rb('同期','どうき')}ID</p>
+          <p class="text-sm font-mono font-bold tracking-wider text-white/95 leading-none translate-y-px">${esc(state.familyCode)}</p>
         </div>
       </div>
     </div>
@@ -263,7 +266,7 @@ function buildInboxItems() {
         id: `prop-${t.id}`,
         tone: 'accent',
         title: '見積りが届きました',
-        body: `「${t.title}」希望 ${t.points}pt`,
+        body: `「${t.title}」希望 ${Number(t.points) || 0}pt`,
         action: `setView('home')`
       });
     });
@@ -278,13 +281,13 @@ function buildInboxItems() {
     });
   } else {
     (state.balloons || []).forEach(b => {
-      const msg = JSON.stringify(b.message || '');
       items.push({
         id: `gift-${b.id}`,
         tone: 'gift',
         title: 'ギフトが届きました',
         body: b.message ? `「${b.message}」 +${b.points}pt` : `ボーナス ${b.points}pt`,
-        action: `openBalloon('${b.id}', ${b.points}, ${msg})`
+        // メッセージ本文は openBalloon 側で state から読む（属性に文字列を埋め込まない）
+        action: `openBalloon('${esc(b.id)}')`
       });
     });
     (state.tasks || []).filter(t => t.status === 'open').forEach(t => {
@@ -326,24 +329,23 @@ function renderInboxPanel() {
     gift: 'border-[#f3d4e0] bg-[#fff5f9]',
     danger: 'border-[#f5d4d0] bg-[#fff6f5]'
   };
-  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   const list = items.length
     ? items.slice(0, 6).map(it => `
-        <button type="button" ${it.action ? `onclick="${it.action}"` : ''} class="w-full text-left p-2.5 rounded-xl border ${toneClass[it.tone] || toneClass.accent} ${it.action ? 'cursor-pointer hover:brightness-[0.98]' : 'cursor-default'}">
-          <p class="text-[10px] font-black text-[#1c2b27] leading-tight">${esc(it.title)}</p>
-          <p class="text-[9px] font-bold text-[#7a8f88] mt-0.5 ie-wrap-text">${esc(it.body)}</p>
+        <button type="button" ${it.action ? `onclick="${esc(it.action)}"` : 'disabled'} class="w-full text-left p-2.5 rounded-xl border ${toneClass[it.tone] || toneClass.accent} ${it.action ? 'cursor-pointer hover:brightness-[0.98]' : 'cursor-default'}">
+          <p class="text-[11px] font-black text-[#1c2b27] leading-tight">${esc(it.title)}</p>
+          <p class="text-[10px] font-bold text-[#5f7970] mt-0.5 ie-wrap-text">${esc(it.body)}</p>
         </button>
       `).join('')
-    : `<p class="text-[10px] font-bold text-[#7a8f88] text-center py-3">いまお知らせはありません</p>`;
+    : `<p class="text-[10px] font-bold text-[#5f7970] text-center py-3">いまお知らせはありません</p>`;
 
   return `
-    <div class="solid-box flex flex-col min-h-0 max-h-[38%] overflow-hidden">
+    <div class="solid-box flex flex-col min-h-0 max-h-[38%] overflow-hidden" data-tour="inbox">
       <div class="flex-none px-3 py-2 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#fff8ef] to-white">
         <h2 class="text-[11px] font-black text-[#1c2b27] flex items-center gap-1.5">
           <span class="inline-flex w-2 h-2 rounded-full ${items.length ? 'bg-[#e09a4a]' : 'bg-[#c5d8d1]'}"></span>
           ${rb('お知らせ','おしらせ')}
         </h2>
-        ${items.length ? `<span class="text-[9px] font-black text-[#e09a4a]">${items.length}</span>` : ''}
+        ${items.length ? `<span class="text-[10px] font-black text-[#c47a20]" aria-label="お知らせ${items.length}件">${items.length}</span>` : ''}
       </div>
       <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
         ${list}
@@ -442,7 +444,7 @@ function renderHome() {
         <div class="flex justify-between items-start gap-2 min-w-0">
           <div class="flex items-start gap-1.5 min-w-0 flex-1">
             ${repeatMark}
-            <span class="font-bold text-xs text-[#3d524c] ie-wrap-text">${t.title}</span>
+            <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(t.title)}</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
             <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
@@ -464,49 +466,49 @@ function renderHome() {
           <div class="solid-box flex-1 p-2.5 space-y-3 overflow-y-auto">
             <div>
               <p class="ie-section-label">${rb('仕事','しごと')}</p>
-              <button onclick="setView('${tJob.id}')" class="solid-btn w-full py-3 flex-row gap-2">
+              <button onclick="setView('${tJob.id}')" data-tour="job" class="solid-btn w-full py-3 flex-row gap-2">
                 <div class="w-4 h-4 text-[#2f8f82] shrink-0">${getIcon('propose')}</div>
-                <span class="text-[9px] font-bold text-[#3d524c] leading-none">${tJob.title}</span>
+                <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${tJob.title}</span>
               </button>
-              <button onclick="setView('templates')" class="solid-btn w-full py-2.5 flex-row gap-1.5 mt-2 relative">
-                <div class="w-4 h-4 text-[#5b8def] shrink-0">${getIcon('repeat')}</div>
-                <span class="text-[9px] font-bold text-[#3d524c] leading-none">${rb('定期一覧','ていきいちらん')}</span>
-                ${(state.taskTemplates || []).length > 0 ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-[#5b8def] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">${state.taskTemplates.length}</span>` : ''}
+              <button onclick="setView('templates')" data-tour="templates" class="solid-btn w-full py-2.5 flex-row gap-1.5 mt-2 relative">
+                <div class="w-4 h-4 text-[#4a7bd6] shrink-0">${getIcon('repeat')}</div>
+                <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('定期一覧','ていきいちらん')}</span>
+                ${(state.taskTemplates || []).length > 0 ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#3767bd] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">${state.taskTemplates.length}</span>` : ''}
               </button>
             </div>
             <div>
               <p class="ie-section-label">${rb('管理','かんり')}</p>
               <div class="grid grid-cols-1 gap-2">
-                <button onclick="setView('bank')" class="solid-btn py-2.5 flex-row gap-2">
+                <button onclick="setView('bank')" data-tour="bank" class="solid-btn py-2.5 flex-row gap-2">
                   <div class="flex flex-col items-center shrink-0">
                     <div class="w-4 h-4 text-[#2f8f82]">${getIcon('bank')}</div>
                     ${bankAmtHtml}
                   </div>
-                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('銀行','ぎんこう')}</span>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('銀行','ぎんこう')}</span>
                 </button>
-                <button onclick="setView('invest')" class="solid-btn py-2.5 flex-row gap-2">
+                <button onclick="setView('invest')" data-tour="invest" class="solid-btn py-2.5 flex-row gap-2">
                   <div class="flex flex-col items-center shrink-0">
-                    <div class="w-4 h-4 text-[#5b8def]">${getIcon('invest')}</div>
+                    <div class="w-4 h-4 text-[#4a7bd6]">${getIcon('invest')}</div>
                     ${investAmtHtml}
                   </div>
-                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('運用','うんよう')}</span>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('運用','うんよう')}</span>
                 </button>
               </div>
             </div>
             <div>
               <p class="ie-section-label">${rb('支出','ししゅつ')}</p>
               <div class="grid grid-cols-1 gap-2">
-                <button onclick="setView('payments')" class="solid-btn w-full py-2.5 flex-row gap-2">
+                <button onclick="setView('payments')" data-tour="payments" class="solid-btn w-full py-2.5 flex-row gap-2">
                   <div class="w-4 h-4 text-[#2f8f82] shrink-0">${getIcon('pay')}</div>
-                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${rb('支払い','しはらい')}</span>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('支払い','しはらい')}</span>
                 </button>
-                <button onclick="setView('exchange')" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#e09a4a] shrink-0">${getIcon('exchange')}</div>
-                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">${tEx}</span>
+                <button onclick="setView('exchange')" data-tour="exchange" class="solid-btn w-full py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('exchange')}</div>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${tEx}</span>
                 </button>
-                <button onclick="setView('tickets')" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#d9655b] shrink-0">${getIcon('ticket')}</div>
-                  <span class="text-[10px] font-bold text-[#3d524c] leading-none">チケット</span>
+                <button onclick="setView('tickets')" data-tour="tickets" class="solid-btn w-full py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#c9483c] shrink-0">${getIcon('ticket')}</div>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">チケット</span>
                 </button>
               </div>
             </div>
@@ -516,10 +518,10 @@ function renderHome() {
           </div>
         </div>
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
-          <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden">
+          <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
             <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
               <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
-              <button onclick="setView('calendar')" class="w-4 h-4 text-[#7a8f88] hover:text-[#2f8f82] transition">${getIcon('calendar')}</button>
+              <button onclick="setView('calendar')" class="w-4 h-4 text-[#5f7970] hover:text-[#2f8f82] transition" aria-label="月間予定を見る">${getIcon('calendar')}</button>
             </div>
             <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
               ${taskHtml}
@@ -639,10 +641,10 @@ function renderTemplatesList() {
     ? list.map(temp => {
         const sched = formatRepeatLabel(temp);
         const action = isParent
-          ? `onclick="openTemplateEdit('${temp.id}')"`
+          ? `onclick="openTemplateEdit('${esc(temp.id)}')"`
           : '';
         const chevron = isParent
-          ? `<span class="text-[10px] font-bold text-[#7a8f88] shrink-0">編集 ›</span>`
+          ? `<span class="text-[10px] font-bold text-[#5f7970] shrink-0">編集 ›</span>`
           : '';
         return `
           <button type="button" ${action} class="ie-job-item w-full text-left ${isParent ? 'cursor-pointer hover:bg-[#f0f7f4]' : 'cursor-default'} transition">
@@ -653,12 +655,12 @@ function renderTemplatesList() {
                     <span class="w-3 h-3">${getIcon('repeat')}</span>
                     <span class="text-[8px] font-black tracking-wide">定期</span>
                   </span>
-                  <span class="font-bold text-xs text-[#3d524c] ie-wrap-text">${temp.title || '無題'}</span>
+                  <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(temp.title || '無題')}</span>
                 </div>
-                <p class="text-[10px] font-bold text-[#7a8f88] mt-1.5">${sched}</p>
+                <p class="text-[10px] font-bold text-[#5f7970] mt-1.5">${esc(sched)}</p>
               </div>
               <div class="flex flex-col items-end gap-1 shrink-0">
-                <span class="text-xs font-black text-[#1c2b27]">${Number(temp.points) || 0} <span class="text-[9px] font-bold text-[#7a8f88]">pt</span></span>
+                <span class="text-xs font-black text-[#1c2b27]">${Number(temp.points) || 0} <span class="text-[10px] font-bold text-[#5f7970]">pt</span></span>
                 ${chevron}
               </div>
             </div>
@@ -706,7 +708,7 @@ function renderTemplateEdit() {
       定期発注の編集
     </h2>
     <p class="text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-100 rounded-xl px-3 py-2 mb-4">${formatRepeatLabel(temp)}</p>
-    <input type="text" id="tmpl-title" value="${String(temp.title || '').replace(/"/g, '&quot;')}" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <input type="text" id="tmpl-title" value="${esc(temp.title || '')}" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
     <div class="ie-field-stack mb-4">
       <label>報酬</label>
       <div class="ie-field-row">
@@ -767,18 +769,18 @@ function renderPayments() {
   const card = (p) => {
     const sched = formatPaymentSchedule(p);
     const editBtn = state.role === 'parent'
-      ? `<button onclick="openPaymentEdit('${p.id}')" class="text-[10px] font-bold text-indigo-500 hover:text-indigo-700">編集</button>`
+      ? `<button onclick="openPaymentEdit('${esc(p.id)}')" class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800">編集</button>`
       : '';
     const delBtn = state.role === 'parent'
-      ? `<button onclick="deleteScheduledPayment('${p.id}')" class="text-[10px] font-bold text-slate-400 hover:text-red-500">削除</button>`
+      ? `<button onclick="deleteScheduledPayment('${esc(p.id)}')" class="text-[10px] font-bold text-slate-500 hover:text-red-500">削除</button>`
       : '';
     return `
       <div class="p-4 bg-white border border-slate-100 rounded-xl">
         <div class="flex justify-between items-start gap-2 mb-1">
-          <p class="font-bold text-sm text-slate-800">${p.title}</p>
-          <span class="text-sm font-black text-indigo-600 shrink-0">−${p.amount}pt</span>
+          <p class="font-bold text-sm text-slate-800 ie-wrap-text min-w-0 flex-1">${esc(p.title)}</p>
+          <span class="text-sm font-black text-indigo-600 shrink-0">−${Number(p.amount) || 0}pt</span>
         </div>
-        <p class="text-[10px] font-bold text-slate-400 mb-2">${sched}</p>
+        <p class="text-[10px] font-bold text-slate-500 mb-2">${esc(sched)}</p>
         <div class="flex gap-3 justify-end">${editBtn}${delBtn}</div>
       </div>
     `;
@@ -804,7 +806,7 @@ function renderPayments() {
     <div class="space-y-1">
       ${logs.length ? logs.map(l => {
         const d = new Date(l.chargedAt || l.createdAt);
-        return `<div class="py-2 border-b border-slate-50 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-slate-600 ie-wrap-text min-w-0 flex-1">${l.title}</span><span class="text-slate-800 shrink-0">−${l.amount}pt <span class="text-[9px] text-slate-400 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
+        return `<div class="py-2 border-b border-slate-50 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-slate-600 ie-wrap-text min-w-0 flex-1">${esc(l.title)}</span><span class="text-slate-800 shrink-0">−${Number(l.amount) || 0}pt <span class="text-[10px] text-slate-500 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">まだ引落履歴はありません</p>`}
     </div>
   `;
@@ -880,7 +882,7 @@ function renderPaymentEdit() {
     </h2>
     <p class="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-4">${formatPaymentSchedule(p)}</p>
     <p class="text-[9px] font-bold text-slate-400 mb-2">名目</p>
-    <input type="text" id="pay-edit-title" value="${String(p.title || '').replace(/"/g, '&quot;')}" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <input type="text" id="pay-edit-title" value="${esc(p.title || '')}" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
     <p class="text-[9px] font-bold text-slate-400 mb-2">金額</p>
     <div class="ie-field-stack mb-6">
       <label>金額</label>
@@ -893,7 +895,40 @@ function renderPaymentEdit() {
     <button onclick="deleteScheduledPayment()" class="solid-btn w-full py-3 font-bold text-sm text-red-500 hover:bg-red-50 border-red-100">この支払いを削除</button>
   `;
 }
-function renderSettings() { return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-slate-400">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100"><p class="text-[9px] font-semibold text-slate-400 mb-2 tracking-widest">同期ID</p><p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${state.familyCode}</p></div>${state.role==='child'?`<div class="p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100" onclick="toggleFurigana()"><span class="font-bold text-sm text-slate-600">フリガナ(ルビ)表示</span><div class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana?'bg-slate-800 justify-end':'bg-slate-200 justify-start'}"><div class="w-4 h-4 bg-white rounded-full shadow-sm"></div></div></div>`:''}<button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-500 font-bold text-xs hover:bg-red-50">連携を解除する</button>`; }
+function renderSettings() {
+  const isChild = state.role === 'child';
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-slate-500">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}
+    </h2>
+
+    <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100">
+      <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-widest">同期ID</p>
+      <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
+    </div>
+
+    <button onclick="startAppTutorial()" class="ie-guide-btn w-full mb-4" aria-label="使い方ガイドを最初から見る">
+      <span class="ie-guide-icon">${getIcon('help')}</span>
+      <span class="ie-guide-text">
+        <span class="ie-guide-title">${rb('使い方ガイド','つかいかたガイド')}</span>
+        <span class="ie-guide-sub">${isChild ? 'ホームで じゅんばんに せつめいします' : 'ホーム画面で機能を順番に案内します'}</span>
+      </span>
+      <span class="ie-guide-arrow" aria-hidden="true">›</span>
+    </button>
+
+    ${isChild ? `
+      <button type="button" class="w-full p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100"
+              onclick="toggleFurigana()" role="switch" aria-checked="${state.furigana ? 'true' : 'false'}">
+        <span class="font-bold text-sm text-slate-700">フリガナ(ルビ)表示</span>
+        <span class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana ? 'bg-[#2f8f82] justify-end' : 'bg-slate-300 justify-start'}">
+          <span class="w-4 h-4 bg-white rounded-full shadow-sm"></span>
+        </span>
+      </button>
+    ` : '<div class="mb-8"></div>'}
+
+    <button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-600 font-bold text-xs hover:bg-red-50">連携を解除する</button>
+  `;
+}
 export function drawInvestChart() {
   const canvas = document.getElementById('investChart');
   if (!canvas) return;
@@ -1051,20 +1086,22 @@ function renderTickets() {
   ` : '';
 
   const list = ts.map(t => {
+    const id = esc(t.id);
+    const price = Number(t.price) || 0;
     let b = '';
     if (state.role === 'child') {
-      if (t.status === 'available') b = `<button onclick="buyTicket('${t.id}',${t.price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">購入</button>`;
-      else b = `<span class="text-[9px] font-bold text-slate-400 bg-slate-100 px-3 py-1.5 rounded-md shrink-0">所持中</span>`;
+      if (t.status === 'available') b = `<button onclick="buyTicket('${id}',${price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">購入</button>`;
+      else b = `<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md shrink-0">所持中</span>`;
     } else {
-      if (t.status === 'available') b = `<button onclick="deleteTicket('${t.id}')" class="text-slate-400 hover:text-red-500 text-[10px] font-bold transition shrink-0">削除</button>`;
-      else if (t.status === 'bought') b = `<button onclick="useTicket('${t.id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0">使用済にする</button>`;
-      else b = `<span class="text-[9px] text-slate-300 font-bold shrink-0">使用済</span>`;
+      if (t.status === 'available') b = `<button onclick="deleteTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold transition shrink-0">削除</button>`;
+      else if (t.status === 'bought') b = `<button onclick="useTicket('${id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0">使用済にする</button>`;
+      else b = `<span class="text-[10px] text-slate-400 font-bold shrink-0">使用済</span>`;
     }
     return `
       <div class="p-4 rounded-xl border ${t.status === 'bought' ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
         <div class="min-w-0 flex-1">
-          <p class="font-bold text-sm text-slate-700 ie-wrap-text">${t.title}</p>
-          <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-400' : 'text-rose-500'}">${t.price} pt</p>
+          <p class="font-bold text-sm text-slate-700 ie-wrap-text">${esc(t.title)}</p>
+          <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-500' : 'text-rose-600'}">${price} pt</p>
         </div>
         ${b}
       </div>
@@ -1077,7 +1114,7 @@ function renderTickets() {
       チケット${state.role === 'parent' ? '管理' : '購入'}
     </h2>
     ${parentForm}
-    <div class="space-y-3 min-w-0">${list}</div>
+    <div class="space-y-3 min-w-0">${list || `<p class="text-[11px] font-bold text-slate-500 text-center py-6">チケットはまだありません</p>`}</div>
   `;
 }
 function renderHistory() {
@@ -1114,10 +1151,10 @@ function renderHistory() {
       <p class="text-[9px] font-bold text-[#7a8f88] mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
     </div>
 
-    <div class="space-y-1">${app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-[#3d524c] ie-wrap-text min-w-0 flex-1">${t.title}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee] shrink-0">+${t.points} pt</span></div>`).join('')}</div>
+    <div class="space-y-1">${app.length ? app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-[#2c3d38] ie-wrap-text min-w-0 flex-1">${esc(t.title)}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee] shrink-0">+${Number(t.points) || 0} pt</span></div>`).join('') : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ承認された仕事はありません</p>`}</div>
   `;
 }
-function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-start gap-2 border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700 ie-wrap-text min-w-0 flex-1">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 shrink-0 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
+function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-start gap-2 border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700 ie-wrap-text min-w-0 flex-1">${esc(t.title)}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 shrink-0 ${t.deadline<Date.now()?'text-slate-500':'text-slate-700'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
 function renderSetupLoading(message) {
   return `
     <div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">
@@ -1155,7 +1192,7 @@ function renderPasswordResetForm() {
     </div>
   `;
 }
-function renderWaitingChild() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">${state.childName} の連携待機中</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。</p><div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${state.familyCode}</div><div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse"><div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...</div>${state.children.length > 1 ? `<button onclick="switchActiveChild('${state.children.find(c=>c.id!==state.familyCode)?.id}')" class="text-[10px] text-blue-500 font-bold mb-4">別の子供の画面へ</button><br>` : ''}<button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button></div></div>`; }
+function renderWaitingChild() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">${esc(state.childName)} の連携待機中</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。</p><div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${state.familyCode}</div><div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse"><div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...</div>${state.children.length > 1 ? `<button onclick="switchActiveChild('${state.children.find(c=>c.id!==state.familyCode)?.id}')" class="text-[10px] text-blue-500 font-bold mb-4">別の子供の画面へ</button><br>` : ''}<button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button></div></div>`; }
 
 function renderSetup() {
   let content = '';
