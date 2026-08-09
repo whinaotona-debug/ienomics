@@ -45,7 +45,9 @@
 
 ブラウザの `new Notification()` は、ページが開いている間しか動きません。アプリを閉じるとJavaScriptが止まるので、通知を作る人がいなくなります。
 
-そこで **Firebase Cloud Messaging（FCM）** を使い、Firestore の変化を **Cloud Functions** が見張って、サーバー側から通知を送るようにしました。受け取り役はブラウザが裏で動かすサービスワーカー（`firebase-messaging-sw.js`）なので、スマホがスリープ中でも通知センターに届きます。
+そこで **Firebase Cloud Messaging（FCM）** を使い、Firestore の変化を **Cloud Functions** が見張って、サーバー側から通知を送るようにしました。受け取り役はブラウザが裏で動かすサービスワーカー（`sw.js`）なので、スマホがスリープ中でも通知センターに届きます。
+
+受け取り役は、オフライン対応をしている `sw.js` にまとめてあります。以前は通知専用のサービスワーカーを別スコープに登録していましたが、その方式ではアプリを完全に終了させたときに通知が届きませんでした。画面を受け持っているサービスワーカー自身に受け取らせることで確実になります。
 
 端末は `pushTokens` コレクションに自分の宛先（トークン・同期ID・役割）を登録します。Cloud Functions は「この家族の子供の端末ぜんぶ」を検索して送ります。無効になった宛先は自動で削除されます。
 
@@ -150,8 +152,7 @@ tutorial.js               使い方ガイド（スポットライト案内）
 push.js                   プッシュ通知の受け取り準備
 firebase.js               Firebase の初期化
 style.css                 見た目の調整
-sw.js                     Service Worker（オフライン対応）
-firebase-messaging-sw.js  通知をバックグラウンドで受け取る
+sw.js                     Service Worker（オフライン対応＋通知の受け取り）
 manifest.json             PWA の設定
 firestore.rules           Firestore のセキュリティルール
 functions/index.js        通知を送るサーバー処理（Cloud Functions）
@@ -207,7 +208,7 @@ npx serve .
 
 ### 開発中の注意
 
-各ファイルの読み込みには `?v=130` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
+各ファイルの読み込みには `?v=131` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
 
 対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js`、`push.js` の冒頭にある import 文と、`sw.js` の `VERSION` です。`firebase.js` の import にも番号が必要です（ここを忘れると `firebaseApp` が見つからないというエラーになります）。
 

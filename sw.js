@@ -1,8 +1,50 @@
 // イエノミクスのサービスワーカー。
 // 電波が弱い場所でもアプリが開けるように、画面を作るファイルを手元に置いておく。
 // Firestore への読み書きはキャッシュせず、必ずネットワークに任せる。
+//
+// 通知の受け取りもここで行う。以前は通知専用のサービスワーカーを別スコープに
+// 登録していたが、その方式ではアプリを完全に終了させたときに通知が届かなかった。
+// 画面を受け持っているサービスワーカー自身が受け取るようにすると確実になる。
 
-const VERSION = 'v130';
+// 通知の受け取りに必要な部品。オフラインで起動したときは読み込めないので、
+// 失敗してもキャッシュ配信だけは動き続けるように囲っておく。
+try {
+  importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+  importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
+  firebase.initializeApp({
+    apiKey: "AIzaSyA57yXg46NjGVue3WUK-jbZ68hwQwdLA-g",
+    authDomain: "tibiz-a395e.firebaseapp.com",
+    projectId: "tibiz-a395e",
+    storageBucket: "tibiz-a395e.firebasestorage.app",
+    messagingSenderId: "347209039114",
+    appId: "1:347209039114:web:0d3ff0477e7bb812210ef3"
+  });
+  // これを呼ぶことで、届いた通知が自動で表示されるようになる。
+  // notification 付きで送っているので、自分で表示する処理は書かない（二重表示になる）。
+  firebase.messaging();
+} catch (e) {
+  // 通知だけ使えない状態。オフライン対応はこのまま続く。
+}
+
+// 通知をタップしたら、開いているアプリに戻る。なければ新しく開く。
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const link = event.notification?.data?.FCM_MSG?.webpush?.fcmOptions?.link
+    || event.notification?.data?.link
+    || './index.html';
+
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
+        return client.focus();
+      }
+    }
+    return self.clients.openWindow(link);
+  })());
+});
+
+const VERSION = 'v131';
 const SHELL_CACHE = `ienomics-shell-${VERSION}`;
 const RUNTIME_CACHE = `ienomics-runtime-${VERSION}`;
 
@@ -65,8 +107,6 @@ self.addEventListener('fetch', (event) => {
   }
   if (!/^https?:$/.test(url.protocol)) return;
   if (NEVER_CACHE_HOSTS.some(host => url.hostname.endsWith(host))) return;
-  // 通知用サービスワーカーは常に最新を取りに行かせる
-  if (url.pathname.endsWith('/firebase-messaging-sw.js')) return;
 
   const sameOrigin = url.origin === self.location.origin;
 

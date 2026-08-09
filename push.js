@@ -8,7 +8,7 @@
 //    Firebaseコンソール → プロジェクトの設定 → Cloud Messaging
 //    → 「ウェブプッシュ証明書」→ 鍵ペアを生成 → 表示された文字列を貼る。
 import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js";
-import { firebaseApp, db, auth } from './firebase.js?v=130';
+import { firebaseApp, db, auth } from './firebase.js?v=131';
 import { doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 const VAPID_KEY = 'BOhb3tbhUOgpwnVP6EHVoX3jKSkAsMMkjrbr4aD_Fi3gpAJiWBcXF0SN_6w9yLGTrNwqMaih1yzWnH8bmg3khaA';
@@ -16,6 +16,29 @@ const VAPID_KEY = 'BOhb3tbhUOgpwnVP6EHVoX3jKSkAsMMkjrbr4aD_Fi3gpAJiWBcXF0SN_6w9y
 let messaging = null;
 let fcmActive = false;
 let currentTokenDocId = null;
+let lastError = null;
+
+/** 通知を有効にできなかったときの理由。設定画面の案内に出す。 */
+export function getPushError() {
+  return lastError;
+}
+
+/**
+ * 以前の版が別スコープに登録していた通知専用サービスワーカーを片付ける。
+ * 残っていると、どちらが通知を受け取るのか不定になる。
+ */
+async function removeOldPushWorker() {
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(
+      regs
+        .filter(r => r.scope.includes('firebase-cloud-messaging-push-scope'))
+        .map(r => r.unregister())
+    );
+  } catch (e) {
+    // 片付けに失敗しても本筋は続ける
+  }
+}
 
 /** この端末を見分けるためのID。同じアカウントを複数端末で使っても通知が届くようにする。 */
 function getDeviceId() {
@@ -62,28 +85,42 @@ export async function requestPushPermission() {
  * @returns {Promise<boolean>} サーバー通知が使えるようになったか
  */
 export async function initPush({ familyCode, role }) {
-  if (!familyCode || !role) return false;
-  if (!(await isPushSupported())) return false;
-  if (Notification.permission !== 'granted') return false;
+  lastError = null;
+  if (!familyCode || !role) {
+    lastError = '家族の情報が読み込まれていません';
+    return false;
+  }
+  if (!(await isPushSupported())) {
+    lastError = 'この開き方では通知が使えません（ホーム画面に追加したアイコンから開いてください）';
+    return false;
+  }
+  if (Notification.permission !== 'granted') {
+    lastError = '通知が許可されていません';
+    return false;
+  }
   if (!VAPID_KEY || VAPID_KEY.startsWith('ここに')) {
-    console.warn('[push] VAPIDキーが未設定です。push.js の VAPID_KEY を設定してください。');
+    lastError = 'ウェブプッシュ証明書の鍵が未設定です';
     return false;
   }
 
   try {
     if (!messaging) messaging = getMessaging(firebaseApp);
 
-    // FCM 専用のサービスワーカーを、通常の sw.js とぶつからない範囲で登録する。
-    // GitHub Pages はサブディレクトリ配信なので、スコープは必ず相対パスで指定する。
-    const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js', {
-      scope: 'firebase-cloud-messaging-push-scope/'
-    });
+    await removeOldPushWorker();
+
+    // 画面を受け持っている sw.js に通知を受け取らせる。
+    // 別スコープの専用ワーカーだと、アプリを終了させたときに届かないことがある。
+    await navigator.serviceWorker.register('sw.js');
+    const registration = await navigator.serviceWorker.ready;
 
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
       serviceWorkerRegistration: registration
     });
-    if (!token) return false;
+    if (!token) {
+      lastError = '通知の宛先（トークン）を取得できませんでした';
+      return false;
+    }
 
     currentTokenDocId = getDeviceId();
     await setDoc(doc(db, 'pushTokens', currentTokenDocId), {
@@ -111,6 +148,7 @@ export async function initPush({ familyCode, role }) {
     return true;
   } catch (error) {
     console.warn('[push] 通知の準備に失敗:', error);
+    lastError = error?.code || error?.message || String(error);
     fcmActive = false;
     return false;
   }

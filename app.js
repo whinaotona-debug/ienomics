@@ -1,10 +1,10 @@
-import { state } from './state.js?v=130';
-import { render } from './ui.js?v=130';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=130';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=130';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=130';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush } from './push.js?v=130';
-import { db, auth } from './firebase.js?v=130';
+import { state } from './state.js?v=131';
+import { render } from './ui.js?v=131';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=131';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=131';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=131';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=131';
+import { db, auth } from './firebase.js?v=131';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -110,9 +110,10 @@ window.enablePushNotifications = async () => {
       { title: '通知をオンにしました' }
     );
   } else {
+    const reason = getPushError();
     await showAlert(
-      '許可は取れましたが、通知サーバーの準備ができていません。\n（開発者向け: push.js の VAPID_KEY と Cloud Functions のデプロイを確認してください）',
-      { title: 'あと少し設定が必要です' }
+      `通知の準備ができませんでした。\n\n理由: ${reason || '不明'}`,
+      { title: '通知をオンにできませんでした' }
     );
   }
 };

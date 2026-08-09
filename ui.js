@@ -1,7 +1,7 @@
-import { state } from './state.js?v=130';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=130';
-import { refreshTutorial } from './tutorial.js?v=130';
-import { auth } from './firebase.js?v=130';
+import { state } from './state.js?v=131';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=131';
+import { refreshTutorial } from './tutorial.js?v=131';
+import { auth } from './firebase.js?v=131';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
