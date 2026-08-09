@@ -1,7 +1,7 @@
-import { state } from './state.js?v=129';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=129';
-import { refreshTutorial } from './tutorial.js?v=129';
-import { auth } from './firebase.js?v=129';
+import { state } from './state.js?v=130';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=130';
+import { refreshTutorial } from './tutorial.js?v=130';
+import { auth } from './firebase.js?v=130';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -905,7 +905,7 @@ function renderSettings() {
             aria-label="通知を受け取る設定">
       <span class="ie-guide-icon ${pushOn ? 'text-[#2f8f82]' : 'text-[#c47a20]'}">${getIcon('bell')}</span>
       <span class="ie-guide-text">
-        <span class="ie-guide-title">${rb('通知','つうち')}を${rb('受け取る','うけとる')}</span>
+        <span class="ie-guide-title">${rb('通知を受け取る','つうちをうけとる')}</span>
         <span class="ie-guide-sub">
           ${pushOn
             ? 'オンになっています。アプリを閉じていても届きます'

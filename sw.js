@@ -2,7 +2,7 @@
 // 電波が弱い場所でもアプリが開けるように、画面を作るファイルを手元に置いておく。
 // Firestore への読み書きはキャッシュせず、必ずネットワークに任せる。
 
-const VERSION = 'v129';
+const VERSION = 'v130';
 const SHELL_CACHE = `ienomics-shell-${VERSION}`;
 const RUNTIME_CACHE = `ienomics-runtime-${VERSION}`;
 

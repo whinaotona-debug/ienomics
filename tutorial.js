@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=129';
+import { esc } from './utils.js?v=130';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -181,7 +181,8 @@ function draw() {
     <div class="ie-tour-layer" role="dialog" aria-modal="true" aria-label="使い方ガイド">
       <div class="ie-tour-spot" data-tour-spot hidden></div>
       <div class="ie-tour-dim" data-tour-dim hidden></div>
-      <div class="ie-tour-card" data-tour-card>
+      <div class="ie-tour-card-wrap" data-tour-card>
+       <div class="ie-tour-card">
         <div class="ie-tour-head">
           <span class="ie-tour-count">${index + 1} / ${total}</span>
           <button type="button" class="ie-tour-skip" data-tour-end>とじる</button>
@@ -195,6 +196,7 @@ function draw() {
           <button type="button" class="ie-tour-btn" data-tour-prev ${index === 0 ? 'disabled' : ''}>もどる</button>
           <button type="button" class="ie-tour-btn ie-tour-next" data-tour-next>${isLast ? 'はじめる' : 'つぎへ'}</button>
         </div>
+       </div>
       </div>
     </div>
   `;

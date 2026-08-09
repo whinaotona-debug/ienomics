@@ -777,10 +777,16 @@ body.ie-tour-open { overflow: hidden; }
   inset: 0;
   background: rgba(15, 28, 24, 0.68);
 }
-.ie-tour-card {
+/* 位置決めと登場アニメーションを別の要素に分ける。
+   同じ要素で transform を使うと、アニメーション中だけ中央寄せが打ち消されて
+   カードが右にずれてから戻る（ガタつく）ため。 */
+.ie-tour-card-wrap {
   position: fixed;
   left: 50%;
+  transform: translateX(-50%);
   width: min(340px, calc(100vw - 32px));
+}
+.ie-tour-card {
   background: var(--ie-surface);
   border-radius: var(--ie-radius);
   padding: 16px 18px 14px;
