@@ -211,6 +211,20 @@ npx serve .
 
 対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js`、`push.js` の冒頭にある import 文と、`sw.js` の `VERSION` です。`firebase.js` の import にも番号が必要です（ここを忘れると `firebaseApp` が見つからないというエラーになります）。
 
+## 公開のしかた（GitHub Pages）
+
+`main` ブランチに push すると `.github/workflows/pages.yml` が動き、ファイルがそのまま公開されます。
+
+```bash
+git add -A
+git commit -m "変更内容のメモ"
+git push
+```
+
+リポジトリの Settings → Pages で、Source が **GitHub Actions** になっている必要があります。「Deploy from a branch」にすると GitHub が Jekyll を通してから公開しようとしますが、このアプリは静的ファイルを置くだけなので Jekyll は不要で、そのビルドが失敗すると公開が止まりサイトが 404 になります。
+
+Source を切り替えた直後は公開がいったん取り消されるため、もう一度 push するか Actions から再実行して公開し直してください。
+
 ---
 
 ## 開発の記録
