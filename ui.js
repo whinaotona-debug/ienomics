@@ -331,7 +331,7 @@ function renderInboxPanel() {
     ? items.slice(0, 6).map(it => `
         <button type="button" ${it.action ? `onclick="${it.action}"` : ''} class="w-full text-left p-2.5 rounded-xl border ${toneClass[it.tone] || toneClass.accent} ${it.action ? 'cursor-pointer hover:brightness-[0.98]' : 'cursor-default'}">
           <p class="text-[10px] font-black text-[#1c2b27] leading-tight">${esc(it.title)}</p>
-          <p class="text-[9px] font-bold text-[#7a8f88] mt-0.5 truncate">${esc(it.body)}</p>
+          <p class="text-[9px] font-bold text-[#7a8f88] mt-0.5 ie-wrap-text">${esc(it.body)}</p>
         </button>
       `).join('')
     : `<p class="text-[10px] font-bold text-[#7a8f88] text-center py-3">いまお知らせはありません</p>`;
@@ -439,12 +439,12 @@ function renderHome() {
     
     return `
       <div class="ie-job-item">
-        <div class="flex justify-between items-center gap-2 min-w-0">
-          <div class="flex items-center gap-1.5 min-w-0 flex-1">
+        <div class="flex justify-between items-start gap-2 min-w-0">
+          <div class="flex items-start gap-1.5 min-w-0 flex-1">
             ${repeatMark}
-            <span class="font-bold text-xs text-[#3d524c] truncate">${t.title}</span>
+            <span class="font-bold text-xs text-[#3d524c] ie-wrap-text">${t.title}</span>
           </div>
-          <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1.5 shrink-0">
             <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
             ${trashBtn}
           </div>
@@ -648,12 +648,12 @@ function renderTemplatesList() {
           <button type="button" ${action} class="ie-job-item w-full text-left ${isParent ? 'cursor-pointer hover:bg-[#f0f7f4]' : 'cursor-default'} transition">
             <div class="flex justify-between items-start gap-2 min-w-0">
               <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5 min-w-0">
+                <div class="flex items-start gap-1.5 min-w-0">
                   <span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100">
                     <span class="w-3 h-3">${getIcon('repeat')}</span>
                     <span class="text-[8px] font-black tracking-wide">定期</span>
                   </span>
-                  <span class="font-bold text-xs text-[#3d524c] truncate">${temp.title || '無題'}</span>
+                  <span class="font-bold text-xs text-[#3d524c] ie-wrap-text">${temp.title || '無題'}</span>
                 </div>
                 <p class="text-[10px] font-bold text-[#7a8f88] mt-1.5">${sched}</p>
               </div>
@@ -804,7 +804,7 @@ function renderPayments() {
     <div class="space-y-1">
       ${logs.length ? logs.map(l => {
         const d = new Date(l.chargedAt || l.createdAt);
-        return `<div class="py-2 border-b border-slate-50 flex justify-between text-xs font-bold"><span class="text-slate-600 truncate">${l.title}</span><span class="text-slate-800 shrink-0">−${l.amount}pt <span class="text-[9px] text-slate-400 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
+        return `<div class="py-2 border-b border-slate-50 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-slate-600 ie-wrap-text min-w-0 flex-1">${l.title}</span><span class="text-slate-800 shrink-0">−${l.amount}pt <span class="text-[9px] text-slate-400 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">まだ引落履歴はありません</p>`}
     </div>
   `;
@@ -1061,9 +1061,9 @@ function renderTickets() {
       else b = `<span class="text-[9px] text-slate-300 font-bold shrink-0">使用済</span>`;
     }
     return `
-      <div class="p-4 rounded-xl border ${t.status === 'bought' ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-center gap-2 min-w-0">
+      <div class="p-4 rounded-xl border ${t.status === 'bought' ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
         <div class="min-w-0 flex-1">
-          <p class="font-bold text-sm text-slate-700 truncate">${t.title}</p>
+          <p class="font-bold text-sm text-slate-700 ie-wrap-text">${t.title}</p>
           <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-400' : 'text-rose-500'}">${t.price} pt</p>
         </div>
         ${b}
@@ -1114,10 +1114,10 @@ function renderHistory() {
       <p class="text-[9px] font-bold text-[#7a8f88] mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
     </div>
 
-    <div class="space-y-1">${app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-center text-xs font-bold"><span class="text-[#3d524c]">${t.title}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee]">+${t.points} pt</span></div>`).join('')}</div>
+    <div class="space-y-1">${app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-[#3d524c] ie-wrap-text min-w-0 flex-1">${t.title}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee] shrink-0">+${t.points} pt</span></div>`).join('')}</div>
   `;
 }
-function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-center border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
+function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-start gap-2 border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700 ie-wrap-text min-w-0 flex-1">${t.title}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 shrink-0 ${t.deadline<Date.now()?'text-slate-400':'text-slate-600'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
 function renderSetupLoading(message) {
   return `
     <div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">

@@ -278,6 +278,16 @@ html, body {
   border-color: var(--ie-line-soft);
 }
 
+/* 長い名前でも省略せず折り返して全部見せる */
+.ie-wrap-text {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
 .ie-modal-backdrop {
   background: rgba(28, 43, 39, 0.28);
   backdrop-filter: blur(10px);
