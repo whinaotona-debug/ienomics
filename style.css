@@ -607,6 +607,82 @@ textarea:focus-visible,
   color: #ffffff;
 }
 
+/* ===== 設定画面のお子さま一覧 ===== */
+.ie-child-manage {
+  border: 1px solid var(--ie-line-soft);
+  border-radius: var(--ie-radius);
+  background: var(--ie-surface);
+  padding: 12px 12px 10px;
+}
+.ie-child-manage-title {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--ie-muted);
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.ie-child-manage-note {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ie-muted);
+  line-height: 1.6;
+  margin-top: 8px;
+}
+.ie-child-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  border: 1px solid var(--ie-line-soft);
+  border-radius: 14px;
+  background: #f7faf9;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.ie-child-row.on {
+  border-color: var(--ie-accent);
+  background: var(--ie-accent-soft);
+}
+.ie-child-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 9px 10px;
+  text-align: left;
+}
+.ie-child-row-main:active { transform: scale(0.99); }
+.ie-child-row-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ie-ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ie-child-row-sub {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--ie-muted);
+}
+.ie-child-row-del {
+  flex: none;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ie-muted);
+  border-left: 1px solid var(--ie-line-soft);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ie-child-row-del:hover {
+  background: #fdecec;
+  color: #d64545;
+}
+.ie-child-row-del:active { transform: scale(0.94); }
+
 /* 通知のオン・オフ表示 */
 .ie-push-state {
   flex: none;

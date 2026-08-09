@@ -1,11 +1,11 @@
-import { state } from './state.js?v=132';
-import { render } from './ui.js?v=132';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=132';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=132';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=132';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=132';
-import { db, auth } from './firebase.js?v=132';
-import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { state } from './state.js?v=133';
+import { render } from './ui.js?v=133';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=133';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=133';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=133';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=133';
+import { db, auth } from './firebase.js?v=133';
+import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
@@ -594,6 +594,37 @@ async function checkAndGenerateRepeatedTasks() {
   }
 }
 
+/**
+ * 見ていた口座が親に削除されたときの後片付け（子供の端末用）。
+ * 通知の宛先も消しておかないと、消えた口座宛の通知が届き続ける。
+ */
+let familyRemovedHandled = false;
+async function handleFamilyRemoved() {
+  if (familyRemovedHandled) return;
+  familyRemovedHandled = true;
+
+  unsubscribes.forEach(unsub => unsub());
+  unsubscribes = [];
+  await unregisterPush();
+  try { await signOut(auth); } catch (e) {}
+
+  localStorage.removeItem('ienomics_role');
+  localStorage.removeItem('ienomics_familyCode');
+  state.role = null;
+  state.familyCode = null;
+  state.childName = '';
+  state.points = 0;
+  state.childLinked = false;
+  state.setupMode = null;
+  render();
+
+  await showAlert(
+    'この口座は親の端末で削除されました。\nもう一度使うには、新しい同期IDを入れ直してください。',
+    { title: '口座がなくなりました' }
+  );
+  familyRemovedHandled = false;
+}
+
 function setupListeners() {
   if (!state.familyCode) return;
   
@@ -610,7 +641,11 @@ function setupListeners() {
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
       render(); 
-    } else render();
+    }
+    // 親がこの口座を削除した。子供の端末に古い残高を見せ続けないよう初期設定へ戻す。
+    // 親の端末は、口座一覧の変化を見て自動で別の子に移るのでここでは何もしない。
+    else if (state.role === 'child') handleFamilyRemoved();
+    else render();
   }, () => render());
   unsubscribes.push(unsubFamily);
 
@@ -823,6 +858,9 @@ window.switchActiveChild = (code) => {
   state.view = 'home';
   setupListeners();
   render();
+  // 通知の宛先は同期IDごとに登録してあるので、見る子を変えたら付け替える。
+  // これをしないと、切り替えたあとの子の通知が親の端末に届かない。
+  if (isPushActive()) initPush({ familyCode: code, role: state.role }).catch(() => {});
 };
 
 window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.setItem('ienomics_furigana', state.furigana); applyFuriganaState(); render(); };
@@ -1215,6 +1253,74 @@ window.addNewChild = async () => {
   if (!code) return;
   await showAlert(`お子様の端末で同期ID【 ${code} 】を入力してください。`, { title: `「${name}」を登録しました` });
   switchActiveChild(code);
+};
+
+// 同期IDにひもづくデータの置き場所。お子さまを削除するときはここを全部さらう。
+// pushTokens は一覧で引けない決まりにしてあるので、Cloud Functions 側で掃除する。
+const FAMILY_DATA_COLLECTIONS = [
+  'tasks', 'taskTemplates', 'tickets', 'exchanges', 'investments',
+  'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
+];
+
+/** ある同期IDにひもづく書類を、まとめ書きの上限（500件）を超えないように分けて消す */
+async function deleteFamilyDocs(collectionName, familyCode) {
+  const snap = await getDocs(query(collection(db, collectionName), where("familyCode", "==", familyCode)));
+  const refs = snap.docs.map(d => d.ref);
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const ref of refs.slice(i, i + 400)) batch.delete(ref);
+    await batch.commit();
+  }
+  return refs.length;
+}
+
+window.deleteChild = async (code) => {
+  const list = state.children || [];
+  const target = list.find(c => c.id === code);
+  if (!target) return;
+
+  const name = target.childName || 'このお子さま';
+
+  // 最後の1人を消すと口座がなくなり、親は新しく作り直す入口を失ってしまう
+  if (list.length <= 1) {
+    return showAlert(
+      'ひとりだけのときは削除できません。\n先に別のお子さまを追加してから削除してください。',
+      { title: '削除できません' }
+    );
+  }
+
+  const ok = await showConfirm(
+    `「${name}」のお仕事・ポイント・株・チケット・履歴が、すべて消えます。\n元に戻すことはできません。`,
+    { title: `「${name}」を削除しますか？`, okLabel: '確認へ進む', tone: 'danger' }
+  );
+  if (!ok) return;
+
+  // 押しまちがいで消えてしまわないよう、名前を書いてもらう
+  const typed = await showPrompt(
+    `本当に消す場合は、下に「${name}」と入力してください。`,
+    { title: '最後の確認', placeholder: name, okLabel: '削除する', tone: 'danger' }
+  );
+  if (typed === null || typed === undefined) return;
+  if (String(typed).trim() !== name) {
+    return showAlert('名前が合いませんでした。削除はしていません。', { title: '削除を取り消しました' });
+  }
+
+  const next = list.find(c => c.id !== code);
+
+  const done = await guard(`deleteChild:${code}`, async () => {
+    for (const collectionName of FAMILY_DATA_COLLECTIONS) {
+      await deleteFamilyDocs(collectionName, code);
+    }
+    // 家族の書類はいちばん最後に消す。先に消すとルールの家族チェックが通らなくなり、
+    // 残ったデータを消せなくなってしまう。
+    await deleteDoc(doc(db, "families", code));
+    return true;
+  }, { busyLabel: `「${name}」のデータを消しています...` });
+
+  if (!done) return;
+
+  showToast(`「${name}」を削除しました`);
+  if (next) switchActiveChild(next.id);
 };
 
 window.unlinkAccount = async () => {

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=132';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=132';
-import { refreshTutorial } from './tutorial.js?v=132';
-import { auth } from './firebase.js?v=132';
+import { state } from './state.js?v=133';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=133';
+import { refreshTutorial } from './tutorial.js?v=133';
+import { auth } from './firebase.js?v=133';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -212,6 +212,41 @@ function renderChildTabs(tone) {
   }).join('');
 
   return `<div class="ie-child-tabs ie-child-tabs-${tone}" role="tablist" aria-label="お子さまの切り替え" data-tour="childtabs">${tabs}</div>`;
+}
+
+/**
+ * 設定画面のお子さま一覧。切り替えと削除ができる。
+ * ひとりだけのときは削除できない（口座がなくなると作り直せなくなる）ので出さない。
+ */
+function renderChildManageList() {
+  const list = Array.isArray(state.children) ? state.children : [];
+  if (state.role !== 'parent' || list.length < 2) return '';
+
+  const rows = list.map(c => {
+    const active = c.id === state.familyCode;
+    const sub = active
+      ? 'いま表示中'
+      : (c.childLinked === false ? 'まだ端末とつながっていません' : `${(c.points || 0).toLocaleString()}pt`);
+    return `
+      <div class="ie-child-row ${active ? 'on' : ''}">
+        <button type="button" onclick="switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
+          <span class="ie-child-row-name">${esc(c.childName)}</span>
+          <span class="ie-child-row-sub">${esc(sub)}</span>
+        </button>
+        <button type="button" onclick="deleteChild('${esc(c.id)}')" class="ie-child-row-del" aria-label="${esc(c.childName)}を削除する" title="${esc(c.childName)}を削除する">
+          <span class="w-4 h-4">${getIcon('trash')}</span>
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="ie-child-manage mb-4">
+      <p class="ie-child-manage-title">お子さまの${rb('一覧','いちらん')}</p>
+      ${rows}
+      <p class="ie-child-manage-note">ゴミ箱を押すと、その子のお仕事・ポイント・株・履歴がすべて消えます。元には戻せません。</p>
+    </div>
+  `;
 }
 
 function renderHeader() {
@@ -959,6 +994,7 @@ function renderSettings() {
         </span>
         <span class="ie-guide-arrow" aria-hidden="true">›</span>
       </button>
+      ${renderChildManageList()}
     `}
 
     <button onclick="startAppTutorial()" class="ie-guide-btn w-full mb-4" aria-label="使い方ガイドを最初から見る">

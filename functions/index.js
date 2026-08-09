@@ -9,7 +9,7 @@
 //   各端末は pushTokens コレクションに { familyCode, role, token } を登録する。
 //   「この家族の子供の端末ぜんぶ」に送りたいときは、そこを検索して使う。
 
-const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { setGlobalOptions } = require('firebase-functions/v2');
 const { initializeApp } = require('firebase-admin/app');
@@ -217,6 +217,36 @@ exports.onPaymentCharged = onDocumentCreated('paymentLogs/{logId}', async (event
     ? `「${l.title}」 −${amount}pt。口座がマイナスになりました`
     : `「${l.title}」 −${amount}pt`;
   await notify(l.familyCode, 'all', title, body, 'payment');
+});
+
+// ---- お子さまの口座が削除されたとき ----
+//
+// 端末側でも関連データを消しているが、通知の宛先（pushTokens）は
+// 「一覧で引けない」決まりにしてあるため端末からは掃除できない。
+// 残しておくと消えた口座宛の通知が届き続けるので、ここで消す。
+// 途中で通信が切れて端末側が消しきれなかった分の取りこぼしも拾う。
+exports.onFamilyDeleted = onDocumentDeleted('families/{code}', async (event) => {
+  const code = event.params.code;
+  const collections = [
+    'pushTokens', 'tasks', 'taskTemplates', 'tickets', 'exchanges',
+    'investments', 'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
+  ];
+
+  let total = 0;
+  for (const name of collections) {
+    // まとめ書きの上限を超えないよう、500件ずつ消していく
+    while (true) {
+      const snap = await db.collection(name).where('familyCode', '==', code).limit(400).get();
+      if (snap.empty) break;
+      const batch = db.batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+      total += snap.size;
+      if (snap.size < 400) break;
+    }
+  }
+
+  console.log(`[onFamilyDeleted] family=${code} の残りデータ${total}件を削除`);
 });
 
 /**

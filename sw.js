@@ -44,7 +44,7 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
-const VERSION = 'v132';
+const VERSION = 'v133';
 const SHELL_CACHE = `ienomics-shell-${VERSION}`;
 const RUNTIME_CACHE = `ienomics-runtime-${VERSION}`;
 
