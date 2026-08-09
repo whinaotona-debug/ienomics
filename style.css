@@ -435,45 +435,18 @@ input[type="date"],
 input[type="time"],
 input[type="datetime-local"],
 textarea,
-select:not(.ie-hero-select) {
+select {
   border-radius: 14px !important;
   border-color: var(--ie-line) !important;
   background: #f7faf9 !important;
   color: var(--ie-ink) !important;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
-input:focus, textarea:focus, select:not(.ie-hero-select):focus {
+input:focus, textarea:focus, select:focus {
   outline: none !important;
   border-color: var(--ie-accent) !important;
   background: #fff !important;
   box-shadow: 0 0 0 3px rgba(47, 143, 130, 0.15);
-}
-
-/* ヘッダーの子供名セレクトは枠・背景なし */
-.ie-hero-select {
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  color: rgba(255, 255, 255, 0.85) !important;
-  font-size: 10px !important;
-  font-weight: 700 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  max-width: 140px;
-  cursor: pointer;
-  outline: none !important;
-}
-.ie-hero-select:focus {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-.ie-hero-select option {
-  color: #1c2b27 !important;
-  background: #fff !important;
 }
 
 .password-wrapper {
@@ -576,6 +549,63 @@ textarea:focus-visible,
 .ie-guide-title { font-size: 14px; font-weight: 800; color: var(--ie-ink); }
 .ie-guide-sub { font-size: 11px; font-weight: 700; color: var(--ie-muted); line-height: 1.45; }
 .ie-guide-arrow { flex: none; font-size: 20px; font-weight: 800; color: var(--ie-accent); }
+
+/* ===== お子さまの切り替えタブ ===== */
+.ie-child-tabs {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ie-child-tabs::-webkit-scrollbar { display: none; }
+.ie-child-tab {
+  flex: none;
+  max-width: 108px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.ie-child-tab:active { transform: scale(0.96); }
+
+/* 濃い色のヘッダーの上に置くとき */
+.ie-child-tabs-hero .ie-child-tab {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.85);
+}
+.ie-child-tabs-hero .ie-child-tab.on {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: var(--ie-accent-deep);
+}
+
+/* 白い背景の上に置くとき */
+.ie-child-tabs-light {
+  flex: 0 1 auto;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ie-child-tabs-light .ie-child-tab {
+  background: #f1f6f4;
+  border: 1px solid var(--ie-line-soft);
+  color: var(--ie-ink-soft);
+}
+.ie-child-tabs-light .ie-child-tab.on {
+  background: var(--ie-accent);
+  border-color: var(--ie-accent);
+  color: #ffffff;
+}
 
 /* 通知のオン・オフ表示 */
 .ie-push-state {

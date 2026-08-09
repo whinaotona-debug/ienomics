@@ -1,7 +1,7 @@
-import { state } from './state.js?v=131';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=131';
-import { refreshTutorial } from './tutorial.js?v=131';
-import { auth } from './firebase.js?v=131';
+import { state } from './state.js?v=132';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=132';
+import { refreshTutorial } from './tutorial.js?v=132';
+import { auth } from './firebase.js?v=132';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -192,15 +192,33 @@ export function render() {
   refreshTutorial();
 }
 
+/**
+ * お子さまの名前を並べて、タップで口座を切り替えられるようにする。
+ * ひとりだけのときは切り替える意味がないので何も返さない。
+ * @param {'hero'|'light'} tone 置く場所の背景に合わせた見た目
+ */
+function renderChildTabs(tone) {
+  if (state.role !== 'parent') return '';
+  const list = Array.isArray(state.children) ? state.children : [];
+  if (list.length < 2) return '';
+
+  const tabs = list.map(c => {
+    const on = c.id === state.familyCode;
+    const waiting = c.childLinked === false ? ' ⏳' : '';
+    return `<button type="button" role="tab" aria-selected="${on}"
+              onclick="switchActiveChild('${esc(c.id)}')"
+              class="ie-child-tab ${on ? 'on' : ''}"
+              title="${esc(c.childName)}${c.childLinked === false ? '（連携待ち）' : ''}">${esc(c.childName)}${waiting}</button>`;
+  }).join('');
+
+  return `<div class="ie-child-tabs ie-child-tabs-${tone}" role="tablist" aria-label="お子さまの切り替え" data-tour="childtabs">${tabs}</div>`;
+}
+
 function renderHeader() {
   let nameTag = '';
   if (state.role === 'parent') {
-    nameTag = `
-      <select onchange="switchActiveChild(this.value)" class="ie-hero-select hover:text-white transition">
-        ${state.children.map(c => `<option value="${esc(c.id)}" ${c.id === state.familyCode ? 'selected' : ''}>${esc(c.childName)} の口座</option>`).join('')}
-      </select>
-      <button onclick="addNewChild()" class="text-[8px] bg-white/15 hover:bg-white/25 text-white px-2.5 py-1 rounded-lg transition ml-1 font-bold border border-white/20">＋追加</button>
-    `;
+    nameTag = renderChildTabs('hero')
+      || `<p class="text-[10px] text-white/85 font-bold tracking-[0.08em]">${esc(state.childName)} の${rb('口座','こうざ')}</p>`;
   } else {
     nameTag = `<p class="text-[10px] text-white/85 font-bold tracking-[0.08em]">${esc(state.childName)} の${rb('資産','しさん')}</p>`;
   }
@@ -224,8 +242,8 @@ function renderHeader() {
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
         <div class="flex-1 relative z-10 min-w-0 pr-10">
-          <div class="flex items-center gap-1.5 mb-1.5">
-             <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20">
+          <div class="flex items-center gap-1.5 mb-1.5 min-w-0">
+             <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20 flex-none">
                <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
              </div>
              ${nameTag}
@@ -930,6 +948,19 @@ function renderSettings() {
 
     ${pushRow}
 
+    ${isChild ? '' : `
+      <button onclick="addNewChild()" class="ie-guide-btn w-full mb-4" aria-label="お子さまを追加する">
+        <span class="ie-guide-icon">${getIcon('childAdd')}</span>
+        <span class="ie-guide-text">
+          <span class="ie-guide-title">お子さまを${rb('追加','ついか')}</span>
+          <span class="ie-guide-sub">${state.children.length >= 2
+            ? `いま${state.children.length}人。上の名前をタップで切り替えできます`
+            : '兄弟姉妹を登録すると、上の名前をタップで切り替えできます'}</span>
+        </span>
+        <span class="ie-guide-arrow" aria-hidden="true">›</span>
+      </button>
+    `}
+
     <button onclick="startAppTutorial()" class="ie-guide-btn w-full mb-4" aria-label="使い方ガイドを最初から見る">
       <span class="ie-guide-icon">${getIcon('help')}</span>
       <span class="ie-guide-text">
@@ -1215,7 +1246,29 @@ function renderPasswordResetForm() {
     </div>
   `;
 }
-function renderWaitingChild() { return `<div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden"><img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" /><div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95"><h3 class="font-black text-slate-800 mb-2 text-lg">${esc(state.childName)} の連携待機中</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。</p><div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${state.familyCode}</div><div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse"><div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...</div>${state.children.length > 1 ? `<button onclick="switchActiveChild('${state.children.find(c=>c.id!==state.familyCode)?.id}')" class="text-[10px] text-blue-500 font-bold mb-4">別の子供の画面へ</button><br>` : ''}<button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button></div></div>`; }
+function renderWaitingChild() {
+  const tabs = renderChildTabs('light');
+  return `
+    <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
+      <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
+      <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center animate-in zoom-in-95">
+        <h3 class="font-black text-slate-800 mb-2 text-lg">${esc(state.childName)} の連携待機中</h3>
+        <p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
+          子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。
+        </p>
+        <div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${esc(state.familyCode)}</div>
+        <div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse">
+          <div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...
+        </div>
+        ${tabs ? `
+          <p class="text-[10px] font-bold text-slate-500 mb-2">ほかのお子さまの画面に切り替え</p>
+          <div class="mb-6">${tabs}</div>
+        ` : ''}
+        <button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderSetup() {
   let content = '';

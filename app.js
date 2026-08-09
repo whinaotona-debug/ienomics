@@ -1,10 +1,10 @@
-import { state } from './state.js?v=131';
-import { render } from './ui.js?v=131';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=131';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=131';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=131';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=131';
-import { db, auth } from './firebase.js?v=131';
+import { state } from './state.js?v=132';
+import { render } from './ui.js?v=132';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=132';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=132';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=132';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=132';
+import { db, auth } from './firebase.js?v=132';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, increment, deleteDoc, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -457,6 +457,20 @@ async function runMigrationAndLoadChildren(uid) {
   loadParentChildren(uid);
 }
 
+/**
+ * state.children のうち、いま選んでいる子の情報を画面用の state に写す。
+ * 切り替え直後は Firestore からの通知が来ないので、ここで自分で反映しないと
+ * 名前・残高・連携状態が前の子のまま残ってしまう。
+ */
+function applyActiveChild() {
+  const active = (state.children || []).find(c => c.id === state.familyCode);
+  if (!active) return false;
+  state.childName = active.childName;
+  state.points = active.points || 0;
+  state.childLinked = active.childLinked !== false;
+  return true;
+}
+
 function loadParentChildren(parentUid) {
   const q = query(collection(db, "families"), where("parentUid", "==", parentUid));
   if (window.unsubChildren) window.unsubChildren();
@@ -467,10 +481,7 @@ function loadParentChildren(parentUid) {
     if (list.length > 0) {
       if (!list.some(c => c.id === state.familyCode)) state.familyCode = list[0].id;
       localStorage.setItem('ienomics_familyCode', state.familyCode);
-      const activeChild = list.find(c => c.id === state.familyCode);
-      state.childName = activeChild.childName;
-      state.points = activeChild.points || 0;
-      state.childLinked = activeChild.childLinked !== false;
+      applyActiveChild();
       setupListeners();
     } else {
       state.familyCode = null; state.childName = ''; state.points = 0; state.childLinked = false; render();
@@ -802,12 +813,16 @@ window.deleteTemplate = async () => {
   }, { busyLabel: '削除しています...' });
 };
 
-// ★ 修正：切り替えた時に「作ったよスタンプ」をリセットする
-window.switchActiveChild = (code) => { 
-  state.familyCode = code; 
-  localStorage.setItem('ienomics_familyCode', code); 
-  generatedToday = {}; // 別の子供に切り替えたらリセット
-  setupListeners(); 
+window.switchActiveChild = (code) => {
+  if (!code || code === state.familyCode) return;
+  state.familyCode = code;
+  localStorage.setItem('ienomics_familyCode', code);
+  generatedToday = {}; // 別の子供に切り替えたら「今日作ったよスタンプ」をリセット
+  // 名前・残高・連携状態を先に反映する。これをしないと連携待ち画面から抜けられない。
+  applyActiveChild();
+  state.view = 'home';
+  setupListeners();
+  render();
 };
 
 window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.setItem('ienomics_furigana', state.furigana); applyFuriganaState(); render(); };

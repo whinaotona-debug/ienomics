@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=131';
+import { esc } from './utils.js?v=132';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -24,7 +24,14 @@ const PARENT_STEPS = [
   {
     target: 'synccode',
     title: '同期ID',
-    body: 'お子さまの端末でこのIDを入力すると、親子の画面がつながります。お子さまを追加したいときは名前の横の「＋追加」からどうぞ。'
+    body: 'お子さまの端末でこのIDを入力すると、親子の画面がつながります。お子さまを追加したいときは、設定の「お子さまを追加」からどうぞ。'
+  },
+  {
+    target: 'childtabs',
+    // お子さまがひとりのときは切り替えタブが出ないので、この説明も飛ばす
+    requireTarget: true,
+    title: 'お子さまの切り替え',
+    body: 'ごきょうだいを登録すると、ここに名前が並びます。タップするとその子の口座に切り替わります。砂時計のマークは、まだ端末がつながっていない子です。'
   },
   {
     target: 'job',
@@ -285,8 +292,11 @@ export function startTutorial(role, options = {}) {
   window.addEventListener('resize', onResize);
   document.addEventListener('keydown', onKey, true);
   localStorage.setItem(SEEN_KEY, 'true');
-  // ホームが描画され終わってから位置を測る
-  setTimeout(draw, 80);
+  // ホームが描画され終わってから、実際に画面にある項目だけに絞って始める
+  setTimeout(() => {
+    steps = steps.filter(s => !s.requireTarget || findTarget(s.target));
+    draw();
+  }, 80);
 }
 
 export function end() {
