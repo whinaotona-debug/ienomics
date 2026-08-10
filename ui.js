@@ -1,7 +1,7 @@
-import { state } from './state.js?v=133';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=133';
-import { refreshTutorial } from './tutorial.js?v=133';
-import { auth } from './firebase.js?v=133';
+import { state } from './state.js?v=134';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=134';
+import { refreshTutorial } from './tutorial.js?v=134';
+import { auth } from './firebase.js?v=134';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -663,13 +663,13 @@ function renderTaskCreate() {
           <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-monthly">毎月指定</button>
         </div>
         <div id="weekly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（0時自動追加）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（当日になると自動で追加）</p>
           <div class="flex gap-2 flex-wrap">
             ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="repeat-weeks" value="${i}"> ${w}</label>`).join('')}
           </div>
         </div>
         <div id="monthly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（0時自動追加）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（当日になると自動で追加）</p>
           <select id="repeat-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
             ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}
           </select>

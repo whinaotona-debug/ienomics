@@ -1,4 +1,4 @@
-import { state } from './state.js?v=133';
+import { state } from './state.js?v=134';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -109,11 +109,12 @@ export function getTemplateIdFromTask(task) {
 export function formatRepeatLabel(temp) {
   if (!temp) return '定期';
   const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
+  const days = (temp.days || []).map(d => Number(d)).filter(d => Number.isFinite(d));
   if (temp.type === 'weekly') {
-    const days = (temp.days || []).slice().sort((a, b) => a - b).map(d => weekNames[d]).join('');
-    return `毎週${days || '？'} ${temp.time || ''}`;
+    const label = days.slice().sort((a, b) => a - b).map(d => weekNames[d] || '?').join('');
+    return `毎週${label || '？'} ${temp.time || ''}`;
   }
-  const day = (temp.days && temp.days[0]) || '?';
+  const day = days[0] ?? '?';
   return `毎月${day}日 ${temp.time || ''}`;
 }
 

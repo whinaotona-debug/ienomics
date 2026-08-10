@@ -1,10 +1,10 @@
-import { state } from './state.js?v=133';
-import { render } from './ui.js?v=133';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=133';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=133';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=133';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=133';
-import { db, auth } from './firebase.js?v=133';
+import { state } from './state.js?v=134';
+import { render } from './ui.js?v=134';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=134';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=134';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=134';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=134';
+import { db, auth } from './firebase.js?v=134';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -191,10 +191,13 @@ function startDeadlineWatcher() {
   checkDeadlineReminders();
   processScheduledPayments();
   cleanupExpiredDeadlineTasks();
+  checkAndGenerateRepeatedTasks();
   deadlineTimer = setInterval(() => {
     checkDeadlineReminders();
     processScheduledPayments();
     cleanupExpiredDeadlineTasks();
+    // アプリを開きっぱなしで日付が変わったときも、定期発注を拾う
+    checkAndGenerateRepeatedTasks();
   }, DEADLINE_CHECK_MS);
 }
 
@@ -269,10 +272,10 @@ function isScheduledPaymentDue(p, now, todayStr) {
 
   // 定期
   if (p.interval === 'weekly') {
-    return (p.days || []).includes(now.getDay());
+    return (p.days || []).map(Number).includes(now.getDay());
   }
   if (p.interval === 'monthly') {
-    return (p.days || []).includes(now.getDate());
+    return (p.days || []).map(Number).includes(now.getDate());
   }
   return false;
 }
@@ -479,10 +482,17 @@ function loadParentChildren(parentUid) {
     snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.children = list.sort((a, b) => a.createdAt - b.createdAt);
     if (list.length > 0) {
+      const prevCode = state.familyCode;
       if (!list.some(c => c.id === state.familyCode)) state.familyCode = list[0].id;
       localStorage.setItem('ienomics_familyCode', state.familyCode);
       applyActiveChild();
-      setupListeners();
+      // ポイント更新のたびにここが走る。毎回 setupListeners すると
+      // 定期発注の判定が途中でキャンセルされて、仕事が出てこないことがある。
+      if (state.familyCode !== prevCode || unsubscribes.length === 0) {
+        setupListeners();
+      } else {
+        render();
+      }
     } else {
       state.familyCode = null; state.childName = ''; state.points = 0; state.childLinked = false; render();
     }
@@ -524,19 +534,32 @@ async function dedupeRepeatedTasks() {
   }
 }
 
+/** 定期テンプレの曜日・日付を数字の配列にする（文字で保存されていても判定できるように） */
+function normalizeTemplateDays(days) {
+  if (!Array.isArray(days)) return [];
+  return days.map(d => Number(d)).filter(d => Number.isFinite(d));
+}
+
+/** 今日このテンプレから発注すべきか */
+function shouldGenerateTemplateToday(temp, now = new Date()) {
+  if (!temp) return false;
+  const days = normalizeTemplateDays(temp.days);
+  if (temp.type === 'weekly') return days.includes(now.getDay());
+  if (temp.type === 'monthly') return days.includes(now.getDate());
+  return false;
+}
+
 async function checkAndGenerateRepeatedTasks() {
-  // 子端末では作らない（親子同時書き込みの二重発注を防ぐ）
-  if (state.role !== 'parent') return;
+  // ドキュメントIDが決まっているので、親子どちらが作っても二重にならない。
+  // 親の端末が閉じていると子供側に仕事が出ないのを防ぐため、どちらでも生成する。
   if (!state.familyCode || !state.tasksReady || isGenerating) return;
   if (!state.taskTemplates || state.taskTemplates.length === 0) return;
   isGenerating = true;
 
   try {
-    await dedupeRepeatedTasks();
+    if (state.role === 'parent') await dedupeRepeatedTasks();
 
     const now = new Date();
-    const currentDay = now.getDay();
-    const currentDate = now.getDate();
     const todayStr = todayKeyString();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
@@ -546,45 +569,48 @@ async function checkAndGenerateRepeatedTasks() {
     );
 
     for (const temp of state.taskTemplates) {
-      const generatedKey = `rep_${temp.id}_${todayStr}`;
+      try {
+        const generatedKey = `rep_${temp.id}_${todayStr}`;
 
-      if (generatedToday[generatedKey] || existingKeys.has(generatedKey)) {
-        generatedToday[generatedKey] = true;
-        continue;
-      }
+        if (generatedToday[generatedKey] || existingKeys.has(generatedKey)) {
+          generatedToday[generatedKey] = true;
+          continue;
+        }
 
-      // 確定IDのドキュメントが既にあればスキップ（他端末との競合対策）
-      const taskRef = doc(db, "tasks", generatedKey);
-      const existingDoc = await getDoc(taskRef);
-      if (existingDoc.exists()) {
-        generatedToday[generatedKey] = true;
-        existingKeys.add(generatedKey);
-        continue;
-      }
+        // 確定IDのドキュメントが既にあればスキップ（他端末・サーバーとの競合対策）
+        const taskRef = doc(db, "tasks", generatedKey);
+        const existingDoc = await getDoc(taskRef);
+        if (existingDoc.exists()) {
+          generatedToday[generatedKey] = true;
+          existingKeys.add(generatedKey);
+          continue;
+        }
 
-      let shouldCreate = false;
-      if (temp.type === 'weekly' && temp.days.includes(currentDay)) shouldCreate = true;
-      if (temp.type === 'monthly' && temp.days.includes(currentDate)) shouldCreate = true;
+        if (!shouldGenerateTemplateToday(temp, now)) continue;
 
-      if (shouldCreate) {
         generatedToday[generatedKey] = true;
         existingKeys.add(generatedKey);
 
-        const [hours, minutes] = temp.time.split(':').map(Number);
+        const timeParts = String(temp.time || '19:00').split(':');
+        const hours = Number(timeParts[0]);
+        const minutes = Number(timeParts[1]) || 0;
         const deadlineDate = new Date(todayStart);
-        deadlineDate.setHours(hours, minutes, 0, 0);
+        deadlineDate.setHours(Number.isFinite(hours) ? hours : 19, minutes, 0, 0);
 
         // addDoc禁止: 同じ generatedKey をドキュメントIDにして上書き合流させる
         await setDoc(taskRef, {
           familyCode: state.familyCode,
           title: temp.title,
-          points: temp.points,
+          points: Number(temp.points) || 0,
           status: 'open',
           generatedKey: generatedKey,
           templateId: temp.id,
           createdAt: Date.now(),
           deadline: deadlineDate.getTime()
         });
+      } catch (inner) {
+        // 1件の失敗で残り全部を止めない
+        console.error("繰り返しタスク1件の生成エラー:", temp?.id, inner);
       }
     }
   } catch (error) {
