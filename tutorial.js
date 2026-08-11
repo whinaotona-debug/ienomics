@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=135';
+import { esc } from './utils.js?v=136';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -41,7 +41,7 @@ const PARENT_STEPS = [
   {
     target: 'job',
     title: 'お仕事を発注する',
-    body: 'ここから仕事の内容・報酬・期限を決めて発注します。「定期的に繰り返す」をオンにすると、毎週や毎月、自動で仕事が追加されます。'
+    body: 'ここから仕事の内容・報酬・期限を決めて発注します。「定期的に繰り返す」をオンにすると、毎週や毎月、0:00に自動で仕事が追加されます。定期は受注不要で、子供はすぐ完了報告できます。'
   },
   {
     target: 'templates',

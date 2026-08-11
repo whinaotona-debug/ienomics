@@ -1,10 +1,10 @@
-import { state } from './state.js?v=135';
-import { render } from './ui.js?v=135';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=135';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=135';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=135';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=135';
-import { db, auth } from './firebase.js?v=135';
+import { state } from './state.js?v=136';
+import { render } from './ui.js?v=136';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=136';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=136';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=136';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=136';
+import { db, auth } from './firebase.js?v=136';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -651,14 +651,15 @@ async function checkAndGenerateRepeatedTasks() {
         const deadlineDate = new Date(todayStart);
         deadlineDate.setHours(Number.isFinite(hours) ? hours : 19, minutes, 0, 0);
 
-        // addDoc禁止: 同じ generatedKey をドキュメントIDにして上書き合流させる
+        // 定期は受注手続きなしで、いきなり進行中（accepted）にする
         await setDoc(taskRef, {
           familyCode: state.familyCode,
           title: temp.title,
           points: Number(temp.points) || 0,
-          status: 'open',
+          status: 'accepted',
           generatedKey: generatedKey,
           templateId: temp.id,
+          autoAccepted: true,
           createdAt: Date.now(),
           deadline: deadlineDate.getTime()
         });
@@ -756,6 +757,13 @@ function setupListeners() {
               localNotify(
                 "新しいお仕事！",
                 `「${t.title}」（${t.points}pt）が発注されました！`
+              );
+            }
+            // 定期は受注なしで始まる → 子供へ
+            if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey)) {
+              localNotify(
+                "今日の定期のお仕事",
+                `「${t.title}」（${t.points}pt）が始まりました！`
               );
             }
             // 子供が見積り → 親へ
