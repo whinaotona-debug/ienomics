@@ -1,10 +1,10 @@
-import { state } from './state.js?v=136';
-import { render } from './ui.js?v=136';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=136';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=136';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=136';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=136';
-import { db, auth } from './firebase.js?v=136';
+import { state } from './state.js?v=137';
+import { render } from './ui.js?v=137';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=137';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=137';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=137';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=137';
+import { db, auth } from './firebase.js?v=137';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 

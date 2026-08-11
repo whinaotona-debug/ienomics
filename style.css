@@ -338,6 +338,26 @@ html, body {
   background: #f7fbf9;
   border-color: var(--ie-line-soft);
 }
+.ie-job-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+.ie-job-mark {
+  flex: none;
+}
+.ie-job-title {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2c3d38;
+  line-height: 1.45;
+}
 .ie-job-urgent-soon {
   border-color: #f0c27a !important;
   background: #fffaf2 !important;
@@ -403,14 +423,16 @@ html, body {
   border-radius: 16px;
 }
 
-/* 長い名前でも省略せず折り返して全部見せる */
+/* 長い名前でも省略せず折り返して全部見せる。
+   anywhere だと幅が狭いとき1文字ずつ縦に並ぶので使わない。 */
 .ie-wrap-text {
   white-space: normal !important;
   overflow: visible !important;
   text-overflow: clip !important;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  line-height: 1.4;
+  overflow-wrap: break-word;
+  word-break: normal;
+  line-height: 1.45;
+  min-width: 0;
 }
 
 .ie-modal-backdrop {

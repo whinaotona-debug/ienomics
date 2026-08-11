@@ -1,7 +1,7 @@
-import { state } from './state.js?v=136';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=136';
-import { refreshTutorial } from './tutorial.js?v=136';
-import { auth } from './firebase.js?v=136';
+import { state } from './state.js?v=137';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=137';
+import { refreshTutorial } from './tutorial.js?v=137';
+import { auth } from './firebase.js?v=137';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -626,18 +626,18 @@ function renderHome() {
 
     const body = `
       <div class="ie-job-item ${urgencyClass(t)}">
-        <div class="flex justify-between items-start gap-2 min-w-0">
-          <div class="flex items-start gap-1.5 min-w-0 flex-1">
-            ${repeatMark}
-            <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(t.title)}</span>
-          </div>
-          <div class="flex items-center gap-1.5 shrink-0">
+        <div class="ie-job-head">
+          ${repeatMark ? `<div class="ie-job-mark">${repeatMark}</div>` : ''}
+          <p class="ie-job-title ie-wrap-text">${esc(t.title)}</p>
+        </div>
+        <div class="flex justify-between items-center gap-2 min-w-0">
+          <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
             ${statusChip(t)}
             <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
           </div>
-        </div>
-        <div class="flex justify-between items-center mt-0.5">
           <span class="text-xs font-black text-[#1c2b27] shrink-0">${t.points} <span class="text-[9px] font-bold text-[#7a8f88]">pt</span></span>
+        </div>
+        <div class="flex justify-end items-center mt-0.5">
           ${btn}
         </div>
       </div>
@@ -867,12 +867,12 @@ function renderTemplatesList() {
           <button type="button" ${action} class="ie-job-item w-full text-left ${isParent ? 'cursor-pointer hover:bg-[#f0f7f4]' : 'cursor-default'} transition">
             <div class="flex justify-between items-start gap-2 min-w-0">
               <div class="min-w-0 flex-1">
-                <div class="flex items-start gap-1.5 min-w-0">
-                  <span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100">
+                <div class="ie-job-head">
+                  <span class="ie-job-mark shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100">
                     <span class="w-3 h-3">${getIcon('repeat')}</span>
                     <span class="text-[8px] font-black tracking-wide">定期</span>
                   </span>
-                  <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(temp.title || '無題')}</span>
+                  <p class="ie-job-title ie-wrap-text">${esc(temp.title || '無題')}</p>
                 </div>
                 <p class="text-[10px] font-bold text-[#5f7970] mt-1.5">${esc(sched)}</p>
               </div>
