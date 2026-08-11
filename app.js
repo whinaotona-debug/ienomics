@@ -1,10 +1,10 @@
-import { state } from './state.js?v=134';
-import { render } from './ui.js?v=134';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=134';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=134';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=134';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=134';
-import { db, auth } from './firebase.js?v=134';
+import { state } from './state.js?v=135';
+import { render } from './ui.js?v=135';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=135';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=135';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=135';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=135';
+import { db, auth } from './firebase.js?v=135';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -134,6 +134,8 @@ async function claimChildMembership(code) {
 // ★ 追加：今日追加したテンプレートのIDを記憶しておく箱（セッション中の一時記憶）
 let generatedToday = {};
 let deadlineTimer = null;
+let midnightTimer = null;
+let watchedDayKey = null;
 const DEADLINE_REMIND_MS = 60 * 60 * 1000; // 1時間前
 const DEADLINE_CHECK_MS = 30 * 1000;
 
@@ -192,12 +194,13 @@ function startDeadlineWatcher() {
   processScheduledPayments();
   cleanupExpiredDeadlineTasks();
   checkAndGenerateRepeatedTasks();
+  scheduleMidnightTick();
   deadlineTimer = setInterval(() => {
     checkDeadlineReminders();
     processScheduledPayments();
     cleanupExpiredDeadlineTasks();
-    // アプリを開きっぱなしで日付が変わったときも、定期発注を拾う
-    checkAndGenerateRepeatedTasks();
+    // 日付が変わっていたら、定期の「今日分」フラグを捨てて作り直す
+    ensureTodayGeneration();
   }, DEADLINE_CHECK_MS);
 }
 
@@ -206,6 +209,55 @@ function stopDeadlineWatcher() {
     clearInterval(deadlineTimer);
     deadlineTimer = null;
   }
+  if (midnightTimer) {
+    clearTimeout(midnightTimer);
+    midnightTimer = null;
+  }
+}
+
+/** 次の0:00（少し過ぎた直後）までのミリ秒 */
+function msUntilNextMidnight() {
+  const now = new Date();
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 80);
+  return Math.max(200, next.getTime() - now.getTime());
+}
+
+/**
+ * アプリを開きっぱなしでも、0:00ちょうどに定期を出す。
+ * タイマーはスマホがスリープすると遅れることがあるので、サーバー側の0:00実行と併用する。
+ */
+function scheduleMidnightTick() {
+  if (midnightTimer) clearTimeout(midnightTimer);
+  midnightTimer = setTimeout(async () => {
+    generatedToday = {};
+    watchedDayKey = todayKeyString();
+    const created = await checkAndGenerateRepeatedTasks();
+    if (created > 0) showToast(`今日の定期のお仕事を${created}件追加しました`);
+    scheduleMidnightTick();
+  }, msUntilNextMidnight());
+}
+
+/** 日付が変わっていたら、その日の定期を今すぐ作る */
+async function ensureTodayGeneration() {
+  const today = todayKeyString();
+  if (watchedDayKey === today) {
+    await checkAndGenerateRepeatedTasks();
+    return;
+  }
+  watchedDayKey = today;
+  generatedToday = {};
+  const created = await checkAndGenerateRepeatedTasks();
+  if (created > 0) showToast(`今日の定期のお仕事を${created}件追加しました`);
+}
+
+// バックグラウンドから戻ったときも、日付またぎを拾う
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && state.familyCode) {
+      ensureTodayGeneration();
+      scheduleMidnightTick();
+    }
+  });
 }
 
 let isCleaningExpiredTasks = false;
@@ -552,15 +604,17 @@ function shouldGenerateTemplateToday(temp, now = new Date()) {
 async function checkAndGenerateRepeatedTasks() {
   // ドキュメントIDが決まっているので、親子どちらが作っても二重にならない。
   // 親の端末が閉じていると子供側に仕事が出ないのを防ぐため、どちらでも生成する。
-  if (!state.familyCode || !state.tasksReady || isGenerating) return;
-  if (!state.taskTemplates || state.taskTemplates.length === 0) return;
+  if (!state.familyCode || !state.tasksReady || isGenerating) return 0;
+  if (!state.taskTemplates || state.taskTemplates.length === 0) return 0;
   isGenerating = true;
+  let created = 0;
 
   try {
     if (state.role === 'parent') await dedupeRepeatedTasks();
 
     const now = new Date();
     const todayStr = todayKeyString();
+    watchedDayKey = todayStr;
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // 削除済みも含めてキーがあれば「今日は処理済み」（論理削除で再発注を防ぐ）
@@ -608,6 +662,7 @@ async function checkAndGenerateRepeatedTasks() {
           createdAt: Date.now(),
           deadline: deadlineDate.getTime()
         });
+        created += 1;
       } catch (inner) {
         // 1件の失敗で残り全部を止めない
         console.error("繰り返しタスク1件の生成エラー:", temp?.id, inner);
@@ -618,6 +673,7 @@ async function checkAndGenerateRepeatedTasks() {
   } finally {
     isGenerating = false;
   }
+  return created;
 }
 
 /**
@@ -792,6 +848,29 @@ window.reloadApp = () => {
   url.searchParams.set('_upd', String(Date.now()));
   // 認証用のクエリは残しつつ強制リロード
   window.location.replace(url.toString());
+};
+
+/** 同期IDをクリップボードへ。子供の端末に打ち込むとき、長いIDを手打ちしなくて済む */
+window.copySyncCode = async () => {
+  const code = state.familyCode;
+  if (!code) return;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(code);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    showToast('同期IDをコピーしました');
+  } catch (e) {
+    await showAlert(`同期ID: ${code}`, { title: 'コピーできませんでした' });
+  }
 };
 window.setSetupMode = (mode) => { state.setupMode = mode; state.setupStep = 1; render(); };
 window.cancelSetup = () => { state.setupMode = null; state.setupStep = 1; render(); };

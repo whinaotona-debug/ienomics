@@ -193,6 +193,76 @@ html, body {
   transform: scale(0.96);
 }
 
+/* —— 緑カードの上：ブランドバー —— */
+.ie-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  min-height: 36px;
+}
+.ie-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.ie-topbar-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--ie-surface);
+  border: 1px solid var(--ie-line);
+  box-shadow: var(--ie-shadow-soft);
+  flex: none;
+}
+.ie-topbar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ie-topbar-name {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: var(--ie-ink);
+  line-height: 1;
+}
+.ie-topbar-refresh {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ie-ink-soft);
+  background: var(--ie-surface);
+  border: 1px solid var(--ie-line);
+  box-shadow: var(--ie-shadow-soft);
+  transition: background 0.15s, transform 0.15s, color 0.15s;
+  flex: none;
+}
+.ie-topbar-refresh:hover {
+  background: var(--ie-accent-soft);
+  color: var(--ie-accent-deep);
+}
+.ie-topbar-refresh:active {
+  transform: scale(0.94);
+}
+.ie-topbar-refresh svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.ie-topbar-refresh:active svg {
+  animation: ieSpin 0.6s linear;
+}
+
 /* —— Header balance card —— */
 .ie-hero {
   background:
@@ -240,16 +310,6 @@ html, body {
   to { transform: translateY(-2px); }
 }
 
-.ie-refresh-btn svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  stroke-width: 2;
-  fill: none;
-}
-.ie-refresh-btn:active svg {
-  animation: ieSpin 0.6s linear;
-}
 @keyframes ieSpin {
   to { transform: rotate(360deg); }
 }
@@ -277,6 +337,70 @@ html, body {
 .ie-job-item:hover {
   background: #f7fbf9;
   border-color: var(--ie-line-soft);
+}
+.ie-job-urgent-soon {
+  border-color: #f0c27a !important;
+  background: #fffaf2 !important;
+}
+.ie-job-urgent-over {
+  border-color: #f0b0a8 !important;
+  background: #fff6f5 !important;
+}
+
+/* 状態チップ */
+.ie-status-chip {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ie-chip-open { background: #eef7f5; color: #246f65; border-color: #cfe8e2; }
+.ie-chip-accepted { background: #eef3fb; color: #3767bd; border-color: #d5e1f6; }
+.ie-chip-done { background: #fff4e8; color: #c47a20; border-color: #f3dfc0; }
+.ie-chip-proposed { background: #f3f0fb; color: #6b5cad; border-color: #ddd5f2; }
+.ie-chip-rejected { background: #fdecea; color: #d9655b; border-color: #f5cfcb; }
+
+/* 左スワイプで削除 */
+.ie-swipe {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #d9655b;
+}
+.ie-swipe-actions {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 76px;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.ie-swipe-delete {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  background: #d9655b;
+}
+.ie-swipe-delete:active { filter: brightness(0.92); }
+.ie-swipe-panel {
+  position: relative;
+  z-index: 1;
+  background: #fbfefd;
+  will-change: transform;
+  touch-action: pan-y;
+}
+.ie-swipe-panel .ie-job-item {
+  border-radius: 16px;
 }
 
 /* 長い名前でも省略せず折り返して全部見せる */

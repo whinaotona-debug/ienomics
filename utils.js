@@ -1,4 +1,4 @@
-import { state } from './state.js?v=134';
+import { state } from './state.js?v=135';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=134';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=134';
-import { refreshTutorial } from './tutorial.js?v=134';
-import { auth } from './firebase.js?v=134';
+import { state } from './state.js?v=135';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=135';
+import { refreshTutorial } from './tutorial.js?v=135';
+import { auth } from './firebase.js?v=135';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -187,9 +187,110 @@ export function render() {
 
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
   animatePointsDisplay();
+  bindSwipeRows(appDiv);
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
   // 画面が作り直されたので、ガイドの枠を測り直す
   refreshTutorial();
+}
+
+/**
+ * 親の仕事行を左にスワイプすると削除ボタンが出る。
+ * render() のたびに DOM が作り直されるので、都度付け直す。
+ */
+function bindSwipeRows(root) {
+  const rows = root.querySelectorAll('.ie-swipe');
+  if (!rows.length) return;
+
+  const closeAll = (except) => {
+    rows.forEach(row => {
+      if (row === except) return;
+      const panel = row.querySelector('.ie-swipe-panel');
+      if (panel) panel.style.transform = 'translateX(0)';
+      row.classList.remove('open');
+    });
+  };
+
+  rows.forEach(row => {
+    const panel = row.querySelector('.ie-swipe-panel');
+    if (!panel) return;
+    const ACTION_W = 76;
+    let startX = 0;
+    let startY = 0;
+    let currentX = 0;
+    let dragging = false;
+    let axis = null; // 'x' | 'y'
+
+    const setX = (x) => {
+      currentX = Math.min(0, Math.max(-ACTION_W, x));
+      panel.style.transform = `translateX(${currentX}px)`;
+    };
+
+    const onStart = (x, y) => {
+      startX = x;
+      startY = y;
+      dragging = true;
+      axis = null;
+      panel.style.transition = 'none';
+      closeAll(row);
+    };
+
+    const onMove = (x, y, e) => {
+      if (!dragging) return;
+      const dx = x - startX;
+      const dy = y - startY;
+      if (!axis) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+        if (axis === 'y') {
+          dragging = false;
+          return;
+        }
+      }
+      if (axis !== 'x') return;
+      if (e.cancelable) e.preventDefault();
+      const base = row.classList.contains('open') ? -ACTION_W : 0;
+      setX(base + dx);
+    };
+
+    const onEnd = () => {
+      if (!dragging && axis !== 'x') return;
+      dragging = false;
+      panel.style.transition = 'transform 0.2s ease';
+      if (currentX < -ACTION_W * 0.45) {
+        setX(-ACTION_W);
+        row.classList.add('open');
+      } else {
+        setX(0);
+        row.classList.remove('open');
+      }
+      axis = null;
+    };
+
+    panel.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      onStart(t.clientX, t.clientY);
+    }, { passive: true });
+    panel.addEventListener('touchmove', (e) => {
+      const t = e.touches[0];
+      onMove(t.clientX, t.clientY, e);
+    }, { passive: false });
+    panel.addEventListener('touchend', onEnd);
+    panel.addEventListener('touchcancel', onEnd);
+
+    // マウスでも試せるように（PC確認用）
+    panel.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return;
+      onStart(e.clientX, e.clientY);
+      const move = (ev) => onMove(ev.clientX, ev.clientY, ev);
+      const up = () => {
+        onEnd();
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+  });
 }
 
 /**
@@ -271,16 +372,21 @@ function renderHeader() {
     : '';
 
   return `
-    <div class="flex-none p-3 pb-0">
-      <div class="ie-hero flex items-center justify-between">
-        <button type="button" onclick="reloadApp()" title="最新版を読み込む" class="ie-refresh-btn absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-xl bg-white/15 hover:bg-white/25 border border-white/20 text-white transition active:scale-95" aria-label="更新">
+    <div class="flex-none px-3 pt-3 pb-0">
+      <div class="ie-topbar" data-tour="topbar">
+        <div class="ie-topbar-brand">
+          <div class="ie-topbar-logo">
+            <img src="logo.png" alt="" onerror="this.style.display='none'" />
+          </div>
+          <span class="ie-topbar-name">イエノミクス</span>
+        </div>
+        <button type="button" onclick="reloadApp()" title="最新版を読み込む" class="ie-topbar-refresh" aria-label="更新">
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
-        <div class="flex-1 relative z-10 min-w-0 pr-10">
+      </div>
+      <div class="ie-hero flex items-center justify-between">
+        <div class="flex-1 relative z-10 min-w-0">
           <div class="flex items-center gap-1.5 mb-1.5 min-w-0">
-             <div class="w-5 h-5 rounded-xl overflow-hidden bg-white/15 flex items-center justify-center border border-white/20 flex-none">
-               <img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" />
-             </div>
              ${nameTag}
           </div>
           <div class="flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
@@ -292,10 +398,11 @@ function renderHeader() {
           ${streakHint}
         </div>
         <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
-        <div class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1" data-tour="synccode">
+        <button type="button" onclick="copySyncCode()" class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1 active:opacity-80" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
           <p class="text-[10px] text-white/70 font-bold mb-1.5 tracking-widest leading-none">${rb('同期','どうき')}ID</p>
           <p class="text-sm font-mono font-bold tracking-wider text-white/95 leading-none translate-y-px">${esc(state.familyCode)}</p>
-        </div>
+          <p class="text-[8px] text-white/55 font-bold mt-1.5 leading-none">タップでコピー</p>
+        </button>
       </div>
     </div>
   `;
@@ -431,16 +538,43 @@ function renderHome() {
     ? `<span class="text-[8px] font-black text-[#5b8def] leading-none mt-0.5">${investTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
     : '';
 
+  const canSwipeDelete = (status) =>
+    state.role === 'parent' && ['open', 'accepted', 'rejected', 'proposal_rejected'].includes(status);
+
+  const statusChip = (t) => {
+    const map = {
+      open: { label: '募集中', cls: 'ie-chip-open' },
+      accepted: { label: '進行中', cls: 'ie-chip-accepted' },
+      completed: { label: '確認待ち', cls: 'ie-chip-done' },
+      proposed: { label: '見積り', cls: 'ie-chip-proposed' },
+      rejected: { label: 'お断り', cls: 'ie-chip-rejected' },
+      proposal_rejected: { label: '見積り却下', cls: 'ie-chip-rejected' }
+    };
+    const s = map[t.status];
+    if (!s) return '';
+    return `<span class="ie-status-chip ${s.cls}">${s.label}</span>`;
+  };
+
+  const urgencyClass = (t) => {
+    if (!t.deadline) return '';
+    const left = t.deadline - Date.now();
+    if (left < 0) return 'ie-job-urgent-over';
+    if (left < 60 * 60 * 1000) return 'ie-job-urgent-soon';
+    return '';
+  };
+
+  const todayRepeatCount = activeTasks.filter(t => getTemplateIdFromTask(t)).length;
+
   let taskHtml = activeTasks.length > 0 ? activeTasks.map(t => {
     const timeTxt = formatTimeLeft(t.deadline);
-    let btn = ''; let trashBtn = '';
+    let btn = '';
     const templateId = getTemplateIdFromTask(t);
     const template = templateId ? state.taskTemplates.find(tp => tp.id === templateId) : null;
     let repeatMark = '';
     if (template) {
       const tip = formatRepeatLabel(template);
       if (state.role === 'parent') {
-        repeatMark = `<button type="button" onclick="openTemplateEdit('${template.id}')" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100 transition" title="${tip}（タップで編集）"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black tracking-wide">定期</span></button>`;
+        repeatMark = `<button type="button" onclick="event.stopPropagation(); openTemplateEdit('${template.id}')" class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100 transition" title="${tip}（タップで編集）"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black tracking-wide">定期</span></button>`;
       } else {
         repeatMark = `<span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-500 border border-sky-100" title="${tip}"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black tracking-wide">定期</span></span>`;
       }
@@ -464,10 +598,6 @@ function renderHome() {
         btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">確認待ち</span>`;
       }
     } else {
-      if (t.status === 'open' || t.status === 'rejected' || t.status === 'proposal_rejected') {
-        trashBtn = `<button onclick="deleteTask('${t.id}')" class="text-red-400 hover:text-red-600 w-4 h-4 shrink-0 transition">${getIcon('trash')}</button>`;
-      }
-      
       if (t.status === 'completed') {
         btn = `
           <div class="flex gap-1.5 items-center">
@@ -487,21 +617,23 @@ function renderHome() {
         `;
       } else if (t.status === 'proposal_rejected') {
         btn = `<span class="text-[9px] text-rose-500 font-bold shrink-0">見積りを却下済み</span>`;
+      } else if (t.status === 'open') {
+        btn = `<span class="text-[9px] text-[#7a8f88] font-bold shrink-0">子供の受注待ち</span>`;
       } else {
         btn = `<span class="text-[9px] text-slate-400 font-medium shrink-0">進行中</span>`;
       }
     }
-    
-    return `
-      <div class="ie-job-item">
+
+    const body = `
+      <div class="ie-job-item ${urgencyClass(t)}">
         <div class="flex justify-between items-start gap-2 min-w-0">
           <div class="flex items-start gap-1.5 min-w-0 flex-1">
             ${repeatMark}
             <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(t.title)}</span>
           </div>
           <div class="flex items-center gap-1.5 shrink-0">
+            ${statusChip(t)}
             <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
-            ${trashBtn}
           </div>
         </div>
         <div class="flex justify-between items-center mt-0.5">
@@ -510,7 +642,35 @@ function renderHome() {
         </div>
       </div>
     `;
-  }).join('') : `<div class="flex flex-col items-center justify-center h-full opacity-50"><div class="w-6 h-6 mb-2 text-[#7a8f88]">${getIcon('task')}</div><p class="text-[10px] font-bold text-[#7a8f88]">仕事はありません</p></div>`;
+
+    if (!canSwipeDelete(t.status)) return body;
+
+    return `
+      <div class="ie-swipe" data-swipe-id="${esc(t.id)}">
+        <div class="ie-swipe-actions">
+          <button type="button" class="ie-swipe-delete" onclick="event.stopPropagation(); deleteTask('${esc(t.id)}')" aria-label="削除">
+            <span class="w-4 h-4">${getIcon('trash')}</span>
+            <span>削除</span>
+          </button>
+        </div>
+        <div class="ie-swipe-panel">${body}</div>
+      </div>
+    `;
+  }).join('') : `<div class="flex flex-col items-center justify-center h-full px-3 text-center">
+      <div class="w-7 h-7 mb-2 text-[#7a8f88]">${getIcon('task')}</div>
+      <p class="text-[11px] font-bold text-[#7a8f88]">いま動いている仕事はありません</p>
+      ${state.role === 'parent'
+        ? `<button onclick="setView('taskCreate')" class="mt-3 text-[10px] font-black text-[#2f8f82] underline">仕事を発注する</button>`
+        : `<p class="text-[9px] font-bold text-[#a0b2ab] mt-1">親からの発注を待ちましょう</p>`}
+    </div>`;
+
+  const swipeHint = state.role === 'parent' && activeTasks.some(t => canSwipeDelete(t.status))
+    ? `<span class="text-[8px] font-bold text-[#a0b2ab]">左にスワイプで削除</span>`
+    : '';
+
+  const repeatBadge = todayRepeatCount > 0
+    ? `<span class="text-[8px] font-black text-[#3767bd] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">定期 ${todayRepeatCount}</span>`
+    : '';
 
   return `
     <div class="flex-1 min-h-0 p-3">
@@ -574,7 +734,11 @@ function renderHome() {
           <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
             <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
               <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
-              <button onclick="setView('calendar')" class="w-4 h-4 text-[#5f7970] hover:text-[#2f8f82] transition" aria-label="月間予定を見る">${getIcon('calendar')}</button>
+              <div class="flex items-center gap-2">
+                ${repeatBadge}
+                ${swipeHint}
+                <button onclick="setView('calendar')" class="w-4 h-4 text-[#5f7970] hover:text-[#2f8f82] transition" aria-label="月間予定を見る">${getIcon('calendar')}</button>
+              </div>
             </div>
             <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
               ${taskHtml}
