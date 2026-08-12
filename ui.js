@@ -1,7 +1,7 @@
-import { state } from './state.js?v=137';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData } from './utils.js?v=137';
-import { refreshTutorial } from './tutorial.js?v=137';
-import { auth } from './firebase.js?v=137';
+import { state } from './state.js?v=138';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock } from './utils.js?v=138';
+import { refreshTutorial } from './tutorial.js?v=138';
+import { auth } from './firebase.js?v=138';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -188,9 +188,20 @@ export function render() {
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
   animatePointsDisplay();
   bindSwipeRows(appDiv);
+  tickJapanClock();
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
   // 画面が作り直されたので、ガイドの枠を測り直す
   refreshTutorial();
+}
+
+function tickJapanClock() {
+  const el = document.getElementById('ie-japan-clock');
+  if (el) el.textContent = formatJapanClock();
+}
+
+if (typeof window !== 'undefined' && !window.__ieClockStarted) {
+  window.__ieClockStarted = true;
+  setInterval(tickJapanClock, 15000);
 }
 
 /**
@@ -378,7 +389,10 @@ function renderHeader() {
           <div class="ie-topbar-logo">
             <img src="logo.png" alt="" onerror="this.style.display='none'" />
           </div>
-          <span class="ie-topbar-name">イエノミクス</span>
+          <div class="ie-topbar-titles">
+            <span class="ie-topbar-name">イエノミクス</span>
+            <span class="ie-topbar-clock" id="ie-japan-clock">${esc(formatJapanClock())}</span>
+          </div>
         </div>
         <button type="button" onclick="reloadApp()" title="最新版を読み込む" class="ie-topbar-refresh" aria-label="更新">
           <span class="w-4 h-4">${getIcon('refresh')}</span>

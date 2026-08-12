@@ -1,10 +1,10 @@
-import { state } from './state.js?v=137';
-import { render } from './ui.js?v=137';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates } from './utils.js?v=137';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=137';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=137';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=137';
-import { db, auth } from './firebase.js?v=137';
+import { state } from './state.js?v=138';
+import { render } from './ui.js?v=138';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=138';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=138';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=138';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=138';
+import { db, auth } from './firebase.js?v=138';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -215,11 +215,9 @@ function stopDeadlineWatcher() {
   }
 }
 
-/** 次の0:00（少し過ぎた直後）までのミリ秒 */
+/** 次の日本時間0:00（少し過ぎた直後）までのミリ秒 */
 function msUntilNextMidnight() {
-  const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 80);
-  return Math.max(200, next.getTime() - now.getTime());
+  return msUntilJapanMidnight();
 }
 
 /**
@@ -278,10 +276,10 @@ async function cleanupExpiredDeadlineTasks() {
     // まだ期限前
     if (t.deadline > nowMs) continue;
 
-    const dl = new Date(t.deadline);
-    // 期限日の 23:59:00
-    const dayEnd = new Date(dl.getFullYear(), dl.getMonth(), dl.getDate(), 23, 59, 0, 0);
-    if (nowMs < dayEnd.getTime()) continue;
+    const dl = japanParts(new Date(t.deadline));
+    // 期限日（日本時間）の 23:59:00
+    const dayEnd = japanDeadlineMs(23, 59, new Date(t.deadline));
+    if (nowMs < dayEnd) continue;
 
     targets.push(t);
   }
@@ -322,12 +320,13 @@ function isScheduledPaymentDue(p, now, todayStr) {
     return dateKeyToValue(todayStr) >= dateKeyToValue(p.dueDate);
   }
 
-  // 定期
+  // 定期（日本時間の曜日・日付で判定）
+  const j = japanParts(now);
   if (p.interval === 'weekly') {
-    return (p.days || []).map(Number).includes(now.getDay());
+    return (p.days || []).map(Number).includes(j.weekday);
   }
   if (p.interval === 'monthly') {
-    return (p.days || []).map(Number).includes(now.getDate());
+    return (p.days || []).map(Number).includes(j.day);
   }
   return false;
 }
@@ -556,8 +555,7 @@ let isGenerating = false;
 let isDeduping = false;
 
 function todayKeyString() {
-  const now = new Date();
-  return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+  return japanTodayKey();
 }
 
 async function dedupeRepeatedTasks() {
@@ -592,12 +590,13 @@ function normalizeTemplateDays(days) {
   return days.map(d => Number(d)).filter(d => Number.isFinite(d));
 }
 
-/** 今日このテンプレから発注すべきか */
+/** 今日このテンプレから発注すべきか（日本時間） */
 function shouldGenerateTemplateToday(temp, now = new Date()) {
   if (!temp) return false;
   const days = normalizeTemplateDays(temp.days);
-  if (temp.type === 'weekly') return days.includes(now.getDay());
-  if (temp.type === 'monthly') return days.includes(now.getDate());
+  const j = japanParts(now);
+  if (temp.type === 'weekly') return days.includes(j.weekday);
+  if (temp.type === 'monthly') return days.includes(j.day);
   return false;
 }
 
@@ -615,7 +614,6 @@ async function checkAndGenerateRepeatedTasks() {
     const now = new Date();
     const todayStr = todayKeyString();
     watchedDayKey = todayStr;
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     // 削除済みも含めてキーがあれば「今日は処理済み」（論理削除で再発注を防ぐ）
     const existingKeys = new Set(
@@ -625,6 +623,10 @@ async function checkAndGenerateRepeatedTasks() {
     for (const temp of state.taskTemplates) {
       try {
         const generatedKey = `rep_${temp.id}_${todayStr}`;
+        const timeParts = String(temp.time || '19:00').split(':');
+        const hours = Number(timeParts[0]);
+        const minutes = Number(timeParts[1]) || 0;
+        const deadlineMs = japanDeadlineMs(hours, minutes, now);
 
         if (generatedToday[generatedKey] || existingKeys.has(generatedKey)) {
           generatedToday[generatedKey] = true;
@@ -637,6 +639,14 @@ async function checkAndGenerateRepeatedTasks() {
         if (existingDoc.exists()) {
           generatedToday[generatedKey] = true;
           existingKeys.add(generatedKey);
+          // 以前UTCで作った期限がずれている分は、日本時間に直す
+          const data = existingDoc.data() || {};
+          if (
+            data.deadline !== deadlineMs &&
+            ['open', 'accepted'].includes(data.status)
+          ) {
+            await updateDoc(taskRef, { deadline: deadlineMs });
+          }
           continue;
         }
 
@@ -644,12 +654,6 @@ async function checkAndGenerateRepeatedTasks() {
 
         generatedToday[generatedKey] = true;
         existingKeys.add(generatedKey);
-
-        const timeParts = String(temp.time || '19:00').split(':');
-        const hours = Number(timeParts[0]);
-        const minutes = Number(timeParts[1]) || 0;
-        const deadlineDate = new Date(todayStart);
-        deadlineDate.setHours(Number.isFinite(hours) ? hours : 19, minutes, 0, 0);
 
         // 定期は受注手続きなしで、いきなり進行中（accepted）にする
         await setDoc(taskRef, {
@@ -661,7 +665,7 @@ async function checkAndGenerateRepeatedTasks() {
           templateId: temp.id,
           autoAccepted: true,
           createdAt: Date.now(),
-          deadline: deadlineDate.getTime()
+          deadline: deadlineMs
         });
         created += 1;
       } catch (inner) {
@@ -926,16 +930,14 @@ window.updateTemplate = async () => {
 
     // 今日すでに出ている未完了の定期ジョブも内容を揃える
     const [hours, minutes] = time.split(':').map(Number);
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-    const deadlineDate = new Date(todayStart);
-    deadlineDate.setHours(hours, minutes, 0, 0);
+    const deadlineMs = japanDeadlineMs(hours, minutes);
 
     for (const t of state.tasks) {
       const tid = getTemplateIdFromTask(t);
       if (tid !== id) continue;
       if (!['open', 'accepted', 'rejected'].includes(t.status)) continue;
       await updateDoc(doc(db, "tasks", t.id), {
-        title, points, deadline: deadlineDate.getTime(), templateId: id
+        title, points, deadline: deadlineMs, templateId: id
       });
     }
 

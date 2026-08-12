@@ -1,4 +1,4 @@
-import { state } from './state.js?v=137';
+import { state } from './state.js?v=138';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -144,12 +144,80 @@ export function dateKeyToValue(key) {
   return y * 10000 + m * 100 + d;
 }
 
+const JST = 'Asia/Tokyo';
+const WEEKDAY_EN = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/**
+ * 日本時間の壁時計。サーバー（UTC）でもスマホでも同じ「今日」になる。
+ * weekday は日曜=0（テンプレの曜日指定と同じ）。
+ */
+export function japanParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: JST,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    weekday: 'short',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+  const get = (type) => parts.find(p => p.type === type)?.value;
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    hour: Number(get('hour')),
+    minute: Number(get('minute')),
+    second: Number(get('second')),
+    weekday: WEEKDAY_EN[get('weekday')] ?? 0
+  };
+}
+
+export function japanTodayKey(date = new Date()) {
+  const j = japanParts(date);
+  return `${j.year}-${j.month}-${j.day}`;
+}
+
+export function japanDayStartMs(date = new Date()) {
+  const j = japanParts(date);
+  return new Date(`${j.year}-${pad2(j.month)}-${pad2(j.day)}T00:00:00+09:00`).getTime();
+}
+
+export function japanDeadlineMs(hours, minutes, date = new Date()) {
+  const j = japanParts(date);
+  const h = Number.isFinite(hours) ? hours : 19;
+  const m = Number.isFinite(minutes) ? minutes : 0;
+  return new Date(`${j.year}-${pad2(j.month)}-${pad2(j.day)}T${pad2(h)}:${pad2(m)}:00+09:00`).getTime();
+}
+
+export function msUntilJapanMidnight(date = new Date()) {
+  const next = japanDayStartMs(date) + 24 * 60 * 60 * 1000 + 80;
+  return Math.max(200, next - date.getTime());
+}
+
+export function formatJapanClock(date = new Date()) {
+  const j = japanParts(date);
+  const week = ['日', '月', '火', '水', '木', '金', '土'][j.weekday];
+  return `${j.month}/${j.day}(${week}) ${pad2(j.hour)}:${pad2(j.minute)}`;
+}
+
+function japanShiftDays(j, n) {
+  const noon = new Date(`${j.year}-${pad2(j.month)}-${pad2(j.day)}T12:00:00+09:00`).getTime();
+  return japanParts(new Date(noon + n * 86400000));
+}
+
 function startOfLocalDay(d = new Date()) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return new Date(japanDayStartMs(d));
 }
 
 function toDateKey(d) {
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+  return japanTodayKey(d);
 }
 
 /** 次の自動支払いまでの情報 { title, daysLeft } */
@@ -182,26 +250,31 @@ function calcNextPaymentDate(p, today, todayStr) {
   }
 
   if (p.interval === 'weekly') {
-    const days = p.days || [];
+    const days = (p.days || []).map(Number);
+    const todayJ = japanParts(today);
     for (let i = 0; i <= 7; i++) {
-      const cand = new Date(today);
-      cand.setDate(cand.getDate() + i);
-      if (!days.includes(cand.getDay())) continue;
+      const candJ = japanShiftDays(todayJ, i);
+      if (!days.includes(candJ.weekday)) continue;
+      const candStr = `${candJ.year}-${candJ.month}-${candJ.day}`;
       if (i === 0 && p.lastChargedKey === todayStr) continue;
-      return cand;
+      return new Date(`${candJ.year}-${pad2(candJ.month)}-${pad2(candJ.day)}T00:00:00+09:00`);
     }
     return null;
   }
 
   if (p.interval === 'monthly') {
-    const day = (p.days && p.days[0]) || 1;
+    const day = Number((p.days && p.days[0]) || 1);
+    const todayJ = japanParts(today);
     const build = (y, m) => {
-      const last = new Date(y, m + 1, 0).getDate();
-      return new Date(y, m, Math.min(day, last));
+      const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const d = Math.min(day, last);
+      return new Date(`${y}-${pad2(m)}-${pad2(d)}T00:00:00+09:00`);
     };
-    let cand = build(today.getFullYear(), today.getMonth());
-    if (cand < today || (toDateKey(cand) === todayStr && p.lastChargedKey === todayStr)) {
-      cand = build(today.getFullYear(), today.getMonth() + 1);
+    let cand = build(todayJ.year, todayJ.month);
+    const candKey = japanTodayKey(cand);
+    if (cand.getTime() < today.getTime() || (candKey === todayStr && p.lastChargedKey === todayStr)) {
+      const next = japanShiftDays({ ...todayJ, day: 1 }, 32);
+      cand = build(next.year, next.month);
     }
     return cand;
   }
@@ -211,10 +284,10 @@ function calcNextPaymentDate(p, today, todayStr) {
 /** 今月のスタンプ(1〜30)と連続お手伝い日数 */
 export function getHelpStampData(tasks) {
   const approved = (tasks || []).filter(t => t.status === 'approved');
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const nowJ = japanParts();
+  const year = nowJ.year;
+  const month = nowJ.month - 1;
+  const daysInMonth = new Date(Date.UTC(nowJ.year, nowJ.month, 0)).getUTCDate();
   const cardDays = Math.min(30, daysInMonth);
 
   const workDayKeys = new Set();
@@ -223,22 +296,21 @@ export function getHelpStampData(tasks) {
   for (const t of approved) {
     const ts = t.completedAt || t.approvedAt || t.createdAt;
     if (!ts) continue;
-    const d = new Date(ts);
-    workDayKeys.add(toDateKey(d));
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      const day = d.getDate();
-      if (day >= 1 && day <= cardDays) stamped.add(day);
+    const j = japanParts(new Date(ts));
+    workDayKeys.add(`${j.year}-${j.month}-${j.day}`);
+    if (j.year === nowJ.year && j.month === nowJ.month) {
+      if (j.day >= 1 && j.day <= cardDays) stamped.add(j.day);
     }
   }
 
   let streak = 0;
-  const cursor = startOfLocalDay(now);
-  if (!workDayKeys.has(toDateKey(cursor))) {
-    cursor.setDate(cursor.getDate() - 1);
+  let cursor = { ...nowJ };
+  if (!workDayKeys.has(`${cursor.year}-${cursor.month}-${cursor.day}`)) {
+    cursor = japanShiftDays(cursor, -1);
   }
-  while (workDayKeys.has(toDateKey(cursor))) {
+  while (workDayKeys.has(`${cursor.year}-${cursor.month}-${cursor.day}`)) {
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor = japanShiftDays(cursor, -1);
   }
 
   return { cardDays, stamped, streak, year, month };

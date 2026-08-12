@@ -224,12 +224,26 @@ html, body {
   object-fit: cover;
   display: block;
 }
+.ie-topbar-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .ie-topbar-name {
   font-size: 15px;
   font-weight: 900;
   letter-spacing: 0.04em;
   color: var(--ie-ink);
   line-height: 1;
+}
+.ie-topbar-clock {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--ie-muted);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 .ie-topbar-refresh {
   width: 36px;
@@ -340,9 +354,9 @@ html, body {
 }
 .ie-job-head {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   width: 100%;
 }
@@ -350,13 +364,12 @@ html, body {
   flex: none;
 }
 .ie-job-title {
-  display: block;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
   font-weight: 700;
   color: #2c3d38;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 .ie-job-urgent-soon {
   border-color: #f0c27a !important;
