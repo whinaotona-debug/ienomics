@@ -1,7 +1,7 @@
-import { state } from './state.js?v=138';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock } from './utils.js?v=138';
-import { refreshTutorial } from './tutorial.js?v=138';
-import { auth } from './firebase.js?v=138';
+import { state } from './state.js?v=139';
+import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock, japanParts } from './utils.js?v=139';
+import { refreshTutorial } from './tutorial.js?v=139';
+import { auth } from './firebase.js?v=139';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1422,7 +1422,200 @@ function renderHistory() {
     <div class="space-y-1">${app.length ? app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-[#2c3d38] ie-wrap-text min-w-0 flex-1">${esc(t.title)}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee] shrink-0">+${Number(t.points) || 0} pt</span></div>`).join('') : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ承認された仕事はありません</p>`}</div>
   `;
 }
-function renderCalendar() { const tasks = state.tasks.filter(t => t.deadline && t.status !== 'deleted').sort((a, b) => a.deadline - b.deadline); return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}</h2><div class="space-y-3">${tasks.length>0?tasks.map(t=>{ const d=new Date(t.deadline); return `<div class="p-4 bg-white border border-slate-100 rounded-xl flex justify-between items-start gap-2 border-l-4 ${t.deadline<Date.now()?'border-l-slate-300':'border-l-blue-400'}"><span class="font-bold text-sm text-slate-700 ie-wrap-text min-w-0 flex-1">${esc(t.title)}</span><span class="text-[10px] font-black bg-slate-50 px-2 py-1 rounded-md border border-slate-100 shrink-0 ${t.deadline<Date.now()?'text-slate-500':'text-slate-700'}">${d.getMonth()+1}/${d.getDate()}</span></div>`; }).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-2 text-slate-300">${getIcon('calendar')}</div><p class="text-[10px] font-bold text-slate-400">予定はありません</p></div>`}</div>`; }
+function ensureCalendarCursor() {
+  if (state.calendarYear && state.calendarMonth) return;
+  const j = japanParts();
+  state.calendarYear = j.year;
+  state.calendarMonth = j.month;
+  if (!state.calendarSelectedDay) state.calendarSelectedDay = j.day;
+}
+
+/** その月の日付キー（日本時間）に仕事を振り分ける */
+function buildCalendarDayMap(year, month) {
+  const map = {};
+  const add = (day, item) => {
+    if (!day || day < 1) return;
+    if (!map[day]) map[day] = [];
+    map[day].push(item);
+  };
+
+  const active = (state.tasks || []).filter(t =>
+    t.deadline && t.status !== 'deleted' && t.status !== 'approved'
+  );
+  for (const t of active) {
+    const j = japanParts(new Date(t.deadline));
+    if (j.year !== year || j.month !== month) continue;
+    add(j.day, {
+      id: t.id,
+      title: t.title || 'お仕事',
+      points: Number(t.points) || 0,
+      status: t.status,
+      deadline: t.deadline,
+      kind: 'task',
+      repeat: Boolean(getTemplateIdFromTask(t)),
+      templateId: getTemplateIdFromTask(t)
+    });
+  }
+
+  // まだ生成されていない未来の定期も、カレンダー上では予定として見せる
+  const today = japanParts();
+  for (const temp of (state.taskTemplates || [])) {
+    const days = Array.isArray(temp.days) ? temp.days.map(Number) : [];
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isPast =
+        year < today.year ||
+        (year === today.year && month < today.month) ||
+        (year === today.year && month === today.month && day < today.day);
+      if (isPast) continue;
+
+      let due = false;
+      if (temp.type === 'weekly') {
+        const wd = new Date(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T12:00:00+09:00`);
+        due = days.includes(japanParts(wd).weekday);
+      } else if (temp.type === 'monthly') {
+        due = days.includes(day);
+      }
+      if (!due) continue;
+
+      // 今日分ですでにタスクがある定期は二重に出さない
+      const already = (map[day] || []).some(x => x.templateId === temp.id || (x.repeat && x.title === temp.title));
+      if (already) continue;
+
+      // 今日は生成済みタスク側で出るので、未来だけ予定マーク
+      if (year === today.year && month === today.month && day === today.day) continue;
+
+      add(day, {
+        id: `plan-${temp.id}-${day}`,
+        title: temp.title || 'お仕事',
+        points: Number(temp.points) || 0,
+        status: 'planned',
+        deadline: null,
+        kind: 'planned',
+        repeat: true,
+        templateId: temp.id,
+        time: temp.time || '19:00'
+      });
+    }
+  }
+
+  for (const day of Object.keys(map)) {
+    map[day].sort((a, b) => (a.deadline || 0) - (b.deadline || 0) || String(a.title).localeCompare(String(b.title), 'ja'));
+  }
+  return map;
+}
+
+function renderCalendar() {
+  ensureCalendarCursor();
+  const year = state.calendarYear;
+  const month = state.calendarMonth;
+  const today = japanParts();
+  const dayMap = buildCalendarDayMap(year, month);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  // 月初の曜日（日=0）を日本時間で取る
+  const firstWeekday = japanParts(new Date(`${year}-${String(month).padStart(2,'0')}-01T12:00:00+09:00`)).weekday;
+
+  if (!state.calendarSelectedDay || state.calendarSelectedDay > daysInMonth) {
+    state.calendarSelectedDay =
+      (year === today.year && month === today.month) ? today.day : 1;
+  }
+  const selected = state.calendarSelectedDay;
+  const selectedItems = dayMap[selected] || [];
+
+  const weekHead = ['日','月','火','水','木','金','土']
+    .map((w, i) => `<span class="ie-cal-dow ${i === 0 ? 'sun' : i === 6 ? 'sat' : ''}">${w}</span>`)
+    .join('');
+
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) {
+    cells.push(`<div class="ie-cal-cell empty" aria-hidden="true"></div>`);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const items = dayMap[day] || [];
+    const isToday = year === today.year && month === today.month && day === today.day;
+    const isSelected = day === selected;
+    const hasTask = items.some(x => x.kind === 'task');
+    const hasPlan = items.some(x => x.kind === 'planned');
+    const overdue = items.some(x => x.kind === 'task' && x.deadline && x.deadline < Date.now() && !['completed', 'approved'].includes(x.status));
+    const dots = items.slice(0, 3).map(x => {
+      let cls = 'plan';
+      if (x.kind === 'task') {
+        if (x.status === 'completed') cls = 'done';
+        else if (x.deadline && x.deadline < Date.now()) cls = 'over';
+        else if (x.repeat) cls = 'repeat';
+        else cls = 'task';
+      }
+      return `<span class="ie-cal-dot ${cls}"></span>`;
+    }).join('');
+    const more = items.length > 3 ? `<span class="ie-cal-more">+${items.length - 3}</span>` : '';
+    const preview = items[0]
+      ? `<span class="ie-cal-preview">${esc(items[0].title)}</span>`
+      : '';
+    cells.push(`
+      <button type="button" class="ie-cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${hasTask || hasPlan ? 'has' : ''} ${overdue ? 'overdue' : ''}"
+              onclick="selectCalendarDay(${day})" aria-label="${month}月${day}日${items.length ? ` 仕事${items.length}件` : ''}" aria-pressed="${isSelected}">
+        <span class="ie-cal-num">${day}</span>
+        <span class="ie-cal-marks">${dots}${more}</span>
+        ${preview}
+      </button>
+    `);
+  }
+
+  const statusLabel = (it) => {
+    if (it.kind === 'planned') return `予定 ${it.time || ''}`.trim();
+    if (it.status === 'completed') return '確認待ち';
+    if (it.status === 'accepted') return '進行中';
+    if (it.status === 'open') return '募集中';
+    if (it.status === 'proposed') return '見積り';
+    if (it.deadline && it.deadline < Date.now()) return '期限切れ';
+    return formatTimeLeft(it.deadline);
+  };
+
+  const list = selectedItems.length
+    ? selectedItems.map(it => `
+        <div class="ie-cal-item ${it.kind === 'planned' ? 'planned' : ''}">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5 min-w-0">
+              ${it.repeat ? `<span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black">定期</span></span>` : ''}
+              <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(it.title)}</span>
+            </div>
+            <p class="text-[9px] font-bold text-[#7a8f88] mt-1">${esc(statusLabel(it))}</p>
+          </div>
+          <span class="text-xs font-black text-[#1c2b27] shrink-0">${it.points}<span class="text-[9px] font-bold text-[#7a8f88] ml-0.5">pt</span></span>
+        </div>
+      `).join('')
+    : `<div class="ie-cal-empty-day"><p class="text-[11px] font-bold text-[#7a8f88]">この日の仕事はありません</p></div>`;
+
+  return `
+    <h2 class="text-lg font-bold mb-3 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-blue-500">${getIcon('calendar')}</div>${rb('月間予定','げっかんよてい')}
+    </h2>
+
+    <div class="ie-cal">
+      <div class="ie-cal-nav">
+        <button type="button" onclick="shiftCalendarMonth(-1)" class="ie-cal-nav-btn" aria-label="前の月">‹</button>
+        <p class="ie-cal-title">${year}年${month}月</p>
+        <button type="button" onclick="shiftCalendarMonth(1)" class="ie-cal-nav-btn" aria-label="次の月">›</button>
+      </div>
+      <div class="ie-cal-weekhead">${weekHead}</div>
+      <div class="ie-cal-grid">${cells.join('')}</div>
+      <div class="ie-cal-legend">
+        <span><i class="ie-cal-dot task"></i>仕事</span>
+        <span><i class="ie-cal-dot repeat"></i>定期</span>
+        <span><i class="ie-cal-dot plan"></i>これから</span>
+        <span><i class="ie-cal-dot over"></i>期限切れ</span>
+      </div>
+    </div>
+
+    <div class="mt-4">
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-[11px] font-black text-[#1c2b27]">${month}月${selected}日の仕事</p>
+        <p class="text-[9px] font-bold text-[#7a8f88]">${selectedItems.length}件</p>
+      </div>
+      <div class="space-y-1.5">${list}</div>
+    </div>
+  `;
+}
 function renderSetupLoading(message) {
   return `
     <div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">

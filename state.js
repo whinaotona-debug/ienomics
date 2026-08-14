@@ -18,6 +18,10 @@ export const state = {
   editingTemplateId: null,
   editingPaymentId: null,
   investRange: 'week', // 'day' | 'week' | 'month'
+  // 月間予定カレンダー（日本時間の年月。selectedDay は 1〜31 か null）
+  calendarYear: null,
+  calendarMonth: null, // 1〜12
+  calendarSelectedDay: null,
   
   // 親が管理する複数子供用データ（新規機能）
   children: [], 

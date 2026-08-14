@@ -1,10 +1,10 @@
-import { state } from './state.js?v=138';
-import { render } from './ui.js?v=138';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=138';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=138';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=138';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=138';
-import { db, auth } from './firebase.js?v=138';
+import { state } from './state.js?v=139';
+import { render } from './ui.js?v=139';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=139';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=139';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=139';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=139';
+import { db, auth } from './firebase.js?v=139';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -844,6 +844,13 @@ function setupListeners() {
 window.setView = (viewName) => {
   if (viewName !== 'templateEdit') state.editingTemplateId = null;
   if (viewName !== 'paymentEdit') state.editingPaymentId = null;
+  if (viewName === 'calendar') {
+    const j = japanParts();
+    // ホームから開いたときは今月・今日に戻す
+    state.calendarYear = j.year;
+    state.calendarMonth = j.month;
+    state.calendarSelectedDay = j.day;
+  }
   state.view = viewName;
   render();
 };
@@ -851,6 +858,28 @@ window.setView = (viewName) => {
 window.setInvestRange = (range) => {
   if (!['day', 'week', 'month'].includes(range)) return;
   state.investRange = range;
+  render();
+};
+
+window.shiftCalendarMonth = (delta) => {
+  const j = japanParts();
+  if (!state.calendarYear || !state.calendarMonth) {
+    state.calendarYear = j.year;
+    state.calendarMonth = j.month;
+  }
+  let y = state.calendarYear;
+  let m = state.calendarMonth + Number(delta || 0);
+  while (m < 1) { m += 12; y -= 1; }
+  while (m > 12) { m -= 12; y += 1; }
+  state.calendarYear = y;
+  state.calendarMonth = m;
+  if (y === j.year && m === j.month) state.calendarSelectedDay = j.day;
+  else state.calendarSelectedDay = 1;
+  render();
+};
+
+window.selectCalendarDay = (day) => {
+  state.calendarSelectedDay = Number(day) || 1;
   render();
 };
 
