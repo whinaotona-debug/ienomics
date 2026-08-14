@@ -1,7 +1,7 @@
-import { state } from './state.js?v=139';
-import { getIcon, rb, esc, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock, japanParts } from './utils.js?v=139';
-import { refreshTutorial } from './tutorial.js?v=139';
-import { auth } from './firebase.js?v=139';
+import { state } from './state.js?v=140';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock, japanParts } from './utils.js?v=140';
+import { refreshTutorial } from './tutorial.js?v=140';
+import { auth } from './firebase.js?v=140';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -398,11 +398,9 @@ function renderHeader() {
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
       </div>
-      <div class="ie-hero flex items-center justify-between">
-        <div class="flex-1 relative z-10 min-w-0">
-          <div class="flex items-center gap-1.5 mb-1.5 min-w-0">
-             ${nameTag}
-          </div>
+      <div class="ie-hero">
+        <div class="ie-hero-main">
+          <div class="ie-hero-label" data-tour="nametag">${nameTag}</div>
           <div class="flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
             <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
             <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
@@ -411,11 +409,11 @@ function renderHeader() {
           ${payHint}
           ${streakHint}
         </div>
-        <div class="w-px h-12 bg-white/15 mx-3 relative z-10 shrink-0"></div>
-        <button type="button" onclick="copySyncCode()" class="flex-none text-right relative z-10 flex flex-col justify-center max-w-[38%] pr-1 pt-1 active:opacity-80" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
-          <p class="text-[10px] text-white/70 font-bold mb-1.5 tracking-widest leading-none">${rb('同期','どうき')}ID</p>
-          <p class="text-sm font-mono font-bold tracking-wider text-white/95 leading-none translate-y-px">${esc(state.familyCode)}</p>
-          <p class="text-[8px] text-white/55 font-bold mt-1.5 leading-none">タップでコピー</p>
+        <div class="ie-hero-divider" aria-hidden="true"></div>
+        <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
+          <div class="ie-hero-label ie-hero-label-right">${rb('同期','どうき')}ID</div>
+          <p class="ie-hero-code">${esc(state.familyCode)}</p>
+          <p class="ie-hero-copyhint">タップでコピー</p>
         </button>
       </div>
     </div>
@@ -552,21 +550,26 @@ function renderHome() {
     ? `<span class="text-[8px] font-black text-[#5b8def] leading-none mt-0.5">${investTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
     : '';
 
-  const canSwipeDelete = (status) =>
-    state.role === 'parent' && ['open', 'accepted', 'rejected', 'proposal_rejected'].includes(status);
+  const canSwipeDelete = (t) => {
+    if (state.role !== 'parent') return false;
+    // 確認待ち・見積り中・期限切れも含めて、親が片付けられるようにする
+    if (['open', 'accepted', 'rejected', 'proposal_rejected', 'completed', 'proposed'].includes(t.status)) return true;
+    return false;
+  };
 
   const statusChip = (t) => {
     const map = {
-      open: { label: '募集中', cls: 'ie-chip-open' },
-      accepted: { label: '進行中', cls: 'ie-chip-accepted' },
-      completed: { label: '確認待ち', cls: 'ie-chip-done' },
-      proposed: { label: '見積り', cls: 'ie-chip-proposed' },
-      rejected: { label: 'お断り', cls: 'ie-chip-rejected' },
-      proposal_rejected: { label: '見積り却下', cls: 'ie-chip-rejected' }
+      open: { label: rb('募集中','ぼしゅうちゅう'), cls: 'ie-chip-open' },
+      accepted: { label: rb('進行中','しんこうちゅう'), cls: 'ie-chip-accepted' },
+      completed: { label: rb('確認待ち','かくにんまち'), cls: 'ie-chip-done' },
+      proposed: { label: rb('見積り','みつもり'), cls: 'ie-chip-proposed' },
+      rejected: { label: rb('お断り','おことわり'), cls: 'ie-chip-rejected' },
+      proposal_rejected: { label: rb('見積り却下','みつもりきゃっか'), cls: 'ie-chip-rejected' }
     };
     const s = map[t.status];
     if (!s) return '';
-    return `<span class="ie-status-chip ${s.cls}">${s.label}</span>`;
+    const expired = t.deadline && t.deadline < Date.now() && ['open', 'accepted'].includes(t.status);
+    return `<span class="ie-status-chip ${s.cls}">${expired ? rb('期限切れ','きげんぎれ') : s.label}</span>`;
   };
 
   const urgencyClass = (t) => {
@@ -642,12 +645,12 @@ function renderHome() {
       <div class="ie-job-item ${urgencyClass(t)}">
         <div class="ie-job-head">
           ${repeatMark ? `<div class="ie-job-mark">${repeatMark}</div>` : ''}
-          <p class="ie-job-title ie-wrap-text">${esc(t.title)}</p>
+          <p class="ie-job-title ie-wrap-text">${jobTitleHtml(t.title, t.titleKana || template?.titleKana)}</p>
         </div>
         <div class="flex justify-between items-center gap-2 min-w-0">
           <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
             ${statusChip(t)}
-            <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt}</span>
+            <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt === '期限切れ' ? rb('期限切れ','きげんぎれ') : timeTxt}</span>
           </div>
           <span class="text-xs font-black text-[#1c2b27] shrink-0">${t.points} <span class="text-[9px] font-bold text-[#7a8f88]">pt</span></span>
         </div>
@@ -657,7 +660,7 @@ function renderHome() {
       </div>
     `;
 
-    if (!canSwipeDelete(t.status)) return body;
+    if (!canSwipeDelete(t)) return body;
 
     return `
       <div class="ie-swipe" data-swipe-id="${esc(t.id)}">
@@ -678,8 +681,8 @@ function renderHome() {
         : `<p class="text-[9px] font-bold text-[#a0b2ab] mt-1">親からの発注を待ちましょう</p>`}
     </div>`;
 
-  const swipeHint = state.role === 'parent' && activeTasks.some(t => canSwipeDelete(t.status))
-    ? `<span class="text-[8px] font-bold text-[#a0b2ab]">左にスワイプで削除</span>`
+  const swipeHint = state.role === 'parent' && activeTasks.some(t => canSwipeDelete(t))
+    ? `<span class="text-[8px] font-bold text-[#a0b2ab]">${rb('左','ひだり')}にスワイプで${rb('削除','さくじょ')}</span>`
     : '';
 
   const repeatBadge = todayRepeatCount > 0
@@ -747,7 +750,7 @@ function renderHome() {
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
             <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
-              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>お仕事リスト</h2>
+              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>${rb('お仕事','おしごと')}リスト</h2>
               <div class="flex items-center gap-2">
                 ${repeatBadge}
                 ${swipeHint}
@@ -822,9 +825,10 @@ function renderInvest() {
 function renderTaskCreate() { 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('仕事発注','しごとはっちゅう')}</h2>
-    <input type="text" id="task-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <input type="text" id="task-title" placeholder="仕事の内容（例: おさら洗い）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-2 font-bold text-sm focus:outline-none" />
+    <input type="text" id="task-title-kana" placeholder="読み方・フリガナ（任意）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
     <div class="ie-field-stack mb-4">
-      <label>報酬</label>
+      <label>${rb('報酬','ほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="task-points" inputmode="numeric" placeholder="報酬金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
         <span class="ie-unit">pt</span>
@@ -833,35 +837,35 @@ function renderTaskCreate() {
     
     <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
       <label class="flex items-center gap-2 font-bold text-xs text-slate-600 cursor-pointer">
-        <input type="checkbox" id="task-repeat-toggle" onchange="toggleRepeatUI()" class="rounded border-slate-300"> 🔁 定期的に繰り返して発注する
+        <input type="checkbox" id="task-repeat-toggle" onchange="toggleRepeatUI()" class="rounded border-slate-300"> 🔁 ${rb('定期的','ていきてき')}に${rb('繰','く')}り返して${rb('発注','はっちゅう')}する
       </label>
       <div id="repeat-ui" class="hidden mt-4 space-y-4">
         <div class="flex gap-2">
-          <button type="button" onclick="setRepeatType('weekly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-weekly">曜日指定</button>
-          <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-monthly">毎月指定</button>
+          <button type="button" onclick="setRepeatType('weekly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-weekly">${rb('曜日指定','ようびしてい')}</button>
+          <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-monthly">${rb('毎月指定','まいつきしてい')}</button>
         </div>
         <div id="weekly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（当日0:00に自動追加・受注不要）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">${rb('発注','はっちゅう')}する${rb('曜日','ようび')}を${rb('選択','せんたく')}（当日0:00に${rb('自動追加','じどうついか')}・${rb('受注不要','じゅちゅうふよう')}）</p>
           <div class="flex gap-2 flex-wrap">
             ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="repeat-weeks" value="${i}"> ${w}</label>`).join('')}
           </div>
         </div>
         <div id="monthly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（当日0:00に自動追加・受注不要）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">${rb('発注','はっちゅう')}する${rb('日付','ひづけ')}を${rb('選択','せんたく')}（当日0:00に${rb('自動追加','じどうついか')}・${rb('受注不要','じゅちゅうふよう')}）</p>
           <select id="repeat-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
             ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}
           </select>
         </div>
         <div>
-          <p class="text-[9px] font-bold text-slate-400 mb-2">その日の期限（締切時間）を設定</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">その${rb('日','ひ')}の${rb('期限','きげん')}（${rb('締切時間','しめきりじかん')}）を${rb('設定','せってい')}</p>
           <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="19:00">
         </div>
       </div>
     </div>
 
-    <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">期限を設定（単発発注の場合）</p>
+    <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">${rb('期限','きげん')}を${rb('設定','せってい')}（${rb('単発発注','たんぱつはっちゅう')}の場合）</p>
     <input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none" />
-    <button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">発注する</button>
+    <button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('発注','はっちゅう')}する</button>
   `; 
 }
 
@@ -886,7 +890,7 @@ function renderTemplatesList() {
                     <span class="w-3 h-3">${getIcon('repeat')}</span>
                     <span class="text-[8px] font-black tracking-wide">定期</span>
                   </span>
-                  <p class="ie-job-title ie-wrap-text">${esc(temp.title || '無題')}</p>
+                  <p class="ie-job-title ie-wrap-text">${jobTitleHtml(temp.title || '無題', temp.titleKana)}</p>
                 </div>
                 <p class="text-[10px] font-bold text-[#5f7970] mt-1.5">${esc(sched)}</p>
               </div>
@@ -936,12 +940,13 @@ function renderTemplateEdit() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-sky-500">${getIcon('repeat')}</div>
-      定期発注の編集
+      ${rb('定期発注','ていきはっちゅう')}の${rb('編集','へんしゅう')}
     </h2>
     <p class="text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-100 rounded-xl px-3 py-2 mb-4">${formatRepeatLabel(temp)}</p>
-    <input type="text" id="tmpl-title" value="${esc(temp.title || '')}" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
+    <input type="text" id="tmpl-title" value="${esc(temp.title || '')}" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-2 font-bold text-sm focus:outline-none" />
+    <input type="text" id="tmpl-title-kana" value="${esc(temp.titleKana || '')}" placeholder="読み方・フリガナ（任意）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
     <div class="ie-field-stack mb-4">
-      <label>報酬</label>
+      <label>${rb('報酬','ほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="tmpl-points" inputmode="numeric" value="${temp.points || ''}" placeholder="報酬金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
         <span class="ie-unit">pt</span>
@@ -1155,7 +1160,7 @@ function renderSettings() {
     </h2>
 
     <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100">
-      <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-widest">同期ID</p>
+      <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-widest">${rb('同期','どうき')}ID</p>
       <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
     </div>
 
@@ -1184,17 +1189,15 @@ function renderSettings() {
       <span class="ie-guide-arrow" aria-hidden="true">›</span>
     </button>
 
-    ${isChild ? `
-      <button type="button" class="w-full p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100"
-              onclick="toggleFurigana()" role="switch" aria-checked="${state.furigana ? 'true' : 'false'}">
-        <span class="font-bold text-sm text-slate-700">フリガナ(ルビ)表示</span>
-        <span class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana ? 'bg-[#2f8f82] justify-end' : 'bg-slate-300 justify-start'}">
-          <span class="w-4 h-4 bg-white rounded-full shadow-sm"></span>
-        </span>
-      </button>
-    ` : '<div class="mb-8"></div>'}
+    <button type="button" class="w-full p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100"
+            onclick="toggleFurigana()" role="switch" aria-checked="${state.furigana ? 'true' : 'false'}">
+      <span class="font-bold text-sm text-slate-700">${rb('フリガナ','ふりがな')}(${rb('表示','ひょうじ')})</span>
+      <span class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana ? 'bg-[#2f8f82] justify-end' : 'bg-slate-300 justify-start'}">
+        <span class="w-4 h-4 bg-white rounded-full shadow-sm"></span>
+      </span>
+    </button>
 
-    <button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-600 font-bold text-xs hover:bg-red-50">連携を解除する</button>
+    <button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-600 font-bold text-xs hover:bg-red-50">${rb('連携','れんけい')}を${rb('解除','かいじょ')}する</button>
   `;
 }
 export function drawInvestChart() {
@@ -1293,7 +1296,7 @@ export function drawInvestChart() {
 function renderBalloonSend() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
-      <div class="w-4 h-4 text-[#2f8f82]">${getIcon('gift')}</div>ギフト送信
+      <div class="w-4 h-4 text-[#2f8f82]">${getIcon('gift')}</div>${rb('ギフト送信','ぎふとそうしん')}
     </h2>
     <input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
     <textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea>
@@ -1303,17 +1306,18 @@ function renderBalloonSend() {
 function renderPropose() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('見積り','みつもり')}</h2>
-    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">仕事の内容と希望の報酬を親に送ります。</p>
-    <input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
+    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">${rb('仕事','しごと')}の${rb('内容','ないよう')}と${rb('希望','きぼう')}の${rb('報酬','ほうしゅう')}を${rb('親','おや')}に${rb('送','おく')}ります。</p>
+    <input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-2 font-bold text-sm focus:outline-none focus:border-slate-400" />
+    <input type="text" id="prop-title-kana" placeholder="読み方・フリガナ（任意）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
     <div class="ie-field-stack mb-4">
-      <label>希望報酬</label>
+      <label>${rb('希望報酬','きぼうほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="prop-points" inputmode="numeric" placeholder="希望金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" />
         <span class="ie-unit">pt</span>
       </div>
     </div>
     <input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" />
-    <button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">見積りを送信</button>
+    <button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('見積り','みつもり')}を${rb('送信','そうしん')}</button>
   `;
 }
 function renderExchange() {
@@ -1448,6 +1452,7 @@ function buildCalendarDayMap(year, month) {
     add(j.day, {
       id: t.id,
       title: t.title || 'お仕事',
+      titleKana: t.titleKana || '',
       points: Number(t.points) || 0,
       status: t.status,
       deadline: t.deadline,
@@ -1488,6 +1493,7 @@ function buildCalendarDayMap(year, month) {
       add(day, {
         id: `plan-${temp.id}-${day}`,
         title: temp.title || 'お仕事',
+        titleKana: temp.titleKana || '',
         points: Number(temp.points) || 0,
         status: 'planned',
         deadline: null,
@@ -1577,7 +1583,7 @@ function renderCalendar() {
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-1.5 min-w-0">
               ${it.repeat ? `<span class="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-600 border border-sky-100"><span class="w-3 h-3">${getIcon('repeat')}</span><span class="text-[8px] font-black">定期</span></span>` : ''}
-              <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${esc(it.title)}</span>
+              <span class="font-bold text-xs text-[#2c3d38] ie-wrap-text">${jobTitleHtml(it.title, it.titleKana)}</span>
             </div>
             <p class="text-[9px] font-bold text-[#7a8f88] mt-1">${esc(statusLabel(it))}</p>
           </div>

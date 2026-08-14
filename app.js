@@ -1,10 +1,10 @@
-import { state } from './state.js?v=139';
-import { render } from './ui.js?v=139';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=139';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=139';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=139';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=139';
-import { db, auth } from './firebase.js?v=139';
+import { state } from './state.js?v=140';
+import { render } from './ui.js?v=140';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=140';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=140';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=140';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=140';
+import { db, auth } from './firebase.js?v=140';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -659,6 +659,7 @@ async function checkAndGenerateRepeatedTasks() {
         await setDoc(taskRef, {
           familyCode: state.familyCode,
           title: temp.title,
+          titleKana: temp.titleKana || '',
           points: Number(temp.points) || 0,
           status: 'accepted',
           generatedKey: generatedKey,
@@ -947,6 +948,7 @@ window.updateTemplate = async () => {
   const id = state.editingTemplateId;
   if (!id) return;
   const title = document.getElementById('tmpl-title').value.trim();
+  const titleKana = (document.getElementById('tmpl-title-kana')?.value || '').trim();
   const points = parseInt(document.getElementById('tmpl-points').value);
   if (!title || !points) return showAlert("内容と報酬を入力してください");
   const { repeatType, days, time } = readRepeatFormDays();
@@ -954,7 +956,7 @@ window.updateTemplate = async () => {
 
   await guard(`updateTemplate:${id}`, async () => {
     await updateDoc(doc(db, "taskTemplates", id), {
-      title, points, type: repeatType, days, time
+      title, titleKana, points, type: repeatType, days, time
     });
 
     // 今日すでに出ている未完了の定期ジョブも内容を揃える
@@ -966,7 +968,7 @@ window.updateTemplate = async () => {
       if (tid !== id) continue;
       if (!['open', 'accepted', 'rejected'].includes(t.status)) continue;
       await updateDoc(doc(db, "tasks", t.id), {
-        title, points, deadline: deadlineMs, templateId: id
+        title, titleKana, points, deadline: deadlineMs, templateId: id
       });
     }
 
@@ -1011,6 +1013,7 @@ window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.s
 
 window.addTask = async () => { 
   const t = document.getElementById('task-title').value.trim();
+  const titleKana = (document.getElementById('task-title-kana')?.value || '').trim();
   const p = parseInt(document.getElementById('task-points').value);
   const isRepeat = document.getElementById('task-repeat-toggle').checked;
 
@@ -1033,14 +1036,14 @@ window.addTask = async () => {
       const time = document.getElementById('repeat-time').value || '19:00';
 
       await addDoc(collection(db, "taskTemplates"), {
-        familyCode: state.familyCode, title: t, points: p, type: repeatType, days: days, time: time, createdAt: Date.now()
+        familyCode: state.familyCode, title: t, titleKana, points: p, type: repeatType, days: days, time: time, createdAt: Date.now()
       });
       setView('home');
       showToast("定期発注として保存しました");
     } else {
       const d = document.getElementById('task-deadline').value; 
       await addDoc(collection(db, "tasks"), { 
-        familyCode: state.familyCode, title: t, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() 
+        familyCode: state.familyCode, title: t, titleKana, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() 
       }); 
       setView('home');
       showToast("お仕事を発注しました");
@@ -1144,6 +1147,7 @@ window.saveNewPassword = async () => {
 
 window.proposeTask = async () => {
   const t = document.getElementById('prop-title').value.trim();
+  const titleKana = (document.getElementById('prop-title-kana')?.value || '').trim();
   const p = parseInt(document.getElementById('prop-points').value);
   const d = document.getElementById('prop-deadline').value;
   if (!t) return showAlert("やりたいことを入力してください");
@@ -1153,6 +1157,7 @@ window.proposeTask = async () => {
     await addDoc(collection(db, "tasks"), {
       familyCode: state.familyCode,
       title: t,
+      titleKana,
       points: p,
       deadline: d ? new Date(d).getTime() : null,
       status: 'proposed',

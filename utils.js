@@ -1,4 +1,4 @@
-import { state } from './state.js?v=139';
+import { state } from './state.js?v=140';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -13,6 +13,14 @@ export function esc(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/** 仕事名＋任意の読み方。フリガナONのときだけルビが出る */
+export function jobTitleHtml(title, kana) {
+  const t = esc(title || '無題');
+  const k = String(kana || '').trim();
+  if (!k) return t;
+  return `<ruby class="ie-job-ruby">${t}<rt>${esc(k)}</rt></ruby>`;
 }
 
 export function applyFuriganaState() {

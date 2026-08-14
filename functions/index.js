@@ -348,6 +348,7 @@ async function runGenerateRepeatedTasks() {
     await taskRef.set({
       familyCode: temp.familyCode,
       title: temp.title || 'お仕事',
+      titleKana: temp.titleKana || '',
       points: Number(temp.points) || 0,
       status: 'accepted',
       generatedKey,

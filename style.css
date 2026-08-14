@@ -284,12 +284,15 @@ html, body {
     linear-gradient(145deg, #1f4f49 0%, #2a7a6f 55%, #348f82 100%);
   color: #fff;
   border-radius: 24px;
-  padding: 1.25rem 1.35rem;
+  padding: 1.15rem 1.2rem 1.2rem;
   position: relative;
   overflow: hidden;
   min-height: 118px;
   box-shadow: 0 14px 32px rgba(31, 79, 73, 0.28);
   border: 1px solid rgba(255,255,255,0.12);
+  display: flex;
+  align-items: stretch;
+  gap: 0;
 }
 .ie-hero::after {
   content: "";
@@ -301,6 +304,78 @@ html, body {
   border-radius: 50%;
   background: rgba(255,255,255,0.08);
   pointer-events: none;
+}
+.ie-hero-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  z-index: 10;
+}
+.ie-hero-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 12px;
+  background: rgba(255,255,255,0.15);
+  position: relative;
+  z-index: 10;
+  flex: none;
+}
+.ie-hero-sync {
+  flex: 0 0 auto;
+  max-width: 38%;
+  text-align: right;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+.ie-hero-sync:active { opacity: 0.85; }
+/* フリガナONでも左右のラベル高さを揃えて、資産と同期IDがズレないようにする */
+.ie-hero-label {
+  min-height: 1.15em;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: flex-end;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+}
+.ie-hero-label > p {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+.ie-hero-label-right {
+  justify-content: flex-end;
+  letter-spacing: 0.16em;
+  color: rgba(255,255,255,0.7);
+}
+body.furigana-on .ie-hero-label {
+  min-height: 2.05em;
+}
+body.furigana-on .ie-hero-label rt {
+  color: rgba(255,255,255,0.65);
+}
+.ie-hero-code {
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.95);
+  line-height: 1.1;
+}
+.ie-hero-copyhint {
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.55);
+  margin-top: 6px;
+  line-height: 1;
 }
 
 /* ptスロット風カウント */
@@ -390,6 +465,23 @@ html, body {
   border: 1px solid transparent;
   line-height: 1.4;
   white-space: nowrap;
+}
+body.furigana-on .ie-status-chip {
+  white-space: normal;
+  line-height: 1.15;
+  padding-top: 4px;
+  padding-bottom: 3px;
+}
+.ie-job-ruby {
+  display: inline-flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  vertical-align: baseline;
+  line-height: 1.2;
+}
+.ie-job-title rt,
+.ie-job-ruby rt {
+  color: var(--ie-muted);
 }
 .ie-chip-open { background: #eef7f5; color: #246f65; border-color: #cfe8e2; }
 .ie-chip-accepted { background: #eef3fb; color: #3767bd; border-color: #d5e1f6; }
