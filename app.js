@@ -1,11 +1,11 @@
-import { state } from './state.js?v=140';
-import { render } from './ui.js?v=140';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight } from './utils.js?v=140';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=140';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=140';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=140';
-import { db, auth } from './firebase.js?v=140';
-import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { state } from './state.js?v=141';
+import { render } from './ui.js?v=141';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap } from './utils.js?v=141';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=141';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=141';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=141';
+import { db, auth } from './firebase.js?v=141';
+import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
@@ -521,6 +521,7 @@ function applyActiveChild() {
   if (!active) return false;
   state.childName = active.childName;
   state.points = active.points || 0;
+  state.pointsCap = Number(active.pointsCap) > 0 ? Number(active.pointsCap) : null;
   state.childLinked = active.childLinked !== false;
   return true;
 }
@@ -545,7 +546,7 @@ function loadParentChildren(parentUid) {
         render();
       }
     } else {
-      state.familyCode = null; state.childName = ''; state.points = 0; state.childLinked = false; render();
+      state.familyCode = null; state.childName = ''; state.points = 0; state.pointsCap = null; state.childLinked = false; render();
     }
   });
 }
@@ -702,6 +703,7 @@ async function handleFamilyRemoved() {
   state.familyCode = null;
   state.childName = '';
   state.points = 0;
+  state.pointsCap = null;
   state.childLinked = false;
   state.setupMode = null;
   render();
@@ -725,7 +727,8 @@ function setupListeners() {
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => { 
     if (d.exists()) { 
       const data = d.data();
-      state.points = data.points || 0; 
+      state.points = data.points || 0;
+      state.pointsCap = Number(data.pointsCap) > 0 ? Number(data.pointsCap) : null;
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
       render(); 
@@ -1067,29 +1070,58 @@ window.completeTask = async (id) => guard(`completeTask:${id}`, async () => {
  * 承認とポイント付与を1つのトランザクションで行う。
  * 途中で失敗しても「承認だけ済んでポイントが増えない」状態にならない。
  */
-window.approveTask = async (id, p) => guard(`approveTask:${id}`, async () => {
-  const taskRef = doc(db, "tasks", id);
-  const famRef = doc(db, "families", state.familyCode);
+window.approveTask = async (id, p) => {
   const amount = Number(p) || 0;
-  let granted = 0;
+  const room = roomUnderPointsCap(state.points, state.pointsCap);
+  if (amount > 0 && room === 0) {
+    return showAlert(
+      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しています。設定で上限を上げるか、換金などで残高を減らしてから付与してください。`,
+      { title: '上限に達しています' }
+    );
+  }
+  if (amount > 0 && Number.isFinite(room) && amount > room) {
+    const ok = await showConfirm(
+      `上限は ${Number(state.pointsCap).toLocaleString()}pt です。いま付与できるのは ${room.toLocaleString()}pt までです。${room.toLocaleString()}pt だけ付与して承認しますか？`,
+      { title: '上限までしか付与できません', okLabel: '一部付与して承認' }
+    );
+    if (!ok) return;
+  }
 
-  await runTransaction(db, async (tx) => {
-    const taskSnap = await tx.get(taskRef);
-    if (!taskSnap.exists()) throw new Error('この仕事は見つかりませんでした');
-    if (taskSnap.data().status === 'approved') return; // 二重付与を防ぐ
+  await guard(`approveTask:${id}`, async () => {
+    const taskRef = doc(db, "tasks", id);
+    const famRef = doc(db, "families", state.familyCode);
+    let granted = 0;
+    let capped = false;
 
-    const famSnap = await tx.get(famRef);
-    if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+    await runTransaction(db, async (tx) => {
+      const taskSnap = await tx.get(taskRef);
+      if (!taskSnap.exists()) throw new Error('この仕事は見つかりませんでした');
+      if (taskSnap.data().status === 'approved') return; // 二重付与を防ぐ
 
-    tx.update(taskRef, { status: 'approved', approvedAt: Date.now() });
-    if (amount > 0) {
-      tx.update(famRef, { points: (famSnap.data().points || 0) + amount });
-      granted = amount;
+      const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+
+      const pts = famSnap.data().points || 0;
+      const cap = Number(famSnap.data().pointsCap) || 0;
+      const avail = roomUnderPointsCap(pts, cap);
+      granted = amount > 0 ? Math.min(amount, avail === Infinity ? amount : avail) : 0;
+      capped = amount > 0 && granted < amount;
+
+      const taskUpdate = { status: 'approved', approvedAt: Date.now() };
+      if (capped) taskUpdate.points = granted;
+      tx.update(taskRef, taskUpdate);
+      if (granted > 0) tx.update(famRef, { points: pts + granted });
+    });
+
+    if (granted > 0) {
+      showToast(capped
+        ? `上限のため ${granted}pt だけ付与しました`
+        : `${granted}pt を付与しました`);
+    } else {
+      showToast('承認しました');
     }
-  });
-
-  if (granted > 0) showToast(`${granted}pt を付与しました`);
-}, { busyLabel: '付与しています...' });
+  }, { busyLabel: '付与しています...' });
+};
 
 window.rejectTask = async (id) => {
   const ok = await showConfirm("お断りすると、この仕事は受注されません。", { title: 'このお仕事をお断りしますか？', okLabel: 'お断りする' });
@@ -1226,13 +1258,40 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
 
 window.sellCustom = async (id, v) => {
   const value = Number(v) || 0;
-  const ok = await showConfirm(`今の価値は ${value}pt です。売ってポイントに戻します。`, { title: '売却しますか？', okLabel: '売却する' });
+  const room = roomUnderPointsCap(state.points, state.pointsCap);
+  if (value > 0 && room === 0) {
+    return showAlert(
+      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、売却できません。`,
+      { title: '上限に達しています' }
+    );
+  }
+  const willGrant = Number.isFinite(room) ? Math.min(value, room) : value;
+  const ok = await showConfirm(
+    willGrant < value
+      ? `今の価値は ${value}pt ですが、上限のため ${willGrant}pt だけ戻ります。売却しますか？`
+      : `今の価値は ${value}pt です。売ってポイントに戻します。`,
+    { title: '売却しますか？', okLabel: '売却する' }
+  );
   if (!ok) return;
   await guard(`sellCustom:${id}`, async () => {
-    await updateDoc(doc(db, "families", state.familyCode), { points: increment(value) });
-    await deleteDoc(doc(db, "investments", id));
+    const famRef = doc(db, "families", state.familyCode);
+    const invRef = doc(db, "investments", id);
+    let granted = 0;
+    await runTransaction(db, async (tx) => {
+      const invSnap = await tx.get(invRef);
+      if (!invSnap.exists()) throw new Error('この投資は見つかりませんでした');
+      const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+      const pts = famSnap.data().points || 0;
+      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
+      granted = Math.min(value, avail === Infinity ? value : avail);
+      if (granted > 0) tx.update(famRef, { points: pts + granted });
+      tx.delete(invRef);
+    });
     setView('invest');
-    showToast(`${value}pt になりました`);
+    showToast(granted < value
+      ? `上限のため ${granted}pt だけ戻りました`
+      : `${granted}pt になりました`);
   }, { busyLabel: '売却しています...' });
 };
 
@@ -1315,28 +1374,89 @@ window.depositBank = async () => {
 
 window.withdrawBank = async () => {
   if (!state.banks.length) return showAlert("預けているポイントがありません");
-  const ok = await showConfirm("預金と利息をまとめてポイントに戻します。", { title: '全額を引き出しますか？', okLabel: '引き出す' });
+  let total = 0;
+  const deposits = state.banks.slice();
+  for (const b of deposits) {
+    const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
+    total += b.amount + Math.floor(b.amount * (0.001 * months));
+  }
+  const room = roomUnderPointsCap(state.points, state.pointsCap);
+  if (total > 0 && room === 0) {
+    return showAlert(
+      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、引き出せません。`,
+      { title: '上限に達しています' }
+    );
+  }
+  const willGrant = Number.isFinite(room) ? Math.min(total, room) : total;
+  const ok = await showConfirm(
+    willGrant < total
+      ? `預金＋利息は ${total.toLocaleString()}pt ですが、上限のため ${willGrant.toLocaleString()}pt だけ戻ります。引き出しますか？`
+      : "預金と利息をまとめてポイントに戻します。",
+    { title: '全額を引き出しますか？', okLabel: '引き出す' }
+  );
   if (!ok) return;
   await guard('withdrawBank', async () => {
-    let total = 0;
-    const deposits = state.banks.slice();
-    for (const b of deposits) {
-      const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
-      total += b.amount + Math.floor(b.amount * (0.001 * months));
-    }
-    await updateDoc(doc(db, "families", state.familyCode), { points: increment(total) });
-    for (const b of deposits) {
-      await deleteDoc(doc(db, "banks", b.id));
-    }
+    const famRef = doc(db, "families", state.familyCode);
+    let granted = 0;
+    await runTransaction(db, async (tx) => {
+      const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+      const pts = famSnap.data().points || 0;
+      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
+      granted = Math.min(total, avail === Infinity ? total : avail);
+      if (granted > 0) tx.update(famRef, { points: pts + granted });
+      for (const b of deposits) tx.delete(doc(db, "banks", b.id));
+    });
     setView('home');
-    showToast(`${total}pt 引き出しました`);
+    showToast(granted < total
+      ? `上限のため ${granted}pt だけ引き出しました`
+      : `${granted}pt 引き出しました`);
   }, { busyLabel: '引き出しています...' });
+};
+
+/** いま表示中の子の資産上限を保存。空欄または 0 は制限なし */
+window.savePointsCap = async () => {
+  if (state.role !== 'parent' || !state.familyCode) return;
+  const el = document.getElementById('points-cap-input');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  let cap = null;
+  if (raw !== '') {
+    cap = parseInt(raw, 10);
+    if (!Number.isFinite(cap) || cap < 0) return showAlert('上限は 0 以上の整数で入力してください');
+    if (cap === 0) cap = null;
+  }
+  if (cap != null && (state.points || 0) > cap) {
+    const ok = await showConfirm(
+      `いまの残高（${Number(state.points).toLocaleString()}pt）より低い上限です。残高はそのままで、これ以上増えなくなります。`,
+      { title: '上限を設定しますか？', okLabel: '設定する' }
+    );
+    if (!ok) return;
+  }
+  await guard('savePointsCap', async () => {
+    await updateDoc(doc(db, "families", state.familyCode), {
+      pointsCap: cap == null ? deleteField() : cap
+    });
+    state.pointsCap = cap;
+    showToast(cap == null ? '資産上限を解除しました' : `資産上限を ${cap.toLocaleString()}pt にしました`);
+    render();
+  }, { busyLabel: '保存しています...' });
 };
 
 window.sendBalloon = async () => {
   const p = parseInt(document.getElementById('balloon-points').value);
   const m = document.getElementById('balloon-message').value.trim();
   if (!p || p <= 0) return showAlert("贈るポイントを入力してください");
+  const room = roomUnderPointsCap(state.points, state.pointsCap);
+  if (Number.isFinite(room) && p > room) {
+    const ok = await showConfirm(
+      room <= 0
+        ? `いま資産が上限（${Number(state.pointsCap).toLocaleString()}pt）です。送っても子供は受け取れない可能性があります。それでも送りますか？`
+        : `上限まであと ${room.toLocaleString()}pt です。送った ${p}pt のうち一部しか受け取れないことがあります。それでも送りますか？`,
+      { title: '上限の注意', okLabel: '送る' }
+    );
+    if (!ok) return;
+  }
   await guard('sendBalloon', async () => {
     await addDoc(collection(db, "balloons"), {
       familyCode: state.familyCode,
@@ -1355,29 +1475,50 @@ window.openBalloon = async (id) => {
   const gift = (state.balloons || []).find(b => b.id === id);
   if (!gift) return showAlert("このギフトはもう受け取り済みです");
   const amount = Number(gift.points) || 0;
+  const room = roomUnderPointsCap(state.points, state.pointsCap);
+  if (amount > 0 && room === 0) {
+    return showAlert(
+      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、受け取れません。親に上限を上げてもらうか、換金などで残高を減らしてください。`,
+      { title: '上限に達しています' }
+    );
+  }
+  if (amount > 0 && Number.isFinite(room) && amount > room) {
+    const ok = await showConfirm(
+      `上限のため ${room.toLocaleString()}pt までしか受け取れません。受け取りますか？`,
+      { title: '上限までしか受け取れません', okLabel: '一部受け取る' }
+    );
+    if (!ok) return;
+  }
 
   const received = await guard(`openBalloon:${id}`, async () => {
     const giftRef = doc(db, "balloons", id);
     const famRef = doc(db, "families", state.familyCode);
-    let ok = false;
+    let granted = null;
     await runTransaction(db, async (tx) => {
       const gSnap = await tx.get(giftRef);
       if (!gSnap.exists()) return; // ほかの端末で受け取り済み
       const famSnap = await tx.get(famRef);
-      tx.update(famRef, { points: (famSnap.data().points || 0) + amount });
+      const pts = famSnap.data().points || 0;
+      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
+      granted = Math.min(amount, avail === Infinity ? amount : avail);
+      if (granted > 0) tx.update(famRef, { points: pts + granted });
       tx.delete(giftRef);
-      ok = true;
     });
-    return ok;
+    return granted;
   }, { busyLabel: '受け取っています...' });
 
-  if (received) {
+  if (received == null) return;
+  if (received > 0) {
+    const capped = received < amount;
     const body = gift.message
-      ? `「${gift.message}」\n\nボーナス ${amount}pt を受け取りました！`
-      : `ボーナス ${amount}pt を受け取りました！`;
+      ? `「${gift.message}」\n\nボーナス ${received}pt を受け取りました！${capped ? `\n（上限のため一部）` : ''}`
+      : `ボーナス ${received}pt を受け取りました！${capped ? `\n（上限のため一部）` : ''}`;
     await showAlert(body, { title: 'ギフトが届きました', tone: 'gift' });
+  } else {
+    await showAlert('上限のためポイントは増えませんでしたが、ギフトは受け取り済みにしました。', { title: 'ギフトを受け取りました' });
   }
 };
+
 
 window.addNewChild = async () => {
   const entered = await showPrompt("追加するお子様の名前を入力してください", { title: 'お子様を追加', placeholder: '例: たろう' });

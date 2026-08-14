@@ -1,4 +1,4 @@
-import { state } from './state.js?v=140';
+import { state } from './state.js?v=141';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -322,6 +322,47 @@ export function getHelpStampData(tasks) {
   }
 
   return { cardDays, stamped, streak, year, month };
+}
+
+/** 資産上限までの残り。制限なしなら Infinity */
+export function roomUnderPointsCap(points, cap) {
+  const c = Number(cap);
+  if (!Number.isFinite(c) || c <= 0) return Infinity;
+  return Math.max(0, c - (Number(points) || 0));
+}
+
+/**
+ * 承認済み仕事を日本時間の日付ごとにまとめる（新しい日が先）。
+ * @returns {{ key, year, month, day, weekday, total, items }[]}
+ */
+export function groupApprovedEarningsByDay(tasks) {
+  const map = new Map();
+  for (const t of tasks || []) {
+    if (t.status !== 'approved') continue;
+    const ts = t.approvedAt || t.completedAt || t.createdAt;
+    if (!ts) continue;
+    const j = japanParts(new Date(ts));
+    const key = `${j.year}-${pad2(j.month)}-${pad2(j.day)}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        year: j.year,
+        month: j.month,
+        day: j.day,
+        weekday: j.weekday,
+        total: 0,
+        items: []
+      });
+    }
+    const g = map.get(key);
+    const pts = Number(t.points) || 0;
+    g.total += pts;
+    g.items.push(t);
+  }
+  for (const g of map.values()) {
+    g.items.sort((a, b) => (b.approvedAt || b.completedAt || b.createdAt || 0) - (a.approvedAt || a.completedAt || a.createdAt || 0));
+  }
+  return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
 
 /** 市場レート（決定論的。range: 'day' | 'week' | 'month'） */

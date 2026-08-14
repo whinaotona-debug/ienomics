@@ -29,6 +29,7 @@ export const state = {
   
   // Firebaseから取得するデータ
   points: 0,
+  pointsCap: null, // 親が決める資産上限。null / 0 は制限なし
   childLinked: true,
   tasks: [],
   taskTemplates: [],

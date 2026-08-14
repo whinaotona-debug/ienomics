@@ -1,7 +1,7 @@
-import { state } from './state.js?v=140';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, formatJapanClock, japanParts } from './utils.js?v=140';
-import { refreshTutorial } from './tutorial.js?v=140';
-import { auth } from './firebase.js?v=140';
+import { state } from './state.js?v=141';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts } from './utils.js?v=141';
+import { refreshTutorial } from './tutorial.js?v=141';
+import { auth } from './firebase.js?v=141';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -338,7 +338,9 @@ function renderChildManageList() {
     const active = c.id === state.familyCode;
     const sub = active
       ? 'いま表示中'
-      : (c.childLinked === false ? 'まだ端末とつながっていません' : `${(c.points || 0).toLocaleString()}pt`);
+      : (c.childLinked === false
+        ? 'まだ端末とつながっていません'
+        : `${(c.points || 0).toLocaleString()}pt${Number(c.pointsCap) > 0 ? ` / 上限${Number(c.pointsCap).toLocaleString()}` : ''}`);
     return `
       <div class="ie-child-row ${active ? 'on' : ''}">
         <button type="button" onclick="switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
@@ -382,6 +384,15 @@ function renderHeader() {
     ? `<p class="text-[9px] font-bold text-[#b8f0e4] mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
     : '';
 
+  const cap = Number(state.pointsCap) > 0 ? Number(state.pointsCap) : null;
+  let capHint = '';
+  if (cap != null) {
+    const left = Math.max(0, cap - (Number(state.points) || 0));
+    capHint = left <= 0
+      ? `<p class="text-[9px] font-bold text-[#ffe2b8] mt-1">上限 ${cap.toLocaleString()}pt に到達</p>`
+      : `<p class="text-[9px] font-bold text-white/70 mt-1">上限 ${cap.toLocaleString()}pt（あと ${left.toLocaleString()}pt）</p>`;
+  }
+
   return `
     <div class="flex-none px-3 pt-3 pb-0">
       <div class="ie-topbar" data-tour="topbar">
@@ -406,6 +417,7 @@ function renderHeader() {
             <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
           </div>
           ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
+          ${capHint}
           ${payHint}
           ${streakHint}
         </div>
@@ -1164,6 +1176,21 @@ function renderSettings() {
       <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
     </div>
 
+    ${isChild ? '' : `
+      <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
+        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${esc(state.childName || 'こども')}の${rb('資産上限','しさんじょうげん')}</p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">残高がこの金額を超えないようにします。空欄または 0 で制限なし。</p>
+        <div class="flex gap-2 items-center">
+          <input type="number" id="points-cap-input" inputmode="numeric" min="0" step="1"
+                 value="${Number(state.pointsCap) > 0 ? Number(state.pointsCap) : ''}"
+                 placeholder="例: 3000"
+                 class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+          <span class="text-xs font-bold text-slate-400 shrink-0">pt</span>
+          <button type="button" onclick="savePointsCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>
+        </div>
+      </div>
+    `}
+
     ${pushRow}
 
     ${isChild ? '' : `
@@ -1391,7 +1418,7 @@ function renderTickets() {
 }
 function renderHistory() {
   const app = state.tasks.filter(t => t.status === 'approved');
-  const total = app.reduce((s, t) => s + t.points, 0);
+  const total = app.reduce((s, t) => s + (Number(t.points) || 0), 0);
   const { cardDays, stamped, streak, month } = getHelpStampData(state.tasks);
   const monthLabel = `${month + 1}月`;
   const stampCells = Array.from({ length: cardDays }, (_, i) => {
@@ -1399,6 +1426,29 @@ function renderHistory() {
     const on = stamped.has(day);
     return `<div class="aspect-square rounded-xl flex flex-col items-center justify-center border text-[9px] font-black ${on ? 'ie-stamp-on' : 'bg-[#f7faf9] border-[#eaf1ee] text-[#b9cdc6]'}">${on ? '✓' : day}</div>`;
   }).join('');
+
+  const week = ['日', '月', '火', '水', '木', '金', '土'];
+  const byDay = groupApprovedEarningsByDay(state.tasks);
+  const dayBlocks = byDay.length
+    ? byDay.map(g => {
+      const label = `${g.month}/${g.day}（${week[g.weekday]}）`;
+      const rows = g.items.map(t => `
+        <div class="flex justify-between items-start gap-2 py-2 border-b border-[#eaf1ee] last:border-0">
+          <span class="text-[#2c3d38] ie-wrap-text min-w-0 flex-1 text-xs font-bold">${jobTitleHtml(t.title, t.titleKana)}</span>
+          <span class="text-[#1c2b27] text-xs font-black shrink-0">+${Number(t.points) || 0} pt</span>
+        </div>
+      `).join('');
+      return `
+        <div class="mb-4 rounded-2xl border border-[#eaf1ee] bg-white overflow-hidden">
+          <div class="flex justify-between items-center gap-2 px-4 py-3 bg-[#f4f9f7] border-b border-[#eaf1ee]">
+            <p class="text-sm font-black text-[#1c2b27]">${label}</p>
+            <p class="text-sm font-black text-[#2f8f82] shrink-0">+${g.total.toLocaleString()} <span class="text-[10px] font-bold">pt</span></p>
+          </div>
+          <div class="px-4 py-1">${rows}</div>
+        </div>
+      `;
+    }).join('')
+    : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ承認された仕事はありません</p>`;
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
@@ -1423,7 +1473,8 @@ function renderHistory() {
       <p class="text-[9px] font-bold text-[#7a8f88] mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
     </div>
 
-    <div class="space-y-1">${app.length ? app.map(t => `<div class="border-b border-[#eaf1ee] py-3 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-[#2c3d38] ie-wrap-text min-w-0 flex-1">${esc(t.title)}</span><span class="text-[#1c2b27] bg-[#eef5f2] px-2 py-1 rounded-lg border border-[#eaf1ee] shrink-0">+${Number(t.points) || 0} pt</span></div>`).join('') : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ承認された仕事はありません</p>`}</div>
+    <p class="text-[10px] font-bold text-[#7a8f88] tracking-wider mb-2">日ごとの${rb('獲得','かくとく')}</p>
+    <div>${dayBlocks}</div>
   `;
 }
 function ensureCalendarCursor() {
