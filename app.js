@@ -1,10 +1,10 @@
-import { state } from './state.js?v=141';
-import { render } from './ui.js?v=141';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap } from './utils.js?v=141';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=141';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=141';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=141';
-import { db, auth } from './firebase.js?v=141';
+import { state } from './state.js?v=142';
+import { render } from './ui.js?v=142';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap } from './utils.js?v=142';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=142';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=142';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=142';
+import { db, auth } from './firebase.js?v=142';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 

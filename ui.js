@@ -1,7 +1,7 @@
-import { state } from './state.js?v=141';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts } from './utils.js?v=141';
-import { refreshTutorial } from './tutorial.js?v=141';
-import { auth } from './firebase.js?v=141';
+import { state } from './state.js?v=142';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts } from './utils.js?v=142';
+import { refreshTutorial } from './tutorial.js?v=142';
+import { auth } from './firebase.js?v=142';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -364,13 +364,10 @@ function renderChildManageList() {
 }
 
 function renderHeader() {
-  let nameTag = '';
-  if (state.role === 'parent') {
-    nameTag = renderChildTabs('hero')
-      || `<p class="text-[10px] text-white/85 font-bold tracking-[0.08em]">${esc(state.childName)} の${rb('口座','こうざ')}</p>`;
-  } else {
-    nameTag = `<p class="text-[10px] text-white/85 font-bold tracking-[0.08em]">${esc(state.childName)} の${rb('資産','しさん')}</p>`;
-  }
+  const childTabs = state.role === 'parent' ? renderChildTabs('hero') : '';
+  const nameLabel = state.role === 'parent'
+    ? `${esc(state.childName)} の${rb('口座','こうざ')}`
+    : `${esc(state.childName)} の${rb('資産','しさん')}`;
 
   const nextPay = getNextPaymentInfo(state.scheduledPayments);
   let payHint = '';
@@ -409,10 +406,11 @@ function renderHeader() {
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
       </div>
+      ${childTabs ? `<div class="ie-hero-tabs">${childTabs}</div>` : ''}
       <div class="ie-hero">
         <div class="ie-hero-main">
-          <div class="ie-hero-label" data-tour="nametag">${nameTag}</div>
-          <div class="flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
+          <div class="ie-hero-label" data-tour="nametag"><p>${nameLabel}</p></div>
+          <div class="ie-hero-balance flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
             <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
             <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
           </div>
@@ -423,7 +421,7 @@ function renderHeader() {
         </div>
         <div class="ie-hero-divider" aria-hidden="true"></div>
         <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
-          <div class="ie-hero-label ie-hero-label-right">${rb('同期','どうき')}ID</div>
+          <div class="ie-hero-label ie-hero-label-right"><p>${rb('同期','どうき')}ID</p></div>
           <p class="ie-hero-code">${esc(state.familyCode)}</p>
           <p class="ie-hero-copyhint">タップでコピー</p>
         </button>
@@ -1216,15 +1214,17 @@ function renderSettings() {
       <span class="ie-guide-arrow" aria-hidden="true">›</span>
     </button>
 
-    <button type="button" class="w-full p-4 bg-white rounded-xl mb-8 flex justify-between items-center cursor-pointer border border-slate-100"
+    <button type="button" class="w-full p-4 bg-white rounded-xl mb-4 flex justify-between items-center cursor-pointer border border-slate-100"
             onclick="toggleFurigana()" role="switch" aria-checked="${state.furigana ? 'true' : 'false'}">
-      <span class="font-bold text-sm text-slate-700">${rb('フリガナ','ふりがな')}(${rb('表示','ひょうじ')})</span>
+      <span class="font-bold text-sm text-slate-700">${rb('フリガナ表示','ふりがなひょうじ')}</span>
       <span class="w-10 h-5 rounded-full flex items-center p-0.5 transition-colors duration-200 ${state.furigana ? 'bg-[#2f8f82] justify-end' : 'bg-slate-300 justify-start'}">
         <span class="w-4 h-4 bg-white rounded-full shadow-sm"></span>
       </span>
     </button>
 
-    <button onclick="unlinkAccount()" class="solid-btn w-full py-4 bg-white text-red-600 font-bold text-xs hover:bg-red-50">${rb('連携','れんけい')}を${rb('解除','かいじょ')}する</button>
+    <div class="text-center mb-2">
+      <button type="button" onclick="unlinkAccount()" class="ie-unlink-btn">${rb('連携','れんけい')}を${rb('解除','かいじょ')}する</button>
+    </div>
   `;
 }
 export function drawInvestChart() {
