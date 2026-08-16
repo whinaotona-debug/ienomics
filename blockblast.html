@@ -24,22 +24,26 @@
       margin: 0;
       height: 100%;
       height: 100svh;
-      background: radial-gradient(1200px 700px at 50% -10%, #1a3a78 0%, var(--bg0) 55%);
       color: var(--ink);
       font-family: "M PLUS Rounded 1c", "Fredoka", sans-serif;
       overflow: hidden;
       user-select: none;
       touch-action: none;
     }
+    html {
+      background: radial-gradient(1200px 700px at 50% -10%, #1a3a78 0%, var(--bg0) 55%);
+    }
+    body { background: transparent; }
     #app {
       height: 100%;
       height: 100svh;
       max-width: 460px;
       margin: 0 auto;
-      display: flex;
+      display: none;
       flex-direction: column;
       padding: max(10px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
     }
+    #app.show { display: flex; }
     header { flex: none; margin-bottom: 6px; }
     .hud-top {
       display: grid;
@@ -288,8 +292,8 @@
     }
     .controls {
       display: grid;
-      grid-template-columns: 1.3fr 1fr 1fr auto auto;
-      gap: 8px;
+      grid-template-columns: 1.2fr 1fr 1fr auto auto auto;
+      gap: 6px;
       margin-top: 10px;
     }
     button {
@@ -320,16 +324,15 @@
       display: none;
       filter: drop-shadow(0 12px 16px rgba(0,0,0,.45));
     }
-    #overlay, #start {
+    #overlay, #howto {
       position: fixed; inset: 0;
       background: rgba(5,10,28,.72);
       display: none;
       align-items: center;
       justify-content: center;
-      z-index: 30;
+      z-index: 55;
       padding: 20px;
     }
-    #start { display: flex; }
     .modal {
       width: min(360px, 100%);
       background: linear-gradient(180deg, #2b4782, #182c58);
@@ -362,6 +365,325 @@
       25% { transform: translateX(-4px); }
       75% { transform: translateX(4px); }
     }
+    .modal .play + button { margin-top: 10px; }
+    #endCoins { color: var(--gold); font-size: 15px; min-height: 22px; margin: 0 0 14px; }
+    #endCoins.no { color: #ff9ab4; }
+    #coinWarn {
+      text-align: center;
+      font-size: 11px;
+      color: #ff9ab4;
+      min-height: 16px;
+      margin-top: 2px;
+    }
+    .brand .coin-n { color: var(--gold); font-family: Fredoka, sans-serif; font-size: 16px; }
+
+    #home, #shop {
+      position: fixed; inset: 0;
+      z-index: 40;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      padding: max(28px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+    }
+    #home.show, #shop.show { display: flex; }
+    #shop { z-index: 45; background: rgba(5,10,22,.88); }
+    #home { justify-content: flex-start; }
+    .home-box { width: min(380px, 100%); text-align: center; padding-bottom: 24px; }
+    .coin-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: linear-gradient(180deg, #3a5080, #243560);
+      border-radius: 999px;
+      padding: 8px 16px;
+      margin: 10px 0 6px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 0 #121c36;
+      font-size: 18px;
+    }
+    .coin-chip b { font-family: Fredoka, sans-serif; color: var(--gold); }
+    .home-meta { color: #c5d4f5; font-size: 13px; margin: 8px 0 18px; line-height: 1.5; }
+    .home-meta em { color: var(--gold); font-style: normal; }
+    .note {
+      font-size: 12px; color: #9db0d8; line-height: 1.45;
+      background: rgba(0,0,0,.22); border-radius: 14px; padding: 10px 12px; margin: 14px 0 0;
+    }
+    .shop-head {
+      width: min(420px, 100%);
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px; flex: none;
+    }
+    .shop-head b { font-size: 22px; }
+    .tabs {
+      width: min(420px, 100%);
+      display: flex; gap: 6px; overflow-x: auto; flex: none;
+      padding-bottom: 10px; touch-action: pan-x;
+    }
+    .tabs button {
+      flex: none; padding: 8px 12px; font-size: 13px;
+      background: linear-gradient(180deg, #3a5080, #243560); --btn-shadow: #121c36;
+    }
+    .tabs button.on { background: linear-gradient(180deg, #ffd24a, #f0a000); color: #4a2e00; --btn-shadow: #b06d00; }
+    .shop-grid {
+      width: min(420px, 100%);
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+      padding-bottom: 28px;
+    }
+    .shop-card {
+      background: linear-gradient(180deg, #2b4782, #182c58);
+      border-radius: 16px; padding: 14px 10px 12px; text-align: center;
+      box-shadow: 0 6px 0 #0a142c;
+    }
+    .shop-card.eq { box-shadow: 0 0 0 2px var(--gold), 0 6px 0 #0a142c; }
+    .shop-card .ico { font-size: 30px; line-height: 1.2; }
+    .shop-card .nm { font-size: 13px; margin: 4px 0 2px; }
+    .shop-card .pr { font-size: 12px; color: var(--gold); margin-bottom: 8px; }
+    .shop-card button { width: 100%; padding: 8px; font-size: 13px; }
+    .shop-card button.own { background: linear-gradient(180deg, #5ce1a6, #19a86a); color: #07331f; --btn-shadow: #0e6b42; }
+    .shop-card button.eqb { background: linear-gradient(180deg, #ffd24a, #f0a000); color: #4a2e00; --btn-shadow: #b06d00; }
+    .shop-card button.buy { background: linear-gradient(180deg, #7aa7ff, #3b6adf); --btn-shadow: #1d3f96; }
+    #toast {
+      position: fixed; top: max(16px, env(safe-area-inset-top)); left: 50%;
+      transform: translateX(-50%) translateY(-120%);
+      z-index: 90; background: var(--gold); color: #4a2e00;
+      padding: 10px 18px; border-radius: 999px; font-weight: 800; font-size: 14px;
+      box-shadow: 0 6px 0 #b06d00; pointer-events: none; transition: transform .28s ease;
+      white-space: nowrap;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    .cell.ghost .block { animation: none !important; }
+
+    html[data-skin="simple"] .block, html[data-skin="simple"] .mini i {
+      background: var(--main); border-radius: 4px;
+      box-shadow: 0 2px 0 var(--dark);
+    }
+    html[data-skin="simple"] .block::before, html[data-skin="simple"] .block::after { display: none; }
+
+    html[data-skin="egg"] .block, html[data-skin="egg"] .mini i {
+      border-radius: 50%;
+      background: radial-gradient(circle at 48% 52%, var(--main) 0 34%, #fff8e8 36% 100%);
+      box-shadow: 0 3px 0 #d9c9a0, inset 0 2px 0 rgba(255,255,255,.7);
+    }
+    html[data-skin="egg"] .block::after { display: none; }
+
+    html[data-skin="jelly"] .block, html[data-skin="jelly"] .mini i {
+      border-radius: 42%;
+      background: linear-gradient(180deg, rgba(255,255,255,.45), var(--main) 55%, var(--dark));
+      box-shadow: inset 0 -8px 12px rgba(255,255,255,.28), 0 4px 0 var(--dark);
+      animation: jelly 1.15s ease-in-out infinite;
+    }
+    @keyframes jelly {
+      0%,100% { transform: scale(1,1); }
+      50% { transform: scale(1.07,.93); }
+    }
+
+    html[data-skin="face"] .block::after {
+      content: ""; inset: auto; top: 30%; left: 18%; width: 64%; height: 42%;
+      border-radius: 0; box-shadow: none;
+      background:
+        radial-gradient(circle at 22% 36%, #2a1a12 0 16%, transparent 18%),
+        radial-gradient(circle at 78% 36%, #2a1a12 0 16%, transparent 18%),
+        radial-gradient(ellipse at 50% 86%, #2a1a12 0 18%, transparent 20%);
+    }
+
+    html[data-skin="wood"] .block, html[data-skin="wood"] .mini i {
+      border-radius: 3px;
+      background:
+        repeating-linear-gradient(90deg, transparent 0 3px, rgba(0,0,0,.1) 3px 4px),
+        linear-gradient(180deg, var(--light), var(--main), var(--dark));
+    }
+    html[data-skin="wood"] .block::before { opacity: .35; }
+
+    html[data-skin="neon"] .block, html[data-skin="neon"] .mini i {
+      background: var(--main); border-radius: 6px;
+      box-shadow: 0 0 8px var(--light), 0 0 16px var(--main), inset 0 0 6px var(--light);
+    }
+
+    html[data-skin="pixel"] .block, html[data-skin="pixel"] .mini i {
+      border-radius: 0;
+      background: var(--main);
+      box-shadow: inset -3px -3px 0 var(--dark), inset 3px 3px 0 var(--light);
+    }
+    html[data-skin="pixel"] .block::before, html[data-skin="pixel"] .block::after { display: none; }
+
+    html[data-skin="glass"] .block, html[data-skin="glass"] .mini i {
+      background: linear-gradient(160deg, rgba(255,255,255,.65), var(--light) 28%, var(--main) 70%, rgba(0,0,0,.2));
+      border-radius: 10px;
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.35), 0 4px 10px rgba(0,0,0,.2);
+    }
+
+    html[data-skin="metal"] .block, html[data-skin="metal"] .mini i {
+      border-radius: 4px;
+      background: linear-gradient(180deg, #f4f4f4, var(--main) 42%, #222);
+      box-shadow: inset 0 1px 0 #fff, 0 3px 0 #111;
+    }
+
+    html[data-skin="pastel"] .block, html[data-skin="pastel"] .mini i {
+      border-radius: 14px; filter: saturate(.65) brightness(1.18);
+      box-shadow: 0 3px 0 rgba(0,0,0,.1);
+    }
+
+    html[data-skin="brick"] .block, html[data-skin="brick"] .mini i {
+      border-radius: 2px; background: var(--main);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,.28), 0 2px 0 var(--dark);
+    }
+    html[data-skin="brick"] .block::before, html[data-skin="brick"] .block::after { display: none; }
+
+    html[data-skin="ice"] .block, html[data-skin="ice"] .mini i {
+      background: linear-gradient(160deg, #fff, var(--light) 32%, var(--main) 78%, #b8e8ff);
+      box-shadow: 0 0 10px rgba(180,230,255,.55), 0 3px 0 var(--dark);
+    }
+
+    html[data-skin="lava"] .block, html[data-skin="lava"] .mini i {
+      background: radial-gradient(circle at 30% 28%, #ffe566, var(--main) 42%, #3a0000);
+      box-shadow: 0 0 12px var(--main), 0 3px 0 #3a0000;
+      animation: lava 1.5s ease-in-out infinite;
+    }
+    @keyframes lava { 50% { filter: brightness(1.25); } }
+
+    html[data-skin="cloud"] .block, html[data-skin="cloud"] .mini i {
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 32%, #fff, var(--light) 48%, var(--main));
+      box-shadow: 0 4px 0 rgba(255,255,255,.25);
+    }
+
+    html[data-skin="cat"] .block, html[data-skin="cat"] .mini i {
+      border-radius: 40% 40% 46% 46% / 32% 32% 55% 55%;
+      clip-path: polygon(16% 24%, 20% 0, 40% 18%, 60% 18%, 80% 0, 84% 24%, 100% 40%, 100% 100%, 0 100%, 0 40%);
+    }
+    html[data-skin="cat"] .block::after {
+      content: ""; inset: auto; top: 38%; left: 20%; width: 60%; height: 38%;
+      border-radius: 0; box-shadow: none;
+      background:
+        radial-gradient(circle at 24% 30%, #2a1a12 0 14%, transparent 16%),
+        radial-gradient(circle at 76% 30%, #2a1a12 0 14%, transparent 16%),
+        radial-gradient(ellipse at 50% 80%, #2a1a12 0 16%, transparent 18%);
+    }
+
+    html[data-skin="crystal"] .block, html[data-skin="crystal"] .mini i {
+      border-radius: 0;
+      clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+      background: linear-gradient(135deg, #fff, var(--light), var(--main), var(--dark));
+      box-shadow: none;
+    }
+    html[data-skin="crystal"] .block::before, html[data-skin="crystal"] .block::after { display: none; }
+
+    html[data-skin="paper"] .block, html[data-skin="paper"] .mini i {
+      border-radius: 1px; background: var(--light);
+      box-shadow: 2px 2px 0 var(--dark);
+    }
+    html[data-skin="paper"] .block::after { display: none; }
+
+    html[data-skin="water"] .block, html[data-skin="water"] .mini i {
+      border-radius: 50% 50% 46% 54%;
+      background: radial-gradient(circle at 30% 28%, #fff 0 14%, var(--light) 22%, var(--main));
+      box-shadow: inset 0 -4px 8px rgba(255,255,255,.35), 0 3px 0 var(--dark);
+    }
+
+    html[data-skin="rainbow"] .block, html[data-skin="rainbow"] .mini i {
+      background: linear-gradient(135deg, #ff5c7a, #ffd24a, #3ddc7a, #3b8bff, #9b5cff);
+      background-size: 220% 220%;
+      animation: rainbow 2.4s linear infinite;
+      box-shadow: 0 3px 0 #5a3ad0;
+    }
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+
+    html[data-bg="space"] {
+      background-color: #030014;
+      background-image:
+        radial-gradient(1px 1px at 12% 22%, #fff, transparent),
+        radial-gradient(1px 1px at 28% 78%, #fff, transparent),
+        radial-gradient(1.5px 1.5px at 82% 28%, #cde, transparent),
+        radial-gradient(1px 1px at 62% 52%, #fff, transparent),
+        radial-gradient(1px 1px at 88% 72%, #fff, transparent),
+        radial-gradient(1px 1px at 18% 58%, #9cf, transparent),
+        radial-gradient(2px 2px at 48% 14%, #fff, transparent),
+        radial-gradient(1px 1px at 74% 88%, #fff, transparent),
+        radial-gradient(620px 400px at 50% -8%, #2a1060, transparent 70%),
+        radial-gradient(420px 280px at 85% 110%, #1a2050, transparent);
+    }
+    html[data-bg="arcade"] {
+      background:
+        repeating-linear-gradient(180deg, rgba(255,0,180,.07) 0 2px, transparent 2px 8px),
+        radial-gradient(900px 560px at 50% 0%, #6b1a8a, #120018 72%);
+    }
+    html[data-bg="ocean"] { background: linear-gradient(180deg, #1a6fb5 0%, #0a3a6a 42%, #072038 100%); }
+    html[data-bg="forest"] { background: radial-gradient(900px 520px at 50% -10%, #2d6a3a, #0c2412 62%); }
+    html[data-bg="sunset"] { background: linear-gradient(180deg, #ffb347 0%, #ff6b4a 34%, #4a1a5c 72%, #120818 100%); }
+    html[data-bg="sakura"] {
+      background:
+        radial-gradient(circle at 18% 28%, rgba(255,180,200,.5), transparent 26%),
+        radial-gradient(circle at 82% 18%, rgba(255,200,220,.38), transparent 22%),
+        linear-gradient(180deg, #f7c6d4, #8a4a6a 55%, #3a2038);
+    }
+    html[data-bg="city"] { background: linear-gradient(180deg, #0a1028 0%, #1a1040 42%, #2a1848 72%, #0a0818 100%); }
+    html[data-bg="sweets"] {
+      background: repeating-linear-gradient(45deg, #ffc2d4 0 18px, #c9e4ff 18px 36px);
+    }
+    html[data-bg="desert"] { background: linear-gradient(180deg, #ffe29a, #e0a14a 40%, #c46a2a 72%, #5a3018); }
+    html[data-bg="snow"] {
+      background:
+        radial-gradient(circle at 20% 18%, #fff 0 2px, transparent 3px),
+        radial-gradient(circle at 70% 38%, #fff 0 2px, transparent 3px),
+        radial-gradient(circle at 40% 70%, #fff 0 1.5px, transparent 2.5px),
+        linear-gradient(180deg, #d8e8f8, #7aa0c8 60%, #2a4468);
+    }
+    html[data-bg="retro"] {
+      background: repeating-linear-gradient(0deg, #1a0a28 0 11px, #2a1440 11px 12px);
+    }
+    html[data-bg="circuit"] {
+      background:
+        repeating-linear-gradient(90deg, rgba(0,255,170,.1) 0 1px, transparent 1px 28px),
+        repeating-linear-gradient(0deg, rgba(0,255,170,.1) 0 1px, transparent 1px 28px),
+        #031a14;
+    }
+    html[data-bg="onsen"] { background: linear-gradient(180deg, #6a8c9a, #c4b49a 46%, #8a6a4a 80%, #3a2a1a); }
+    html[data-bg="aurora"] {
+      background:
+        linear-gradient(120deg, rgba(80,255,180,.38), transparent 42%),
+        linear-gradient(240deg, rgba(120,80,255,.42), transparent 46%),
+        linear-gradient(180deg, #041428, #0a2040);
+    }
+
+    html[data-board="wood"] .board-frame, html[data-board="wood"] .tray {
+      background: linear-gradient(180deg, #8b5a2b, #5a3416);
+      box-shadow: 0 10px 0 #3a1e0a, inset 0 1px 0 rgba(255,255,255,.2);
+    }
+    html[data-board="wood"] .cell { background: #3a2410; }
+    html[data-board="neon"] .board-frame, html[data-board="neon"] .tray {
+      background: #0a0a18;
+      box-shadow: 0 0 18px #5ce1ff, 0 10px 0 #041018, inset 0 0 10px rgba(92,225,255,.35);
+    }
+    html[data-board="neon"] .cell { background: #081018; }
+    html[data-board="gold"] .board-frame, html[data-board="gold"] .tray {
+      background: linear-gradient(180deg, #e0b84a, #8a6010);
+      box-shadow: 0 10px 0 #5a3a08, inset 0 1px 0 rgba(255,255,255,.4);
+    }
+    html[data-board="gold"] .cell { background: #3a2a08; }
+    html[data-board="arcade"] .board-frame, html[data-board="arcade"] .tray {
+      background: linear-gradient(180deg, #5a1a78, #2a0a40);
+      box-shadow: 0 10px 0 #120018, inset 0 0 0 3px #ffd24a;
+    }
+    html[data-board="arcade"] .cell { background: #1a0828; }
+    html[data-board="stone"] .board-frame, html[data-board="stone"] .tray {
+      background: linear-gradient(180deg, #6a7080, #3a404c);
+      box-shadow: 0 10px 0 #1a1e24;
+    }
+    html[data-board="stone"] .cell { background: #2a3038; }
+    html[data-board="pastel"] .board-frame, html[data-board="pastel"] .tray {
+      background: linear-gradient(180deg, #f2c6d8, #c9b6f2);
+      box-shadow: 0 10px 0 #8a6aa0;
+    }
+    html[data-board="pastel"] .cell { background: #efe4ff; }
+    html[data-board="holo"] .board-frame, html[data-board="holo"] .tray {
+      background: linear-gradient(135deg, #5ce1ff, #c9a3ff, #ff9ada, #ffd24a);
+      box-shadow: 0 10px 0 #4a2a80;
+    }
+    html[data-board="holo"] .cell { background: rgba(10,16,40,.55); }
   </style>
 </head>
 <body>
@@ -372,7 +694,7 @@
           <span>BEST</span>
           <b id="best">0</b>
         </div>
-        <div class="brand">BLOCK BLAST</div>
+        <div class="brand">🪙 <span class="coin-n" id="hudCoins">0</span></div>
         <div class="stat combo-badge" id="comboBox">
           <span>COMBO</span>
           <b id="combo">0</b>
@@ -381,6 +703,7 @@
       <div class="score-hero">
         <span>SCORE</span>
         <b id="score">0</b>
+        <div id="coinWarn"></div>
       </div>
     </header>
 
@@ -402,24 +725,48 @@
       <button class="hint" id="btnHint">ヒント</button>
       <button class="icon" id="btnMute" title="音">🔊</button>
       <button class="icon" id="btnRetry" title="やり直し">↺</button>
+      <button class="icon" id="btnHome" title="ホーム">🏠</button>
     </div>
   </div>
 
   <div id="drag"></div>
-  <div id="start">
-    <div class="modal">
+  <div id="home" class="show">
+    <div class="home-box">
       <div class="logo">BLOCK<br>BLAST</div>
-      <p>原作と同じ 8×8。行と列を消してコンボを伸ばそう。<br>AIが盤面を読んで最善の置き方をするよ。</p>
+      <div class="coin-chip">🪙 <b id="homeCoins">0</b></div>
+      <div class="home-meta">BEST <em id="homeBest">0</em>　全消し <em id="homePerfects">0</em></div>
       <button class="play" id="btnStart">はじめる</button>
+      <button class="play alt" id="btnShop" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96;margin-top:10px">ショップ</button>
+      <button class="play" id="btnHow" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36;margin-top:10px">あそびかた</button>
+      <div class="note">手で置いた点数だけコインになるよ。<br>AI配置・おまかせを使うとその回は <b>0枚</b>。<br>ヒントはOK。見た目だけ変えられるよ。</div>
+    </div>
+  </div>
+  <div id="shop">
+    <div class="shop-head">
+      <b>ショップ</b>
+      <span class="coin-chip" style="margin:0">🪙 <b id="shopCoins">0</b></span>
+      <button class="icon" id="btnShopClose" style="width:44px">✕</button>
+    </div>
+    <div class="tabs" id="shopTabs"></div>
+    <div class="shop-grid" id="shopGrid"></div>
+  </div>
+  <div id="howto">
+    <div class="modal">
+      <div class="logo" style="font-size:28px">あそびかた</div>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>🪙 コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ショップではブロック・背景・盤面・演出・音が買える。点数アップアイテムはないよ。</p>
+      <button class="play" id="btnHowClose">とじる</button>
     </div>
   </div>
   <div id="overlay">
     <div class="modal">
       <div class="logo" style="font-size:32px">GAME OVER</div>
       <p>スコア <b id="endScore">0</b></p>
+      <p id="endCoins"></p>
       <button class="play" id="btnAgain">もう一度</button>
+      <button class="play" id="btnEndHome" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">ホーム</button>
     </div>
   </div>
+  <div id="toast"></div>
 
 <script>
 (() => {
@@ -664,12 +1011,110 @@
     pop: document.getElementById("pop"),
     frame: document.getElementById("frame"),
     overlay: document.getElementById("overlay"),
-    start: document.getElementById("start"),
+    home: document.getElementById("home"),
+    shop: document.getElementById("shop"),
+    howto: document.getElementById("howto"),
+    app: document.getElementById("app"),
     endScore: document.getElementById("endScore"),
+    endCoins: document.getElementById("endCoins"),
     floatScore: document.getElementById("floatScore"),
-    flash: document.getElementById("flash")
+    flash: document.getElementById("flash"),
+    hudCoins: document.getElementById("hudCoins"),
+    homeCoins: document.getElementById("homeCoins"),
+    shopCoins: document.getElementById("shopCoins"),
+    homeBest: document.getElementById("homeBest"),
+    homePerfects: document.getElementById("homePerfects"),
+    coinWarn: document.getElementById("coinWarn"),
+    toast: document.getElementById("toast"),
+    shopTabs: document.getElementById("shopTabs"),
+    shopGrid: document.getElementById("shopGrid")
   };
 
+  const CATALOG = {
+    skins: [
+      { id: "candy", name: "キャンディ", price: 0, icon: "🍬" },
+      { id: "simple", name: "シンプル", price: 40, icon: "▫️" },
+      { id: "egg", name: "目玉焼き", price: 90, icon: "🍳" },
+      { id: "jelly", name: "プルプル", price: 90, icon: "🫧" },
+      { id: "face", name: "にこにこ", price: 100, icon: "😊" },
+      { id: "wood", name: "ウッド", price: 70, icon: "🪵" },
+      { id: "neon", name: "ネオン", price: 110, icon: "💡" },
+      { id: "pixel", name: "ドット", price: 80, icon: "👾" },
+      { id: "glass", name: "ガラス", price: 100, icon: "🔮" },
+      { id: "metal", name: "メタル", price: 100, icon: "⚙️" },
+      { id: "pastel", name: "パステル", price: 70, icon: "🎀" },
+      { id: "brick", name: "レゴ", price: 90, icon: "🧱" },
+      { id: "ice", name: "アイス", price: 100, icon: "🧊" },
+      { id: "lava", name: "マグマ", price: 120, icon: "🌋" },
+      { id: "cloud", name: "くも", price: 80, icon: "☁️" },
+      { id: "cat", name: "ねこ", price: 130, icon: "🐱" },
+      { id: "crystal", name: "クリスタル", price: 140, icon: "💎" },
+      { id: "paper", name: "おりがみ", price: 70, icon: "📄" },
+      { id: "water", name: "みずたま", price: 90, icon: "💧" },
+      { id: "rainbow", name: "にじ", price: 160, icon: "🌈" }
+    ],
+    bgs: [
+      { id: "navy", name: "ミッドナイト", price: 0, icon: "🌙" },
+      { id: "space", name: "宇宙", price: 80, icon: "🚀" },
+      { id: "arcade", name: "ゲーセン", price: 110, icon: "🕹️" },
+      { id: "ocean", name: "うみ", price: 80, icon: "🌊" },
+      { id: "forest", name: "もり", price: 80, icon: "🌲" },
+      { id: "sunset", name: "ゆうやけ", price: 90, icon: "🌅" },
+      { id: "sakura", name: "さくら", price: 100, icon: "🌸" },
+      { id: "city", name: "よるのまち", price: 100, icon: "🌃" },
+      { id: "sweets", name: "スイーツ", price: 90, icon: "🍭" },
+      { id: "desert", name: "さばく", price: 70, icon: "🏜️" },
+      { id: "snow", name: "ゆき", price: 90, icon: "❄️" },
+      { id: "retro", name: "レトロ", price: 110, icon: "📺" },
+      { id: "circuit", name: "でんし", price: 100, icon: "💻" },
+      { id: "onsen", name: "おんせん", price: 90, icon: "♨️" },
+      { id: "aurora", name: "オーロラ", price: 130, icon: "✨" }
+    ],
+    boards: [
+      { id: "classic", name: "クラシック", price: 0, icon: "🟦" },
+      { id: "wood", name: "木枠", price: 60, icon: "🪵" },
+      { id: "neon", name: "ネオン枠", price: 80, icon: "💠" },
+      { id: "gold", name: "ゴールド", price: 120, icon: "🥇" },
+      { id: "arcade", name: "筐体", price: 80, icon: "🎰" },
+      { id: "stone", name: "いし", price: 60, icon: "🪨" },
+      { id: "pastel", name: "パステル枠", price: 60, icon: "🩷" },
+      { id: "holo", name: "ホロ", price: 100, icon: "🪩" }
+    ],
+    fx: [
+      { id: "spark", name: "スパーク", price: 0, icon: "✨" },
+      { id: "bubble", name: "バブル", price: 70, icon: "🫧" },
+      { id: "star", name: "ほし", price: 80, icon: "⭐" },
+      { id: "petal", name: "はなびら", price: 90, icon: "🌸" },
+      { id: "pixel", name: "ドット", price: 70, icon: "🟦" },
+      { id: "heart", name: "ハート", price: 90, icon: "💗" }
+    ],
+    sfx: [
+      { id: "pop", name: "ポップ", price: 0, icon: "🎵" },
+      { id: "bit", name: "8ビット", price: 80, icon: "👾" },
+      { id: "soft", name: "やわらか", price: 60, icon: "🎹" },
+      { id: "arcade", name: "アーケード", price: 90, icon: "🔊" }
+    ]
+  };
+  const TABS = [
+    { key: "skins", label: "ブロック" },
+    { key: "bgs", label: "背景" },
+    { key: "boards", label: "盤面" },
+    { key: "fx", label: "演出" },
+    { key: "sfx", label: "音" }
+  ];
+  const EQ_KEY = { skins: "skin", bgs: "bg", boards: "board", fx: "fx", sfx: "sfx" };
+
+  function defaultSave() {
+    return {
+      coins: 0,
+      best: 0,
+      owned: { skins: ["candy"], bgs: ["navy"], boards: ["classic"], fx: ["spark"], sfx: ["pop"] },
+      eq: { skin: "candy", bg: "navy", board: "classic", fx: "spark", sfx: "pop" },
+      games: 0,
+      perfects: 0,
+      daily: ""
+    };
+  }
   function loadBest() {
     try { return Number(localStorage.getItem("blockblast-best") || 0); }
     catch (e) { return 0; }
@@ -678,6 +1123,154 @@
     try { localStorage.setItem("blockblast-best", String(n)); }
     catch (e) {}
   }
+  function loadSave() {
+    const base = defaultSave();
+    try {
+      const raw = localStorage.getItem("blockblast-save");
+      if (raw) {
+        const s = JSON.parse(raw);
+        base.coins = Number(s.coins) || 0;
+        base.best = Number(s.best) || 0;
+        base.games = Number(s.games) || 0;
+        base.perfects = Number(s.perfects) || 0;
+        base.daily = s.daily || "";
+        if (s.owned) {
+          for (const k of Object.keys(base.owned)) {
+            if (Array.isArray(s.owned[k])) base.owned[k] = s.owned[k];
+          }
+        }
+        if (s.eq) base.eq = { ...base.eq, ...s.eq };
+      }
+    } catch (e) {}
+    const oldBest = loadBest();
+    if (oldBest > base.best) base.best = oldBest;
+    return base;
+  }
+  let save = loadSave();
+  let shopTab = "skins";
+
+  function persist() {
+    try { localStorage.setItem("blockblast-save", JSON.stringify(save)); }
+    catch (e) {}
+    saveBest(save.best);
+  }
+  function applyTheme() {
+    const h = document.documentElement;
+    h.dataset.skin = save.eq.skin || "candy";
+    h.dataset.bg = save.eq.bg || "navy";
+    h.dataset.board = save.eq.board || "classic";
+    h.dataset.fx = save.eq.fx || "spark";
+    h.dataset.sfx = save.eq.sfx || "pop";
+  }
+  function renderCoins() {
+    const n = String(save.coins);
+    el.hudCoins.textContent = n;
+    el.homeCoins.textContent = n;
+    el.shopCoins.textContent = n;
+    el.homeBest.textContent = save.best;
+    el.homePerfects.textContent = save.perfects;
+  }
+  function toast(msg) {
+    el.toast.textContent = msg;
+    el.toast.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.toast.classList.remove("show"), 2200);
+  }
+  function todayStr() {
+    const d = new Date();
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
+  function grantDaily() {
+    const t = todayStr();
+    if (save.daily === t) return;
+    save.daily = t;
+    save.coins += 25;
+    persist();
+    toast("ログインボーナス +25 🪙");
+  }
+  function coinFromScore(score) {
+    if (score < 50) return 0;
+    return Math.min(220, Math.max(1, Math.floor(score / 200)));
+  }
+  function owned(kind, id) {
+    return (save.owned[kind] || []).includes(id);
+  }
+  function buyOrEquip(kind, id) {
+    const item = CATALOG[kind].find(x => x.id === id);
+    if (!item) return;
+    const eq = EQ_KEY[kind];
+    if (owned(kind, id)) {
+      save.eq[eq] = id;
+      persist();
+      applyTheme();
+      renderShop();
+      return;
+    }
+    if (save.coins < item.price) {
+      toast("コインが足りないよ");
+      return;
+    }
+    save.coins -= item.price;
+    save.owned[kind].push(id);
+    save.eq[eq] = id;
+    persist();
+    applyTheme();
+    renderCoins();
+    renderShop();
+    toast(item.name + " をゲット！");
+    SFX.ensure();
+    SFX.deal();
+  }
+  function renderShop() {
+    el.shopTabs.innerHTML = "";
+    TABS.forEach(t => {
+      const b = document.createElement("button");
+      b.textContent = t.label;
+      if (t.key === shopTab) b.classList.add("on");
+      b.onclick = () => { shopTab = t.key; renderShop(); };
+      el.shopTabs.appendChild(b);
+    });
+    el.shopGrid.innerHTML = "";
+    CATALOG[shopTab].forEach(item => {
+      const have = owned(shopTab, item.id);
+      const eqNow = save.eq[EQ_KEY[shopTab]] === item.id;
+      const card = document.createElement("div");
+      card.className = "shop-card" + (eqNow ? " eq" : "");
+      const btn = document.createElement("button");
+      if (eqNow) { btn.className = "eqb"; btn.textContent = "装備中"; }
+      else if (have) { btn.className = "own"; btn.textContent = "装備する"; }
+      else { btn.className = "buy"; btn.textContent = item.price ? item.price + " 🪙" : "無料"; }
+      btn.onclick = () => buyOrEquip(shopTab, item.id);
+      card.innerHTML = `<div class="ico">${item.icon}</div><div class="nm">${item.name}</div><div class="pr">${have ? "所持" : (item.price ? item.price + " コイン" : "はじめから")}</div>`;
+      card.appendChild(btn);
+      el.shopGrid.appendChild(card);
+    });
+    renderCoins();
+  }
+  function showHome() {
+    state.auto = false;
+    state.busy = false;
+    state.drag = null;
+    document.getElementById("btnAuto").textContent = "おまかせ";
+    el.overlay.style.display = "none";
+    el.howto.style.display = "none";
+    el.shop.classList.remove("show");
+    el.app.classList.remove("show");
+    el.home.classList.add("show");
+    el.drag.style.display = "none";
+    renderCoins();
+  }
+  function goPlay() {
+    el.home.classList.remove("show");
+    el.shop.classList.remove("show");
+    el.howto.style.display = "none";
+    el.app.classList.add("show");
+    newGame();
+  }
+  applyTheme();
+  renderCoins();
+  grantDaily();
+  renderCoins();
 
   const cellsDom = [];
   for (let i = 0; i < 64; i++) {
@@ -694,13 +1287,14 @@
     score: 0,
     combo: 0,
     misses: 0,
-    best: loadBest(),
+    best: save.best,
     over: false,
     busy: false,
     auto: false,
     muted: false,
     hint: null,
-    drag: null
+    drag: null,
+    usedAi: false
   };
   el.best.textContent = state.best;
 
@@ -726,6 +1320,10 @@
     },
     tone(freq, dur, type, gain, at) {
       if (state.muted || !this.ctx) return;
+      const pack = (save.eq && save.eq.sfx) || "pop";
+      if (pack === "bit") { type = "square"; freq *= 0.86; }
+      else if (pack === "soft") { type = "sine"; gain *= 0.62; dur *= 1.18; freq *= 0.94; }
+      else if (pack === "arcade") { type = type === "sine" ? "sawtooth" : type; freq *= 1.08; }
       const t = this.ctx.currentTime + (at || 0);
       const o = this.ctx.createOscillator();
       const g = this.ctx.createGain();
@@ -1218,6 +1816,7 @@
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
     const cell = rect.width / 8;
     const col = COLORS[colorIdx] || COLORS[0];
+    const kind = (save.eq && save.eq.fx) || "spark";
     const parts = [];
     for (const i of indices) {
       const x = (i & 7) * cell + cell / 2;
@@ -1227,7 +1826,7 @@
         const sp = 1.6 + Math.random() * 5.2;
         parts.push({
           x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.8,
-          life: 1, s: 2.4 + Math.random() * 4.2,
+          life: 1, s: 2.4 + Math.random() * 4.2, rot: a,
           color: k % 5 === 0 ? "#ffe566" : (Math.random() < 0.5 ? col.light : col.main)
         });
       }
@@ -1242,10 +1841,39 @@
         p.vy += 0.18;
         p.life -= 0.04;
         ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color;
+        if (kind === "heart") ctx.fillStyle = p.s > 4 ? "#ff6b9d" : "#ffd24a";
+        else if (kind === "petal") ctx.fillStyle = "#ffb7c5";
+        else ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
-        ctx.fill();
+        if (kind === "pixel") {
+          ctx.fillRect(p.x - p.s, p.y - p.s, p.s * 2, p.s * 2);
+        } else if (kind === "star") {
+          ctx.moveTo(p.x, p.y - p.s);
+          ctx.lineTo(p.x + p.s * 0.35, p.y - p.s * 0.2);
+          ctx.lineTo(p.x + p.s, p.y);
+          ctx.lineTo(p.x + p.s * 0.35, p.y + p.s * 0.2);
+          ctx.lineTo(p.x, p.y + p.s);
+          ctx.lineTo(p.x - p.s * 0.35, p.y + p.s * 0.2);
+          ctx.lineTo(p.x - p.s, p.y);
+          ctx.lineTo(p.x - p.s * 0.35, p.y - p.s * 0.2);
+          ctx.closePath();
+          ctx.fill();
+        } else if (kind === "bubble") {
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 2;
+          ctx.arc(p.x, p.y, p.s + 2, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (kind === "petal") {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.ellipse(0, 0, p.s * 0.55, p.s * 1.6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       if (g < 1) requestAnimationFrame(tick);
       else ctx.clearRect(0, 0, rect.width, rect.height);
@@ -1277,7 +1905,8 @@
     state.misses = sc.misses;
     if (state.score > state.best) {
       state.best = state.score;
-      saveBest(state.best);
+      save.best = state.best;
+      persist();
     }
     state.hint = null;
     SFX.place();
@@ -1300,7 +1929,12 @@
       const names = ["", "NICE", "GREAT", "EXCELLENT", "AMAZING", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE"];
       shout(res.empty ? "PERFECT" : (state.combo >= 2 ? "COMBO x" + state.combo : names[res.lines] || "NICE"),
             res.empty ? "#ffd24a" : "#fff");
-      if (res.empty) SFX.allClear();
+      if (res.empty) {
+        SFX.allClear();
+        save.perfects += 1;
+        persist();
+        renderCoins();
+      }
       el.frame.classList.remove("juice", "juice2");
       void el.frame.offsetWidth;
       el.frame.classList.add(res.empty || res.lines >= 2 ? "juice2" : "juice");
@@ -1340,6 +1974,11 @@
     return true;
   }
 
+  function markAi() {
+    state.usedAi = true;
+    el.coinWarn.textContent = "AI使用中 — このプレイはコインなし";
+  }
+
   function gameOver() {
     if (state.over) return;
     state.over = true;
@@ -1347,6 +1986,19 @@
     document.getElementById("btnAuto").textContent = "おまかせ";
     SFX.over();
     el.endScore.textContent = state.score;
+    save.games += 1;
+    let got = 0;
+    if (state.usedAi) {
+      el.endCoins.textContent = "AI配置・おまかせを使ったのでコインなし";
+      el.endCoins.className = "no";
+    } else {
+      got = coinFromScore(state.score);
+      save.coins += got;
+      el.endCoins.textContent = got ? ("+" + got + " コイン") : "コインはスコア50点から";
+      el.endCoins.className = "";
+    }
+    persist();
+    renderCoins();
     el.overlay.style.display = "flex";
     el.aiLine.innerHTML = "置ける場所がなくなった";
   }
@@ -1361,12 +2013,15 @@
     state.busy = false;
     state.auto = false;
     state.hint = null;
+    state.usedAi = false;
     document.getElementById("btnAuto").textContent = "おまかせ";
     el.overlay.style.display = "none";
+    el.coinWarn.textContent = "";
     deal();
     renderBoard();
     renderTray();
     renderHUD();
+    renderCoins();
     el.aiLine.textContent = "3つのブロックを盤面に置いて、行と列を消そう";
   }
 
@@ -1527,14 +2182,14 @@
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onUp);
 
-  document.getElementById("btnAi").onclick = () => { SFX.ensure(); runAi(false); };
+  document.getElementById("btnAi").onclick = () => { SFX.ensure(); markAi(); runAi(false); };
   document.getElementById("btnHint").onclick = () => { SFX.ensure(); showHint(); };
   document.getElementById("btnAuto").onclick = () => {
     SFX.ensure();
     if (state.over) return;
     state.auto = !state.auto;
     document.getElementById("btnAuto").textContent = state.auto ? "停止" : "おまかせ";
-    if (state.auto) runAi(true);
+    if (state.auto) { markAi(); runAi(true); }
   };
   document.getElementById("btnMute").onclick = () => {
     state.muted = !state.muted;
@@ -1542,11 +2197,19 @@
   };
   document.getElementById("btnRetry").onclick = () => { SFX.ensure(); newGame(); };
   document.getElementById("btnAgain").onclick = () => { SFX.ensure(); newGame(); };
-  document.getElementById("btnStart").onclick = () => {
-    SFX.ensure();
-    el.start.style.display = "none";
-    newGame();
+  document.getElementById("btnStart").onclick = () => { SFX.ensure(); goPlay(); };
+  document.getElementById("btnHome").onclick = () => {
+    if (!state.over && state.score > 0 && !confirm("ホームに戻る？ このプレイのスコアは消えるよ")) return;
+    showHome();
   };
+  document.getElementById("btnEndHome").onclick = () => showHome();
+  document.getElementById("btnShop").onclick = () => {
+    el.shop.classList.add("show");
+    renderShop();
+  };
+  document.getElementById("btnShopClose").onclick = () => el.shop.classList.remove("show");
+  document.getElementById("btnHow").onclick = () => { el.howto.style.display = "flex"; };
+  document.getElementById("btnHowClose").onclick = () => { el.howto.style.display = "none"; };
 })();
 </script>
 </body>
