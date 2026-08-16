@@ -602,7 +602,7 @@
     }
     let empty = true;
     for (let i = 0; i < N; i++) if (next[i]) { empty = false; break; }
-    return { next, lines, empty, cleared, rows, cols };
+    return { next, lines, empty, cleared, clearedN: 8 * popcount(rows) + 8 * popcount(cols) - popcount(rows) * popcount(cols), rows, cols };
   }
 
   function scoreMove(placed, lines, clearedCells, allClear, combo, misses) {
@@ -630,67 +630,116 @@
     return n;
   }
 
-  function cheapQuality(occ) {
-    let empty = 0, holes = 0, near = 0;
-    for (let r = 0; r < N; r++) {
-      const f = popcount(occ[r]);
-      empty += 8 - f;
-      if (f >= 6) near += f === 7 ? 2 : 1;
-      for (let c = 0; c < N; c++) {
-        if (occ[r] & (1 << c)) continue;
-        let n = 0;
-        if (r === 0 || (occ[r - 1] & (1 << c))) n++;
-        if (r === 7 || (occ[r + 1] & (1 << c))) n++;
-        if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
-        if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
-        if (n >= 3) holes++;
-      }
-    }
-    for (let c = 0; c < N; c++) {
-      let f = 0;
-      for (let r = 0; r < N; r++) if (occ[r] & (1 << c)) f++;
-      if (f >= 6) near += f === 7 ? 2 : 1;
-    }
-    return empty * 4 + near * 18 - holes * 36;
+  const PIECE_SQ2 = { cells: [[0,0],[0,1],[1,0],[1,1]], h: 2, w: 2 };
+  const PIECE_SQ3 = { cells: [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]], h: 3, w: 3 };
+  const PIECE_BAR5H = { cells: [[0,0],[0,1],[0,2],[0,3],[0,4]], h: 1, w: 5 };
+  const PIECE_BAR5V = { cells: [[0,0],[1,0],[2,0],[3,0],[4,0]], h: 5, w: 1 };
+  const PIECE_BAR4H = { cells: [[0,0],[0,1],[0,2],[0,3]], h: 1, w: 4 };
+  const PIECE_BAR4V = { cells: [[0,0],[1,0],[2,0],[3,0]], h: 4, w: 1 };
+
+  function interiorGaps(mask) {
+    if (!mask) return 0;
+    let lo = 0, hi = 7;
+    while (lo < 8 && !(mask & (1 << lo))) lo++;
+    while (hi >= 0 && !(mask & (1 << hi))) hi--;
+    if (lo >= hi) return 0;
+    let g = 0;
+    for (let i = lo; i <= hi; i++) if (!(mask & (1 << i))) g++;
+    return g;
   }
 
-  function heuristic(occ, combo, misses) {
-    let h = emptyCount(occ) * 4;
-    h += combo * 55;
-    h -= misses * 28;
-    let holes = 0, near = 0, sq2 = 0, sq3 = 0, islands = 0;
-    for (let r = 0; r < N; r++) {
-      const fillR = popcount(occ[r]);
-      if (fillR >= 6) near += fillR === 7 ? 3 : 1;
-      for (let c = 0; c < N; c++) {
-        if (occ[r] & (1 << c)) continue;
-        let n = 0;
-        if (r === 0 || (occ[r - 1] & (1 << c))) n++;
-        if (r === 7 || (occ[r + 1] & (1 << c))) n++;
-        if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
-        if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
-        if (n >= 3) holes++;
-        if (r < 7 && c < 7 &&
-            !(occ[r] & (1 << c)) && !(occ[r] & (1 << (c + 1))) &&
-            !(occ[r + 1] & (1 << c)) && !(occ[r + 1] & (1 << (c + 1)))) sq2++;
-        if (r < 6 && c < 6) {
-          let ok = true;
-          for (let dr = 0; dr < 3 && ok; dr++) {
-            for (let dc = 0; dc < 3; dc++) if (occ[r + dr] & (1 << (c + dc))) { ok = false; break; }
+  function colBits(occ, c) {
+    let m = 0;
+    for (let r = 0; r < 8; r++) if (occ[r] & (1 << c)) m |= 1 << r;
+    return m;
+  }
+
+  function fitCount(occ, piece) {
+    let n = 0;
+    for (let r = 0; r <= N - piece.h; r++) {
+      for (let c = 0; c <= N - piece.w; c++) {
+        if (canPlace(occ, piece.cells, r, c)) n++;
+      }
+    }
+    return n;
+  }
+
+  function evalFast(occ, combo, misses) {
+    const empty = emptyCount(occ);
+    const fill = 64 - empty;
+    let v = combo * 140 + combo * combo * 28;
+    if (misses === 1) v -= 160;
+    if (misses === 2) v -= 580;
+
+    let holes = 0, sq2 = 0, sq3 = 0, near7 = 0, near6 = 0, gaps = 0, compact = 0;
+    let minR = 8, maxR = -1, minC = 8, maxC = -1;
+
+    for (let r = 0; r < 8; r++) {
+      const fr = popcount(occ[r]);
+      if (fr === 7) near7++;
+      else if (fr === 6) near6++;
+      gaps += interiorGaps(occ[r]);
+      for (let c = 0; c < 8; c++) {
+        if (occ[r] & (1 << c)) {
+          if (r < minR) minR = r;
+          if (r > maxR) maxR = r;
+          if (c < minC) minC = c;
+          if (c > maxC) maxC = c;
+          if (r && (occ[r - 1] & (1 << c))) compact++;
+          if (c && (occ[r] & (1 << (c - 1)))) compact++;
+        } else {
+          let n = 0;
+          if (r === 0 || (occ[r - 1] & (1 << c))) n++;
+          if (r === 7 || (occ[r + 1] & (1 << c))) n++;
+          if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
+          if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
+          if (n >= 3) holes++;
+          if (r < 7 && c < 7 &&
+              !(occ[r] & (1 << (c + 1))) && !(occ[r + 1] & (1 << c)) && !(occ[r + 1] & (1 << (c + 1)))) sq2++;
+          if (r < 6 && c < 6) {
+            let ok = true;
+            for (let dr = 0; dr < 3 && ok; dr++) {
+              for (let dc = 0; dc < 3; dc++) if (occ[r + dr] & (1 << (c + dc))) { ok = false; break; }
+            }
+            if (ok) sq3++;
           }
-          if (ok) sq3++;
         }
       }
     }
-    for (let c = 0; c < N; c++) {
-      let fill = 0;
-      for (let r = 0; r < N; r++) if (occ[r] & (1 << c)) fill++;
-      if (fill >= 6) near += fill === 7 ? 3 : 1;
+    for (let c = 0; c < 8; c++) {
+      const cm = colBits(occ, c);
+      const fc = popcount(cm);
+      if (fc === 7) near7++;
+      else if (fc === 6) near6++;
+      gaps += interiorGaps(cm);
     }
+
+    v -= holes * 240;
+    v -= gaps * 70;
+    v += sq3 * 75;
+    v += sq2 * 12;
+    v += near7 * 62;
+    v += near6 * 16;
+    v += compact * 5;
+
+    if (maxR >= 0) {
+      v -= (maxR - minR + 1) * (maxC - minC + 1) * 3;
+      v -= Math.min(minR + minC, minR + (7 - maxC), (7 - maxR) + minC, (7 - maxR) + (7 - maxC)) * 10;
+    }
+    if (fill < 10) v -= (10 - fill) * 20;
+    if (fill > 46) v -= (fill - 46) * 32;
+    v += empty * 2;
+    return v;
+  }
+
+  function evaluate(occ, combo, misses) {
+    let v = evalFast(occ, combo, misses);
     const seen = new Uint8Array(64);
+    let regions = 0, island1 = 0, island2 = 0;
     for (let i = 0; i < 64; i++) {
       const r = i >> 3, c = i & 7;
       if ((occ[r] & (1 << c)) || seen[i]) continue;
+      regions++;
       let size = 0, stack = [i];
       seen[i] = 1;
       while (stack.length) {
@@ -706,13 +755,55 @@
           stack.push(j);
         }
       }
-      if (size === 1) islands += 18;
-      else if (size === 2) islands += 8;
-      else if (size === 3) islands += 3;
+      if (size === 1) island1++;
+      else if (size === 2) island2++;
     }
-    h += near * 22 + sq2 * 10 + sq3 * 36;
-    h -= holes * 42 + islands;
-    return h;
+    v -= island1 * 300;
+    v -= island2 * 120;
+    v -= Math.max(0, regions - 1) * 95;
+    v += fitCount(occ, PIECE_SQ3) * 90;
+    v += fitCount(occ, PIECE_SQ2) * 14;
+    v += fitCount(occ, PIECE_BAR5H) * 24;
+    v += fitCount(occ, PIECE_BAR5V) * 24;
+    v += fitCount(occ, PIECE_BAR4H) * 10;
+    v += fitCount(occ, PIECE_BAR4V) * 10;
+    return v;
+  }
+
+  function setupBonus(board, rest, comboNow, missNow) {
+    if (!rest.length) return 0;
+    let total = 0;
+    for (const item of rest) {
+      const spots = placements(board, item.p.shape);
+      if (!spots.length) {
+        total -= 1200;
+        continue;
+      }
+      let local = 40;
+      for (const rc of spots) {
+        const res = applyPlace(board, item.p.shape.cells, rc >> 3, rc & 7);
+        if (!res.lines) continue;
+        const s = 320 * res.lines + res.clearedN * 8 + (res.empty ? 700 : 0) + (missNow >= 1 ? 400 : 0);
+        if (s > local) local = s;
+        if (res.lines >= 3) break;
+      }
+      total += local;
+    }
+    return total;
+  }
+
+  function rankMove(res, sc, comboNow, missNow, rest, depth) {
+    let q = sc.pts * 7;
+    q += res.lines * (160 + comboNow * 35);
+    q += sc.combo * sc.combo * 22;
+    if (res.empty) q += 1000;
+    if (comboNow > 0 && sc.combo === 0) q -= 2800 * comboNow;
+    if (missNow >= 2 && res.lines === 0) q -= 25000;
+    if (missNow >= 2 && res.lines > 0) q += 4000;
+    if (missNow === 1 && res.lines > 0) q += 700;
+    q += evalFast(res.next, sc.combo, sc.misses);
+    if (rest.length && depth < 2) q += setupBonus(res.next, rest, sc.combo, sc.misses);
+    return q;
   }
 
   function pickShape() {
@@ -749,15 +840,29 @@
     const live = [];
     tray.forEach((p, i) => { if (p) live.push({ p, i }); });
     if (!live.length) return null;
-    let best = { value: -1e15, moves: [] };
-    const beam = live.length === 3 ? [20, 14, 12] : [28, 18];
+
+    const beam = live.length === 3 ? [16, 12, 10] : live.length === 2 ? [28, 20] : [64];
+    const finals = [];
+
+    function keepLeaf(quick, moves, board, comboNow, missNow, pts) {
+      const row = { quick, moves: moves.map(m => ({ ...m })), board, comboNow, missNow, pts };
+      if (finals.length < 48) {
+        finals.push(row);
+        return;
+      }
+      let w = 0;
+      for (let i = 1; i < finals.length; i++) if (finals[i].quick < finals[w].quick) w = i;
+      if (quick > finals[w].quick) finals[w] = row;
+    }
 
     function search(board, left, comboNow, missNow, pts, moves, depth) {
       if (!left.length) {
-        const value = pts * 18 + heuristic(board, comboNow, missNow);
-        if (value > best.value) best = { value, moves: moves.slice(), pts, combo: comboNow };
+        const comboKill = combo > 2 && comboNow === 0 ? combo * 3500 : 0;
+        keepLeaf(pts * 10 + evalFast(board, comboNow, missNow) + comboNow * comboNow * 40 - comboKill,
+          moves, board, comboNow, missNow, pts);
         return;
       }
+
       let any = false;
       for (let li = 0; li < left.length; li++) {
         const cur = left[li];
@@ -765,27 +870,34 @@
         if (!spots.length) continue;
         any = true;
         const rest = left.filter((_, k) => k !== li);
-        const ranked = spots.map(rc => {
+        let ranked = spots.map(rc => {
           const r = rc >> 3, c = rc & 7;
           const res = applyPlace(board, cur.p.shape.cells, r, c);
-          const sc = scoreMove(cur.p.shape.n, res.lines, new Set(res.cleared).size, res.empty, comboNow, missNow);
-          const q = sc.pts * 22 + res.lines * 90 + cheapQuality(res.next) + (res.empty ? 400 : 0);
-          return { r, c, res, sc, q };
-        }).sort((a, b) => b.q - a.q).slice(0, beam[depth] || 12);
-
-        for (const m of ranked) {
+          const sc = scoreMove(cur.p.shape.n, res.lines, res.clearedN, res.empty, comboNow, missNow);
+          return { r, c, res, sc, q: rankMove(res, sc, comboNow, missNow, rest, depth) };
+        });
+        if (missNow >= 2 && ranked.some(m => m.res.lines > 0)) ranked = ranked.filter(m => m.res.lines > 0);
+        ranked.sort((a, b) => b.q - a.q);
+        const keep = Math.min(ranked.length, beam[depth] || 16);
+        for (let i = 0; i < keep; i++) {
+          const m = ranked[i];
           moves.push({ slot: cur.i, r: m.r, c: m.c, lines: m.res.lines, empty: m.res.empty, pts: m.sc.pts });
           search(m.res.next, rest, m.sc.combo, m.sc.misses, pts + m.sc.pts, moves, depth + 1);
           moves.pop();
         }
       }
-      if (!any) {
-        const value = pts * 18 + heuristic(board, comboNow, missNow) - 80000;
-        if (value > best.value) best = { value, moves: moves.slice(), pts, combo: comboNow };
-      }
+      if (!any) keepLeaf(pts * 10 + evalFast(board, comboNow, missNow) - 90000, moves, board, comboNow, missNow, pts);
     }
     search(occ, live, combo, misses, 0, [], 0);
-    return best.moves.length ? best : null;
+    if (!finals.length) return null;
+
+    let best = null;
+    for (const f of finals) {
+      const comboKill = combo > 2 && f.comboNow === 0 ? combo * 4000 : 0;
+      const value = f.pts * 12 + evaluate(f.board, f.comboNow, f.missNow) + f.comboNow * f.comboNow * 55 - comboKill;
+      if (!best || value > best.value) best = { value, moves: f.moves, pts: f.pts, combo: f.comboNow };
+    }
+    return best;
   }
 
   function explain(plan) {
@@ -796,10 +908,11 @@
     const all = m.find(x => x.empty);
     if (all) return "いま置けば <em>全消し</em> できる。360点ボーナスを取りにいく";
     if (multi.length) return `ここに置けば <em>${multi[0].lines}ライン同時消し</em>。コンボも伸びる`;
+    if (m.some(x => x.lines) && m.some(x => !x.lines)) return "先に形を作って、残りのブロックで <em>ラインを消す</em>";
     if (lines >= 2) return "3手の中でラインを連続で消して、<em>コンボを切らさない</em>配置";
     if (lines === 1) return "あと少しで揃う列／行を埋めて、<em>コンボをつなぐ</em>";
     if (state.combo > 0 && state.misses === 2) return "コンボが切れそう。消せる位置を優先する";
-    return "穴を作らず、次の大きいブロックが入りやすい空きを残す配置";
+    return "穴を作らず、大きいブロックが入りやすい空きを隅に残す配置";
   }
 
   function paintBlock(node, colorIdx) {
@@ -945,7 +1058,7 @@
     if (!canPlace(state.occ, piece.shape.cells, r, c)) return false;
 
     const res = applyPlace(state.occ, piece.shape.cells, r, c);
-    const sc = scoreMove(piece.shape.n, res.lines, new Set(res.cleared).size, res.empty, state.combo, state.misses);
+    const sc = scoreMove(piece.shape.n, res.lines, res.clearedN, res.empty, state.combo, state.misses);
     const placed = [];
     for (const [dr, dc] of piece.shape.cells) {
       const i = (r + dr) * N + (c + dc);
