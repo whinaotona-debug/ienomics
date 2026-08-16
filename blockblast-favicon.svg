@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Block Blast">
+  <rect width="64" height="64" rx="14" fill="#07122c"/>
+  <defs>
+    <linearGradient id="r" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff8aa0"/><stop offset="42%" stop-color="#ff3b5c"/><stop offset="100%" stop-color="#c4103a"/>
+    </linearGradient>
+    <linearGradient id="y" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff08a"/><stop offset="42%" stop-color="#ffd11a"/><stop offset="100%" stop-color="#c49a00"/>
+    </linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8af0b4"/><stop offset="42%" stop-color="#3ddc7a"/><stop offset="100%" stop-color="#1a9a4c"/>
+    </linearGradient>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8ab8ff"/><stop offset="42%" stop-color="#3b8bff"/><stop offset="100%" stop-color="#1a58c4"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="10" y="10" width="20" height="20" rx="5" fill="url(#r)"/>
+    <ellipse cx="16" cy="15" rx="6" ry="3.2" fill="#fff" opacity=".55"/>
+    <rect x="34" y="10" width="20" height="20" rx="5" fill="url(#y)"/>
+    <ellipse cx="40" cy="15" rx="6" ry="3.2" fill="#fff" opacity=".55"/>
+    <rect x="10" y="34" width="20" height="20" rx="5" fill="url(#g)"/>
+    <ellipse cx="16" cy="39" rx="6" ry="3.2" fill="#fff" opacity=".55"/>
+    <rect x="34" y="34" width="20" height="20" rx="5" fill="url(#b)"/>
+    <ellipse cx="40" cy="39" rx="6" ry="3.2" fill="#fff" opacity=".55"/>
+  </g>
+</svg>
