@@ -706,9 +706,23 @@
 
   const SFX = {
     ctx: null,
+    live: [],
     ensure() {
       if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       if (this.ctx.state === "suspended") this.ctx.resume();
+    },
+    stopAll() {
+      const now = this.ctx ? this.ctx.currentTime : 0;
+      for (const n of this.live) {
+        try {
+          n.gain.gain.cancelScheduledValues(now);
+          n.gain.gain.setValueAtTime(Math.max(0.0001, n.gain.gain.value), now);
+          n.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.02);
+          n.osc.stop(now + 0.03);
+        } catch (e) {}
+        try { n.osc.disconnect(); n.gain.disconnect(); } catch (e) {}
+      }
+      this.live = [];
     },
     tone(freq, dur, type, gain, at) {
       if (state.muted || !this.ctx) return;
@@ -722,10 +736,14 @@
       o.connect(g).connect(this.ctx.destination);
       o.start(t);
       o.stop(t + dur + 0.02);
+      this.live.push({ osc: o, gain: g });
+      o.onended = () => {
+        this.live = this.live.filter(n => n.osc !== o);
+      };
     },
-    pickup() { this.tone(740, 0.06, "sine", 0.05); this.tone(1180, 0.05, "triangle", 0.03, 0.02); },
-    place() { this.tone(180, 0.09, "triangle", 0.08); this.tone(320, 0.06, "sine", 0.04); },
-    bad() { this.tone(110, 0.12, "square", 0.04); },
+    pickup() { this.stopAll(); this.tone(740, 0.06, "sine", 0.05); this.tone(1180, 0.05, "triangle", 0.03, 0.02); },
+    place() { this.stopAll(); this.tone(180, 0.09, "triangle", 0.08); this.tone(320, 0.06, "sine", 0.04); },
+    bad() { this.stopAll(); this.tone(110, 0.12, "square", 0.04); },
     clear(lines, combo) {
       this.tone(90, 0.2, "sawtooth", 0.1);
       this.tone(160, 0.14, "square", 0.05);
@@ -742,8 +760,14 @@
       [392, 523, 659, 784, 1046, 1318, 1568].forEach((f, i) => this.tone(f, 0.28, "triangle", 0.09, i * 0.07));
       this.tone(80, 0.35, "sawtooth", 0.08);
     },
-    over() { [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.22, "sawtooth", 0.04, i * 0.12)); },
-    deal() { [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06)); }
+    over() {
+      this.stopAll();
+      [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.22, "sawtooth", 0.04, i * 0.12));
+    },
+    deal() {
+      this.stopAll();
+      [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06));
+    }
   };
 
   const cloneOcc = (occ) => Uint8Array.from(occ);
@@ -1300,7 +1324,7 @@
           cellsDom[i].className = "cell";
         }
         renderBoard();
-      }, 480);
+      }, 420);
     }
 
     const remain = state.tray.filter(Boolean);
@@ -1309,9 +1333,9 @@
         deal();
         renderTray();
         if (!state.tray.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) gameOver();
-      }, res.lines ? (res.empty ? 1100 : 850) : 380);
+      }, res.lines ? (res.empty ? 640 : 480) : 80);
     } else if (!remain.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) {
-      setTimeout(gameOver, res.lines ? 700 : 200);
+      setTimeout(gameOver, res.lines ? 380 : 120);
     }
     return true;
   }
@@ -1358,15 +1382,15 @@
       if (!piece) continue;
       state.hint = ghostFor(piece, mv.r, mv.c);
       renderBoard();
-      await wait(420);
+      await wait(220);
       commit(mv.slot, mv.r, mv.c, true);
-      await wait(mv.empty ? 1500 : mv.lines ? 1100 : 520);
+      await wait(mv.empty ? 780 : mv.lines ? 580 : 240);
     }
     state.hint = null;
     renderBoard();
     state.busy = false;
     if (state.auto && !state.over) {
-      await wait(700);
+      await wait(180);
       runAi(true);
     }
   }
