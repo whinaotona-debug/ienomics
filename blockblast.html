@@ -3,6 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script>
+    (function () {
+      function fit() {
+        var v = window.visualViewport;
+        var h = v ? v.height : window.innerHeight;
+        var t = v ? v.offsetTop : 0;
+        var r = document.documentElement;
+        r.style.setProperty("--app-h", h + "px");
+        r.style.setProperty("--app-top", t + "px");
+      }
+      fit();
+      window.addEventListener("resize", fit);
+      if (window.visualViewport) {
+        visualViewport.addEventListener("resize", fit);
+        visualViewport.addEventListener("scroll", fit);
+      }
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Block Blast">
   <meta name="theme-color" content="#07122c">
@@ -24,30 +42,37 @@
       --gap: 5px;
     }
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    html, body {
-      margin: 0;
-      height: 100%;
-      height: 100svh;
-      color: var(--ink);
-      font-family: "M PLUS Rounded 1c", "Fredoka", sans-serif;
-      overflow: hidden;
-      user-select: none;
-      touch-action: none;
-    }
     html {
       background: radial-gradient(1200px 700px at 50% -10%, #1a3a78 0%, var(--bg0) 55%);
+      height: 100%;
+      overflow: hidden;
     }
-    body { background: transparent; }
+    html, body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "M PLUS Rounded 1c", "Fredoka", sans-serif;
+      user-select: none;
+    }
+    body {
+      background: transparent;
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: var(--app-top, 0px);
+      height: var(--app-h, 100dvh);
+      overflow: hidden;
+      touch-action: pan-y;
+    }
     #app {
       height: 100%;
-      height: 100svh;
       max-width: 460px;
       margin: 0 auto;
       display: none;
       flex-direction: column;
-      padding: max(10px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
+      padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+      min-height: 0;
     }
-    #app.show { display: flex; }
+    #app.show { display: flex; touch-action: none; }
     header { flex: none; margin-bottom: 6px; }
     .hud-top {
       display: grid;
@@ -89,7 +114,7 @@
     .score-hero b {
       display: inline-block;
       font-family: Fredoka, sans-serif;
-      font-size: clamp(36px, 10vw, 52px);
+      font-size: clamp(28px, 8vw, 48px);
       line-height: 1;
       color: var(--gold);
       text-shadow: 0 3px 0 #c47a00, 0 8px 14px rgba(0,0,0,.35);
@@ -114,21 +139,32 @@
     }
     .board-wrap {
       position: relative;
-      flex: 1;
+      flex: 1 1 auto;
       min-height: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 100%;
+      display: grid;
+      place-items: center;
+      container-type: size;
     }
     .board-frame {
       position: relative;
-      width: min(100%, 92vw, calc(100svh - 300px));
+      width: min(100cqw, 100cqh);
+      height: min(100cqw, 100cqh);
       aspect-ratio: 1;
       background: linear-gradient(180deg, #24386a, #16264c);
       border-radius: 22px;
-      padding: 10px;
-      box-shadow: 0 10px 0 #0a142c, 0 18px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+      padding: 8px;
+      box-shadow: 0 8px 0 #0a142c, 0 14px 32px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
     }
+    @supports not (width: 1cqh) {
+      .board-wrap { display: flex; align-items: center; justify-content: center; }
+      .board-frame {
+        width: min(100%, calc(var(--app-h, 100dvh) - 270px));
+        height: auto;
+        max-height: 100%;
+      }
+    }
+    .tray, .controls, #ai-line { flex: none; }
     #board {
       width: 100%; height: 100%;
       display: grid;
@@ -329,7 +365,7 @@
       filter: drop-shadow(0 12px 16px rgba(0,0,0,.45));
     }
     #overlay, #howto {
-      position: fixed; inset: 0;
+      position: absolute; inset: 0;
       background: rgba(5,10,28,.72);
       display: none;
       align-items: center;
@@ -348,10 +384,10 @@
     .logo {
       font-family: Fredoka, sans-serif;
       font-weight: 800;
-      font-size: 42px;
+      font-size: clamp(30px, 8vw, 42px);
       line-height: .95;
       color: var(--gold);
-      text-shadow: 0 3px 0 #c47a00, 0 8px 0 #7a4300, 0 14px 20px rgba(0,0,0,.35);
+      text-shadow: 0 3px 0 #c47a00, 0 7px 0 #7a4300, 0 12px 16px rgba(0,0,0,.35);
       margin-bottom: 8px;
     }
     .modal p { color: #c5d4f5; margin: 8px 0 18px; font-size: 14px; }
@@ -376,26 +412,40 @@
       text-align: center;
       font-size: 11px;
       color: #ff9ab4;
-      min-height: 16px;
+      min-height: 0;
       margin-top: 2px;
     }
     .brand .coin-n { color: var(--gold); font-family: Fredoka, sans-serif; font-size: 16px; }
 
     #home, #shop {
-      position: fixed; inset: 0;
+      position: absolute; inset: 0;
       z-index: 40;
       display: none;
-      flex-direction: column;
-      align-items: center;
+      overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       touch-action: pan-y;
-      padding: max(28px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+      overscroll-behavior: contain;
     }
-    #home.show, #shop.show { display: flex; }
+    #home.show { display: block; }
+    #shop.show {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 20px max(20px, env(safe-area-inset-bottom));
+    }
     #shop { z-index: 45; background: rgba(5,10,22,.88); }
-    #home { justify-content: flex-start; }
-    .home-box { width: min(380px, 100%); text-align: center; padding-bottom: 24px; }
+    .home-box {
+      width: min(380px, 100%);
+      min-height: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      padding: 24px 20px max(28px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+    }
     .coin-chip {
       display: inline-flex; align-items: center; gap: 8px;
       background: linear-gradient(180deg, #3a5080, #243560);
@@ -406,11 +456,29 @@
       font-size: 18px;
     }
     .coin-chip b { font-family: Fredoka, sans-serif; color: var(--gold); }
-    .home-meta { color: #c5d4f5; font-size: 13px; margin: 8px 0 18px; line-height: 1.5; }
+    .home-meta { color: #c5d4f5; font-size: 13px; margin: 8px 0 16px; line-height: 1.5; }
     .home-meta em { color: var(--gold); font-style: normal; }
     .note {
       font-size: 12px; color: #9db0d8; line-height: 1.45;
-      background: rgba(0,0,0,.22); border-radius: 14px; padding: 10px 12px; margin: 14px 0 0;
+      background: rgba(0,0,0,.22); border-radius: 14px; padding: 10px 12px; margin: 12px 0 0;
+    }
+    @media (max-height: 740px) {
+      header { margin-bottom: 2px; }
+      .score-hero { margin-top: 0; }
+      .score-hero span { font-size: 9px; }
+      .score-hero b { font-size: 26px; }
+      .stat { padding: 3px 6px; border-radius: 10px; }
+      .stat b { font-size: 14px; }
+      .slot { height: 68px; }
+      .tray { padding: 7px; gap: 7px; border-radius: 16px; }
+      .mini i { width: 12px; height: 12px; }
+      .controls { margin-top: 6px; gap: 5px; }
+      button { padding: 8px 5px; font-size: 13px; }
+      .icon { width: 38px; }
+      #ai-line { min-height: 0; margin: 4px 2px 2px; font-size: 11px; }
+      .board-frame { border-radius: 16px; padding: 6px; box-shadow: 0 5px 0 #0a142c, 0 10px 20px rgba(0,0,0,.3); }
+      .logo { font-size: 30px; }
+      .play { padding: 12px; font-size: 16px; }
     }
     .shop-head {
       width: min(420px, 100%);
@@ -467,7 +535,7 @@
     .shop-card button.eqb { background: linear-gradient(180deg, #ffd24a, #f0a000); color: #4a2e00; --btn-shadow: #b06d00; }
     .shop-card button.buy { background: linear-gradient(180deg, #7aa7ff, #3b6adf); --btn-shadow: #1d3f96; }
     #toast {
-      position: fixed; top: max(16px, env(safe-area-inset-top)); left: 50%;
+      position: absolute; top: 12px; left: 50%;
       transform: translateX(-50%) translateY(-120%);
       z-index: 90; background: var(--gold); color: #4a2e00;
       padding: 10px 18px; border-radius: 999px; font-weight: 800; font-size: 14px;
