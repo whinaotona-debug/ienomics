@@ -481,10 +481,14 @@ body.furigana-on .ie-hero-label rt {
 .ie-job-title {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
   font-size: 12px;
   font-weight: 700;
   color: #2c3d38;
   line-height: 1.4;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  direction: ltr;
 }
 .ie-job-urgent-soon {
   border-color: #f0c27a !important;
@@ -528,14 +532,34 @@ body.furigana-on .ie-status-chip {
   max-height: none;
 }
 .ie-job-ruby {
-  display: inline-flex;
-  flex-direction: column-reverse;
-  align-items: flex-start;
-  vertical-align: baseline;
-  line-height: 1.2;
+  display: inline-block;
+  max-width: 100%;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
+  direction: ltr;
+  line-height: 1.35;
 }
-.ie-job-title rt,
-.ie-job-ruby rt {
+.ie-job-ruby-reading {
+  display: none;
+  color: var(--ie-muted);
+  font-size: 0.58em;
+  font-weight: 500;
+  line-height: 1.15;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+body.furigana-on .ie-job-ruby-reading {
+  display: block;
+}
+.ie-job-ruby-base {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  writing-mode: horizontal-tb !important;
+}
+.ie-job-title .ie-job-ruby-reading {
   color: var(--ie-muted);
 }
 .ie-chip-open { background: #eef7f5; color: #246f65; border-color: #cfe8e2; }
@@ -593,6 +617,8 @@ body.furigana-on .ie-status-chip {
   word-break: normal;
   line-height: 1.45;
   min-width: 0;
+  writing-mode: horizontal-tb !important;
+  text-orientation: mixed !important;
 }
 
 .ie-modal-backdrop {

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=143';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket } from './utils.js?v=143';
-import { refreshTutorial } from './tutorial.js?v=143';
-import { auth } from './firebase.js?v=143';
+import { state } from './state.js?v=144';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues } from './utils.js?v=144';
+import { refreshTutorial } from './tutorial.js?v=144';
+import { auth } from './firebase.js?v=144';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -340,7 +340,7 @@ function renderChildManageList() {
       ? 'いま表示中'
       : (c.childLinked === false
         ? 'まだ端末とつながっていません'
-        : `${(c.points || 0).toLocaleString()}pt${Number(c.pointsCap) > 0 ? ` / 上限${Number(c.pointsCap).toLocaleString()}` : ''}`);
+        : `${(c.points || 0).toLocaleString()}pt${Number(c.stockCap) > 0 ? ` / 株上限${Number(c.stockCap).toLocaleString()}` : ''}`);
     return `
       <div class="ie-child-row ${active ? 'on' : ''}">
         <button type="button" onclick="switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
@@ -381,15 +381,6 @@ function renderHeader() {
     ? `<p class="text-[9px] font-bold text-[#b8f0e4] mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
     : '';
 
-  const cap = Number(state.pointsCap) > 0 ? Number(state.pointsCap) : null;
-  let capHint = '';
-  if (cap != null) {
-    const left = Math.max(0, cap - (Number(state.points) || 0));
-    capHint = left <= 0
-      ? `<p class="text-[9px] font-bold text-[#ffe2b8] mt-1">上限 ${cap.toLocaleString()}pt に到達</p>`
-      : `<p class="text-[9px] font-bold text-white/70 mt-1">上限 ${cap.toLocaleString()}pt（あと ${left.toLocaleString()}pt）</p>`;
-  }
-
   return `
     <div class="flex-none px-3 pt-3 pb-0">
       <div class="ie-topbar" data-tour="topbar">
@@ -415,7 +406,6 @@ function renderHeader() {
             <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
           </div>
           ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
-          ${capHint}
           ${payHint}
           ${streakHint}
         </div>
@@ -547,11 +537,11 @@ function renderHome() {
     bankTotal += b.amount + Math.floor(b.amount * (0.001 * months));
   });
   const rates = getCurrentMarketRates();
-  let investTotal = 0;
-  (state.investments || []).forEach(inv => {
-    const cur = rateForMarket(rates, inv.name);
-    investTotal += Math.round((inv.shares || (inv.investedPoints / cur)) * cur);
-  });
+  const investTotal = getInvestmentPortfolioValue(
+    state.investments,
+    rates,
+    state.stockCap
+  );
   const showAssetAmt = state.role === 'parent';
   const bankAmtHtml = showAssetAmt
     ? `<span class="text-[8px] font-black text-[#2f8f82] leading-none mt-0.5">${bankTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
@@ -795,6 +785,11 @@ function renderModal(content) {
 function renderInvest() {
   const curRates = getCurrentMarketRates();
   const locked = state.points < 0;
+  const stockCap = Number(state.stockCap) > 0 ? Number(state.stockCap) : null;
+  const rawStockValue = getInvestmentPortfolioValue(state.investments, curRates, null);
+  const stockValue = getInvestmentPortfolioValue(state.investments, curRates, stockCap);
+  const investmentValues = getInvestmentValues(state.investments, curRates, stockCap);
+  const capReached = stockCap != null && rawStockValue >= stockCap;
   const range = state.investRange || 'week';
   const rangeBtn = (id, label) => {
     const on = range === id;
@@ -813,6 +808,15 @@ function renderInvest() {
       ${rangeBtn('month', '1か月')}
     </div>
     <div class="w-full h-[180px] mb-6 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
+    ${stockCap != null ? `
+      <div class="mb-4 px-4 py-3 rounded-xl border ${capReached ? 'bg-amber-50 border-amber-200' : 'bg-[#f4f9f7] border-[#eaf1ee]'}">
+        <div class="flex justify-between gap-2 text-xs font-bold">
+          <span class="${capReached ? 'text-amber-700' : 'text-[#5f7970]'}">${rb('株上限','かぶじょうげん')}</span>
+          <span class="${capReached ? 'text-amber-700' : 'text-[#1c2b27]'}">${stockValue.toLocaleString()} / ${stockCap.toLocaleString()} pt</span>
+        </div>
+        <p class="text-[10px] font-bold mt-1 ${capReached ? 'text-amber-600' : 'text-[#7a8f88]'}">${capReached ? '上限に達したため、株の価値はこれ以上増えません' : `あと ${(stockCap - stockValue).toLocaleString()}pt まで増えます`}</p>
+      </div>
+    ` : ''}
     ${state.role === 'child' ? (
       locked
         ? `<div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-center"><p class="text-xs font-bold text-red-500">残高がマイナスのため株の購入はできません</p><p class="text-[10px] font-bold text-red-400 mt-1">お手伝いでポイントを取り戻しましょう</p></div>`
@@ -824,9 +828,8 @@ function renderInvest() {
     ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">チャート期間を切り替えて値動きを確認できます</p>`}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
-        const cur = rateForMarket(curRates, inv.name);
         const meta = MARKET_META[inv.name] || { label: inv.name };
-        const val = Math.round((inv.shares || inv.investedPoints / cur) * cur);
+        const val = investmentValues[inv.id] || 0;
         const diff = val - inv.investedPoints;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
         return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
@@ -1179,15 +1182,15 @@ function renderSettings() {
 
     ${isChild ? '' : `
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
-        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${esc(state.childName || 'こども')}の${rb('資産上限','しさんじょうげん')}</p>
-        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">残高がこの金額を超えないようにします。空欄または 0 で制限なし。</p>
+        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${esc(state.childName || 'こども')}の${rb('株上限','かぶじょうげん')}</p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">株全体がこの金額に達したら、値上がりしてもこれ以上増えません。空欄または 0 で制限なし。</p>
         <div class="flex gap-2 items-center">
-          <input type="number" id="points-cap-input" inputmode="numeric" min="0" step="1"
-                 value="${Number(state.pointsCap) > 0 ? Number(state.pointsCap) : ''}"
+          <input type="number" id="stock-cap-input" inputmode="numeric" min="0" step="1"
+                 value="${Number(state.stockCap) > 0 ? Number(state.stockCap) : ''}"
                  placeholder="例: 3000"
                  class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
           <span class="text-xs font-bold text-slate-400 shrink-0">pt</span>
-          <button type="button" onclick="savePointsCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>
+          <button type="button" onclick="saveStockCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>
         </div>
       </div>
     `}
@@ -1249,6 +1252,7 @@ export function drawInvestChart() {
   }
   const hasAny = MARKET_ORDER.some(name => holdings[name] > 0);
   const showIndex = !hasAny;
+  const stockCap = Number(state.stockCap) > 0 ? Number(state.stockCap) : null;
   const chartMarkets = isDetail || hasAny
     ? (hasAny ? MARKET_ORDER.filter(name => holdings[name] > 0) : MARKET_ORDER)
     : ['日本', 'アメリカ'];
@@ -1264,7 +1268,16 @@ export function drawInvestChart() {
         const meta = MARKET_META[name];
         const series = showIndex
           ? rates[name].map(r => Math.round(100 * r))
-          : rates[name].map(r => Math.round(holdings[name] * r));
+          : rates[name].map((r, index) => {
+              const rawTotal = MARKET_ORDER.reduce(
+                (sum, market) => sum + holdings[market] * rates[market][index],
+                0
+              );
+              const scale = stockCap != null && rawTotal > stockCap
+                ? stockCap / rawTotal
+                : 1;
+              return Math.round(holdings[name] * r * scale);
+            });
         return {
           label: meta.short,
           data: series,

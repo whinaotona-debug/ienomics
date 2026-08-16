@@ -1,4 +1,4 @@
-import { state } from './state.js?v=143';
+import { state } from './state.js?v=144';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -20,7 +20,7 @@ export function jobTitleHtml(title, kana) {
   const t = esc(title || '無題');
   const k = String(kana || '').trim();
   if (!k) return t;
-  return `<ruby class="ie-job-ruby">${t}<rt>${esc(k)}</rt></ruby>`;
+  return `<span class="ie-job-ruby"><span class="ie-job-ruby-reading">${esc(k)}</span><span class="ie-job-ruby-base">${t}</span></span>`;
 }
 
 export function applyFuriganaState() {
@@ -324,13 +324,6 @@ export function getHelpStampData(tasks) {
   return { cardDays, stamped, streak, year, month };
 }
 
-/** 資産上限までの残り。制限なしなら Infinity */
-export function roomUnderPointsCap(points, cap) {
-  const c = Number(cap);
-  if (!Number.isFinite(c) || c <= 0) return Infinity;
-  return Math.max(0, c - (Number(points) || 0));
-}
-
 /**
  * 承認済み仕事を日本時間の日付ごとにまとめる（新しい日が先）。
  * @returns {{ key, year, month, day, weekday, total, items }[]}
@@ -383,6 +376,30 @@ export function marketNameFromId(id) {
 export function rateForMarket(rates, name) {
   const r = rates && rates[name];
   return Number.isFinite(r) && r > 0 ? r : 1;
+}
+
+/** 株全体の現在価値。stockCap を超えた値上がり分は反映しない。 */
+export function getInvestmentPortfolioValue(investments, rates, stockCap) {
+  const raw = (investments || []).reduce((sum, inv) => {
+    const rate = rateForMarket(rates, inv.name);
+    const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / rate);
+    return sum + shares * rate;
+  }, 0);
+  const cap = Number(stockCap);
+  return Math.round(Number.isFinite(cap) && cap > 0 ? Math.min(raw, cap) : raw);
+}
+
+/** 株上限を各保有銘柄へ現在価値の比率で配分した売却価値。 */
+export function getInvestmentValues(investments, rates, stockCap) {
+  const rows = (investments || []).map(inv => {
+    const rate = rateForMarket(rates, inv.name);
+    const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / rate);
+    return { id: inv.id, raw: shares * rate };
+  });
+  const rawTotal = rows.reduce((sum, row) => sum + row.raw, 0);
+  const cap = Number(stockCap);
+  const scale = Number.isFinite(cap) && cap > 0 && rawTotal > cap ? cap / rawTotal : 1;
+  return Object.fromEntries(rows.map(row => [row.id, Math.round(row.raw * scale)]));
 }
 
 function rateAt(date, market) {

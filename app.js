@@ -1,10 +1,10 @@
-import { state } from './state.js?v=143';
-import { render } from './ui.js?v=143';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap, marketNameFromId, MARKET_META } from './utils.js?v=143';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=143';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=143';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=143';
-import { db, auth } from './firebase.js?v=143';
+import { state } from './state.js?v=144';
+import { render } from './ui.js?v=144';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue } from './utils.js?v=144';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=144';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=144';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=144';
+import { db, auth } from './firebase.js?v=144';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -521,7 +521,7 @@ function applyActiveChild() {
   if (!active) return false;
   state.childName = active.childName;
   state.points = active.points || 0;
-  state.pointsCap = Number(active.pointsCap) > 0 ? Number(active.pointsCap) : null;
+  state.stockCap = Number(active.stockCap) > 0 ? Number(active.stockCap) : null;
   state.childLinked = active.childLinked !== false;
   return true;
 }
@@ -546,7 +546,7 @@ function loadParentChildren(parentUid) {
         render();
       }
     } else {
-      state.familyCode = null; state.childName = ''; state.points = 0; state.pointsCap = null; state.childLinked = false; render();
+      state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false; render();
     }
   });
 }
@@ -703,7 +703,7 @@ async function handleFamilyRemoved() {
   state.familyCode = null;
   state.childName = '';
   state.points = 0;
-  state.pointsCap = null;
+  state.stockCap = null;
   state.childLinked = false;
   state.setupMode = null;
   render();
@@ -728,7 +728,7 @@ function setupListeners() {
     if (d.exists()) { 
       const data = d.data();
       state.points = data.points || 0;
-      state.pointsCap = Number(data.pointsCap) > 0 ? Number(data.pointsCap) : null;
+      state.stockCap = Number(data.stockCap) > 0 ? Number(data.stockCap) : null;
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
       render(); 
@@ -1072,26 +1072,11 @@ window.completeTask = async (id) => guard(`completeTask:${id}`, async () => {
  */
 window.approveTask = async (id, p) => {
   const amount = Number(p) || 0;
-  const room = roomUnderPointsCap(state.points, state.pointsCap);
-  if (amount > 0 && room === 0) {
-    return showAlert(
-      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しています。設定で上限を上げるか、換金などで残高を減らしてから付与してください。`,
-      { title: '上限に達しています' }
-    );
-  }
-  if (amount > 0 && Number.isFinite(room) && amount > room) {
-    const ok = await showConfirm(
-      `上限は ${Number(state.pointsCap).toLocaleString()}pt です。いま付与できるのは ${room.toLocaleString()}pt までです。${room.toLocaleString()}pt だけ付与して承認しますか？`,
-      { title: '上限までしか付与できません', okLabel: '一部付与して承認' }
-    );
-    if (!ok) return;
-  }
 
   await guard(`approveTask:${id}`, async () => {
     const taskRef = doc(db, "tasks", id);
     const famRef = doc(db, "families", state.familyCode);
     let granted = 0;
-    let capped = false;
 
     await runTransaction(db, async (tx) => {
       const taskSnap = await tx.get(taskRef);
@@ -1102,24 +1087,12 @@ window.approveTask = async (id, p) => {
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
 
       const pts = famSnap.data().points || 0;
-      const cap = Number(famSnap.data().pointsCap) || 0;
-      const avail = roomUnderPointsCap(pts, cap);
-      granted = amount > 0 ? Math.min(amount, avail === Infinity ? amount : avail) : 0;
-      capped = amount > 0 && granted < amount;
-
-      const taskUpdate = { status: 'approved', approvedAt: Date.now() };
-      if (capped) taskUpdate.points = granted;
-      tx.update(taskRef, taskUpdate);
+      granted = Math.max(0, amount);
+      tx.update(taskRef, { status: 'approved', approvedAt: Date.now() });
       if (granted > 0) tx.update(famRef, { points: pts + granted });
     });
 
-    if (granted > 0) {
-      showToast(capped
-        ? `上限のため ${granted}pt だけ付与しました`
-        : `${granted}pt を付与しました`);
-    } else {
-      showToast('承認しました');
-    }
+    showToast(granted > 0 ? `${granted}pt を付与しました` : '承認しました');
   }, { busyLabel: '付与しています...' });
 };
 
@@ -1258,40 +1231,25 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
 
 window.sellCustom = async (id, v) => {
   const value = Number(v) || 0;
-  const room = roomUnderPointsCap(state.points, state.pointsCap);
-  if (value > 0 && room === 0) {
-    return showAlert(
-      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、売却できません。`,
-      { title: '上限に達しています' }
-    );
-  }
-  const willGrant = Number.isFinite(room) ? Math.min(value, room) : value;
   const ok = await showConfirm(
-    willGrant < value
-      ? `今の価値は ${value}pt ですが、上限のため ${willGrant}pt だけ戻ります。売却しますか？`
-      : `今の価値は ${value}pt です。売ってポイントに戻します。`,
+    `今の価値は ${value}pt です。売ってポイントに戻します。`,
     { title: '売却しますか？', okLabel: '売却する' }
   );
   if (!ok) return;
   await guard(`sellCustom:${id}`, async () => {
     const famRef = doc(db, "families", state.familyCode);
     const invRef = doc(db, "investments", id);
-    let granted = 0;
     await runTransaction(db, async (tx) => {
       const invSnap = await tx.get(invRef);
       if (!invSnap.exists()) throw new Error('この投資は見つかりませんでした');
       const famSnap = await tx.get(famRef);
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
       const pts = famSnap.data().points || 0;
-      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
-      granted = Math.min(value, avail === Infinity ? value : avail);
-      if (granted > 0) tx.update(famRef, { points: pts + granted });
+      if (value > 0) tx.update(famRef, { points: pts + value });
       tx.delete(invRef);
     });
     setView('invest');
-    showToast(granted < value
-      ? `上限のため ${granted}pt だけ戻りました`
-      : `${granted}pt になりました`);
+    showToast(`${value}pt になりました`);
   }, { busyLabel: '売却しています...' });
 };
 
@@ -1306,6 +1264,24 @@ window.investCustom = async (n) => {
   const dbName = marketNameFromId(n);
   if (!dbName) return showAlert("この市場は選べません");
   const meta = MARKET_META[dbName];
+  const currentStockValue = getInvestmentPortfolioValue(
+    state.investments,
+    getCurrentMarketRates(),
+    null
+  );
+  const stockCap = Number(state.stockCap) || 0;
+  if (stockCap > 0 && currentStockValue >= stockCap) {
+    return showAlert(
+      `株は上限の ${stockCap.toLocaleString()}pt に達しています。これ以上は買えません。`,
+      { title: '株の上限に達しています' }
+    );
+  }
+  if (stockCap > 0 && currentStockValue + a > stockCap) {
+    return showAlert(
+      `株はあと ${(stockCap - currentStockValue).toLocaleString()}pt まで買えます。金額を減らしてください。`,
+      { title: '株の上限を超えます' }
+    );
+  }
 
   await guard(`invest:${n}`, async () => {
     const cur = getCurrentMarketRates();
@@ -1384,44 +1360,29 @@ window.withdrawBank = async () => {
     const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
     total += b.amount + Math.floor(b.amount * (0.001 * months));
   }
-  const room = roomUnderPointsCap(state.points, state.pointsCap);
-  if (total > 0 && room === 0) {
-    return showAlert(
-      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、引き出せません。`,
-      { title: '上限に達しています' }
-    );
-  }
-  const willGrant = Number.isFinite(room) ? Math.min(total, room) : total;
   const ok = await showConfirm(
-    willGrant < total
-      ? `預金＋利息は ${total.toLocaleString()}pt ですが、上限のため ${willGrant.toLocaleString()}pt だけ戻ります。引き出しますか？`
-      : "預金と利息をまとめてポイントに戻します。",
+    "預金と利息をまとめてポイントに戻します。",
     { title: '全額を引き出しますか？', okLabel: '引き出す' }
   );
   if (!ok) return;
   await guard('withdrawBank', async () => {
     const famRef = doc(db, "families", state.familyCode);
-    let granted = 0;
     await runTransaction(db, async (tx) => {
       const famSnap = await tx.get(famRef);
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
       const pts = famSnap.data().points || 0;
-      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
-      granted = Math.min(total, avail === Infinity ? total : avail);
-      if (granted > 0) tx.update(famRef, { points: pts + granted });
+      if (total > 0) tx.update(famRef, { points: pts + total });
       for (const b of deposits) tx.delete(doc(db, "banks", b.id));
     });
     setView('home');
-    showToast(granted < total
-      ? `上限のため ${granted}pt だけ引き出しました`
-      : `${granted}pt 引き出しました`);
+    showToast(`${total}pt 引き出しました`);
   }, { busyLabel: '引き出しています...' });
 };
 
-/** いま表示中の子の資産上限を保存。空欄または 0 は制限なし */
-window.savePointsCap = async () => {
+/** いま表示中の子の株評価額上限を保存。空欄または 0 は制限なし */
+window.saveStockCap = async () => {
   if (state.role !== 'parent' || !state.familyCode) return;
-  const el = document.getElementById('points-cap-input');
+  const el = document.getElementById('stock-cap-input');
   if (!el) return;
   const raw = String(el.value || '').trim();
   let cap = null;
@@ -1430,19 +1391,25 @@ window.savePointsCap = async () => {
     if (!Number.isFinite(cap) || cap < 0) return showAlert('上限は 0 以上の整数で入力してください');
     if (cap === 0) cap = null;
   }
-  if (cap != null && (state.points || 0) > cap) {
+  const currentValue = getInvestmentPortfolioValue(
+    state.investments,
+    getCurrentMarketRates(),
+    null
+  );
+  if (cap != null && currentValue > cap) {
     const ok = await showConfirm(
-      `いまの残高（${Number(state.points).toLocaleString()}pt）より低い上限です。残高はそのままで、これ以上増えなくなります。`,
+      `いまの株価値は ${currentValue.toLocaleString()}pt です。表示と売却額は ${cap.toLocaleString()}pt までになり、これ以上は増えません。`,
       { title: '上限を設定しますか？', okLabel: '設定する' }
     );
     if (!ok) return;
   }
-  await guard('savePointsCap', async () => {
+  await guard('saveStockCap', async () => {
     await updateDoc(doc(db, "families", state.familyCode), {
-      pointsCap: cap == null ? deleteField() : cap
+      stockCap: cap == null ? deleteField() : cap,
+      pointsCap: deleteField()
     });
-    state.pointsCap = cap;
-    showToast(cap == null ? '資産上限を解除しました' : `資産上限を ${cap.toLocaleString()}pt にしました`);
+    state.stockCap = cap;
+    showToast(cap == null ? '株の上限を解除しました' : `株の上限を ${cap.toLocaleString()}pt にしました`);
     render();
   }, { busyLabel: '保存しています...' });
 };
@@ -1451,16 +1418,6 @@ window.sendBalloon = async () => {
   const p = parseInt(document.getElementById('balloon-points').value);
   const m = document.getElementById('balloon-message').value.trim();
   if (!p || p <= 0) return showAlert("贈るポイントを入力してください");
-  const room = roomUnderPointsCap(state.points, state.pointsCap);
-  if (Number.isFinite(room) && p > room) {
-    const ok = await showConfirm(
-      room <= 0
-        ? `いま資産が上限（${Number(state.pointsCap).toLocaleString()}pt）です。送っても子供は受け取れない可能性があります。それでも送りますか？`
-        : `上限まであと ${room.toLocaleString()}pt です。送った ${p}pt のうち一部しか受け取れないことがあります。それでも送りますか？`,
-      { title: '上限の注意', okLabel: '送る' }
-    );
-    if (!ok) return;
-  }
   await guard('sendBalloon', async () => {
     await addDoc(collection(db, "balloons"), {
       familyCode: state.familyCode,
@@ -1479,20 +1436,6 @@ window.openBalloon = async (id) => {
   const gift = (state.balloons || []).find(b => b.id === id);
   if (!gift) return showAlert("このギフトはもう受け取り済みです");
   const amount = Number(gift.points) || 0;
-  const room = roomUnderPointsCap(state.points, state.pointsCap);
-  if (amount > 0 && room === 0) {
-    return showAlert(
-      `資産が上限（${Number(state.pointsCap).toLocaleString()}pt）に達しているため、受け取れません。親に上限を上げてもらうか、換金などで残高を減らしてください。`,
-      { title: '上限に達しています' }
-    );
-  }
-  if (amount > 0 && Number.isFinite(room) && amount > room) {
-    const ok = await showConfirm(
-      `上限のため ${room.toLocaleString()}pt までしか受け取れません。受け取りますか？`,
-      { title: '上限までしか受け取れません', okLabel: '一部受け取る' }
-    );
-    if (!ok) return;
-  }
 
   const received = await guard(`openBalloon:${id}`, async () => {
     const giftRef = doc(db, "balloons", id);
@@ -1503,8 +1446,7 @@ window.openBalloon = async (id) => {
       if (!gSnap.exists()) return; // ほかの端末で受け取り済み
       const famSnap = await tx.get(famRef);
       const pts = famSnap.data().points || 0;
-      const avail = roomUnderPointsCap(pts, famSnap.data().pointsCap);
-      granted = Math.min(amount, avail === Infinity ? amount : avail);
+      granted = amount;
       if (granted > 0) tx.update(famRef, { points: pts + granted });
       tx.delete(giftRef);
     });
@@ -1513,13 +1455,10 @@ window.openBalloon = async (id) => {
 
   if (received == null) return;
   if (received > 0) {
-    const capped = received < amount;
     const body = gift.message
-      ? `「${gift.message}」\n\nボーナス ${received}pt を受け取りました！${capped ? `\n（上限のため一部）` : ''}`
-      : `ボーナス ${received}pt を受け取りました！${capped ? `\n（上限のため一部）` : ''}`;
+      ? `「${gift.message}」\n\nボーナス ${received}pt を受け取りました！`
+      : `ボーナス ${received}pt を受け取りました！`;
     await showAlert(body, { title: 'ギフトが届きました', tone: 'gift' });
-  } else {
-    await showAlert('上限のためポイントは増えませんでしたが、ギフトは受け取り済みにしました。', { title: 'ギフトを受け取りました' });
   }
 };
 
