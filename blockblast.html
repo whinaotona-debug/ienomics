@@ -440,13 +440,124 @@
     return { cells, h, w, n: cells.length };
   });
 
-  const WEIGHT = SHAPES.map(p => {
-    if (p.n === 9) return 1.2;
-    if (p.n >= 6) return 2;
-    if (p.n === 5 && (p.h === 1 || p.w === 1)) return 2.2;
-    if (p.n === 1) return 3.2;
-    return 4;
-  });
+  function pieceHelp(occ, shape, combo, misses) {
+    const spots = placements(occ, shape);
+    if (!spots.length) return { help: -1e9, shape, canClear: false, maxLines: 0, best: null };
+    let bestQ = -1e9, canClear = false, maxLines = 0, best = null;
+    for (const rc of spots) {
+      const res = applyPlace(occ, shape.cells, rc >> 3, rc & 7);
+      const sc = scoreMove(shape.n, res.lines, res.clearedN, res.empty, combo, misses);
+      let q = sc.pts * 6 + evalFast(res.next, sc.combo, sc.misses);
+      if (res.lines) {
+        canClear = true;
+        if (res.lines > maxLines) maxLines = res.lines;
+        q += 900 * res.lines + res.clearedN * 18;
+        if (misses >= 1) q += 700;
+        if (misses >= 2) q += 2400;
+        if (combo >= 5) q += 200 * res.lines;
+      }
+      if (res.empty) q += 1400;
+      if (q > bestQ) {
+        bestQ = q;
+        best = { res, sc, r: rc >> 3, c: rc & 7 };
+      }
+    }
+    let help = bestQ + shape.n * 6 + Math.random() * 50;
+    if (shape.n >= 8 && emptyCount(occ) < 30) help -= 500;
+    if (shape.n === 1) help -= 40;
+    return { help, shape, canClear, maxLines, best };
+  }
+
+  function bestRemaining(occ, combo, misses, used) {
+    let top = null;
+    for (const shape of SHAPES) {
+      if (used.includes(shape)) continue;
+      const h = pieceHelp(occ, shape, combo, misses);
+      if (h.best && (!top || h.help > top.help)) top = h;
+    }
+    return top;
+  }
+
+  function scoreTrio(occ, combo, misses, shapes) {
+    const orders = [
+      [0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]
+    ];
+    let best = -1e9;
+    for (const ord of orders) {
+      let board = occ, cmb = combo, miss = misses, pts = 0, lines = 0, ok = true;
+      for (const i of ord) {
+        const h = pieceHelp(board, shapes[i], cmb, miss);
+        if (!h.best) { ok = false; break; }
+        board = h.best.res.next;
+        cmb = h.best.sc.combo;
+        miss = h.best.sc.misses;
+        pts += h.best.sc.pts;
+        lines += h.best.res.lines;
+      }
+      if (!ok) continue;
+      let s = pts * 11 + evalFast(board, cmb, miss) + cmb * cmb * 50;
+      if (combo > 0 && cmb === 0) s -= 6000 * combo;
+      if (misses >= 1 && lines === 0) s -= 9000;
+      if (s > best) best = s;
+    }
+    return best;
+  }
+
+  function deal() {
+    const occ = state.occ;
+    const combo = state.combo;
+    const misses = state.misses;
+    const needClear = (combo > 0 && misses >= 1) || misses >= 2;
+    const ranked = [];
+    for (const shape of SHAPES) {
+      const h = pieceHelp(occ, shape, combo, misses);
+      if (h.best) ranked.push(h);
+    }
+    ranked.sort((a, b) => b.help - a.help);
+
+    const colors = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
+    if (!ranked.length) {
+      state.tray = [0, 1, 2].map(i => ({ shape: SHAPES[0], color: colors[i] }));
+      SFX.deal();
+      return;
+    }
+
+    const seeds = [];
+    const clears = ranked.filter(x => x.canClear);
+    if (needClear && clears.length) {
+      for (let i = 0; i < Math.min(5, clears.length); i++) seeds.push(clears[i]);
+    } else {
+      for (let i = 0; i < Math.min(6, ranked.length); i++) seeds.push(ranked[i]);
+    }
+
+    let bestShapes = null, bestS = -1e9;
+    for (const seed of seeds) {
+      const used = [seed.shape];
+      let board = seed.best.res.next;
+      let cmb = seed.best.sc.combo;
+      let miss = seed.best.sc.misses;
+      const second = bestRemaining(board, cmb, miss, used);
+      if (!second) continue;
+      used.push(second.shape);
+      board = second.best.res.next;
+      cmb = second.best.sc.combo;
+      miss = second.best.sc.misses;
+      const third = bestRemaining(board, cmb, miss, used);
+      if (!third) continue;
+      const shapes = [seed.shape, second.shape, third.shape];
+      const s = scoreTrio(occ, combo, misses, shapes) + seed.maxLines * 80;
+      if (s > bestS) {
+        bestS = s;
+        bestShapes = shapes;
+      }
+    }
+
+    if (!bestShapes) bestShapes = ranked.slice(0, 3).map(x => x.shape);
+    while (bestShapes.length < 3) bestShapes.push(ranked[0].shape);
+
+    state.tray = bestShapes.map((shape, i) => ({ shape, color: colors[i] }));
+    SFX.deal();
+  }
 
   const el = {
     board: document.getElementById("board"),
@@ -804,36 +915,6 @@
     q += evalFast(res.next, sc.combo, sc.misses);
     if (rest.length && depth < 2) q += setupBonus(res.next, rest, sc.combo, sc.misses);
     return q;
-  }
-
-  function pickShape() {
-    const occ = emptyCount(state.occ);
-    let total = 0;
-    const w = WEIGHT.map((base, i) => {
-      const n = SHAPES[i].n;
-      let x = base;
-      if (occ < 22 && n >= 6) x *= 0.25;
-      else if (occ < 30 && n >= 5) x *= 0.55;
-      return x;
-    });
-    for (const x of w) total += x;
-    let r = Math.random() * total;
-    for (let i = 0; i < SHAPES.length; i++) {
-      r -= w[i];
-      if (r <= 0) return SHAPES[i];
-    }
-    return SHAPES[0];
-  }
-
-  function deal() {
-    let pack = null;
-    for (let t = 0; t < 12; t++) {
-      const colors = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
-      pack = [0, 1, 2].map(i => ({ shape: pickShape(), color: colors[i] }));
-      if (pack.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) break;
-    }
-    state.tray = pack;
-    SFX.deal();
   }
 
   function findBest(occ, tray, combo, misses) {
