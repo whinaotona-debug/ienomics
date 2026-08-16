@@ -168,11 +168,37 @@
       background: linear-gradient(180deg, #ff8a8a, #e11d1d);
       opacity: .55;
     }
-    .cell.blast .block { animation: blast .34s ease-in forwards; }
+    .cell.blast .block { animation: blast .42s cubic-bezier(.15,.8,.3,1) forwards; }
     @keyframes blast {
       0% { transform: scale(1); filter: brightness(1); }
-      35% { transform: scale(1.18); filter: brightness(3.2); }
-      100% { transform: scale(.2); opacity: 0; filter: brightness(4); }
+      28% { transform: scale(1.28); filter: brightness(4); }
+      100% { transform: scale(.05); opacity: 0; filter: brightness(6); }
+    }
+    .board-frame.juice { animation: juiceShake .32s ease; }
+    .board-frame.juice2 { animation: juiceShake .48s ease; }
+    @keyframes juiceShake {
+      0%,100% { transform: translateX(0) rotate(0); }
+      18% { transform: translateX(-7px) rotate(-0.5deg); }
+      36% { transform: translateX(7px) rotate(0.5deg); }
+      54% { transform: translateX(-4px); }
+      72% { transform: translateX(3px); }
+    }
+    #flash {
+      position: absolute; inset: 10px;
+      pointer-events: none;
+      border-radius: 12px;
+      opacity: 0;
+      z-index: 4;
+      background: radial-gradient(circle, rgba(255,255,255,.62), rgba(180,220,255,.12) 58%, transparent 72%);
+    }
+    #flash.go { animation: flashBang .36s ease-out; }
+    #flash.perfect {
+      background: radial-gradient(circle, rgba(255,236,140,.85), rgba(255,180,40,.28) 50%, transparent 74%);
+      animation: flashBang .7s ease-out;
+    }
+    @keyframes flashBang {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
     }
     .block.pop { animation: popin .22s cubic-bezier(.2,1.4,.3,1) both; }
     @keyframes popin {
@@ -362,6 +388,7 @@
       <div class="board-frame" id="frame">
         <div id="board"></div>
         <canvas id="fx"></canvas>
+        <div id="flash"></div>
         <div id="floatScore"></div>
         <div id="pop"></div>
       </div>
@@ -427,10 +454,6 @@
     [[0,1],[1,0],[1,1],[1,2]], [[0,0],[1,0],[1,1],[2,0]],
     [[0,1],[0,2],[1,0],[1,1]], [[0,0],[1,0],[1,1],[2,1]],
     [[0,0],[0,1],[1,1],[1,2]], [[0,1],[1,0],[1,1],[2,0]],
-    [[0,0],[1,0],[2,0],[3,0],[3,1]], [[0,0],[0,1],[0,2],[0,3],[1,0]],
-    [[0,0],[0,1],[1,1],[2,1],[3,1]], [[1,0],[1,1],[1,2],[1,3],[0,3]],
-    [[0,1],[1,1],[2,1],[3,0],[3,1]], [[0,0],[1,0],[1,1],[1,2],[1,3]],
-    [[0,0],[0,1],[1,0],[2,0],[3,0]], [[0,0],[0,1],[0,2],[0,3],[1,3]],
     [[0,1],[1,0],[1,1],[1,2],[2,1]],
     [[0,0],[0,1],[0,2],[1,0],[2,0]], [[0,0],[0,1],[0,2],[1,2],[2,2]],
     [[0,2],[1,2],[2,0],[2,1],[2,2]], [[0,0],[1,0],[2,0],[2,1],[2,2]]
@@ -456,7 +479,7 @@
         if (misses >= 2) q += 2400;
         if (combo >= 5) q += 200 * res.lines;
       }
-      if (res.empty) q += 1400;
+      if (res.empty) q += 22000;
       if (q > bestQ) {
         bestQ = q;
         best = { res, sc, r: rc >> 3, c: rc & 7 };
@@ -503,6 +526,9 @@
       }
       if (!ok) continue;
       let s = pts * 11 + evalFast(board, cmb, miss) + cmb * cmb * 50;
+      let vacant = true;
+      for (let r = 0; r < 8; r++) if (board[r]) { vacant = false; break; }
+      if (vacant) s += 90000;
       if (combo > 0 && cmb === 0) s -= 6000 * combo;
       if (misses >= 1 && lines === 0) s -= 9000;
       if (s > best) best = s;
@@ -510,10 +536,66 @@
     return best;
   }
 
+  function fillerForEmpty() {
+    const pool = SHAPES.filter(s => s.n >= 4 && s.n <= 6);
+    return pool[Math.floor(Math.random() * pool.length)] || SHAPES[9];
+  }
+
+  function findAllClearSet(occ) {
+    const fill = 64 - emptyCount(occ);
+    if (fill === 0 || fill > 28) return null;
+
+    for (const shape of SHAPES) {
+      const spots = placements(occ, shape);
+      for (const rc of spots) {
+        if (applyPlace(occ, shape.cells, rc >> 3, rc & 7).empty) {
+          return [shape, fillerForEmpty(), fillerForEmpty()];
+        }
+      }
+    }
+
+    const firsts = [];
+    for (const shape of SHAPES) {
+      const spots = placements(occ, shape);
+      if (!spots.length) continue;
+      const tries = [];
+      for (const rc of spots) {
+        const res = applyPlace(occ, shape.cells, rc >> 3, rc & 7);
+        tries.push({ res, q: (res.empty ? 1e6 : 0) + res.lines * 120 + res.clearedN });
+      }
+      tries.sort((a, b) => b.q - a.q);
+      firsts.push({ shape, tries: tries.slice(0, 5) });
+    }
+    firsts.sort((a, b) => b.tries[0].q - a.tries[0].q);
+
+    for (const a of firsts.slice(0, 10)) {
+      for (const pa of a.tries) {
+        if (pa.res.empty) return [a.shape, fillerForEmpty(), fillerForEmpty()];
+        for (const b of SHAPES) {
+          if (b === a.shape) continue;
+          const spots = placements(pa.res.next, b);
+          for (const rc of spots) {
+            if (applyPlace(pa.res.next, b.cells, rc >> 3, rc & 7).empty) {
+              return [a.shape, b, fillerForEmpty()];
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
   function deal() {
     const occ = state.occ;
     const combo = state.combo;
     const misses = state.misses;
+    const colors = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
+    const perfect = findAllClearSet(occ);
+    if (perfect) {
+      state.tray = perfect.map((shape, i) => ({ shape, color: colors[i] }));
+      SFX.deal();
+      return;
+    }
     const needClear = (combo > 0 && misses >= 1) || misses >= 2;
     const ranked = [];
     for (const shape of SHAPES) {
@@ -522,7 +604,6 @@
     }
     ranked.sort((a, b) => b.help - a.help);
 
-    const colors = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
     if (!ranked.length) {
       state.tray = [0, 1, 2].map(i => ({ shape: SHAPES[0], color: colors[i] }));
       SFX.deal();
@@ -585,7 +666,8 @@
     overlay: document.getElementById("overlay"),
     start: document.getElementById("start"),
     endScore: document.getElementById("endScore"),
-    floatScore: document.getElementById("floatScore")
+    floatScore: document.getElementById("floatScore"),
+    flash: document.getElementById("flash")
   };
 
   function loadBest() {
@@ -645,17 +727,20 @@
     place() { this.tone(180, 0.09, "triangle", 0.08); this.tone(320, 0.06, "sine", 0.04); },
     bad() { this.tone(110, 0.12, "square", 0.04); },
     clear(lines, combo) {
-      const base = 420 + Math.min(combo, 20) * 18;
-      for (let i = 0; i < Math.min(lines, 6); i++) {
-        this.tone(base + i * 90, 0.14, "sine", 0.07, i * 0.04);
-        this.tone(base * 2 + i * 90, 0.1, "triangle", 0.03, i * 0.04);
+      this.tone(90, 0.2, "sawtooth", 0.1);
+      this.tone(160, 0.14, "square", 0.05);
+      const base = 480 + Math.min(combo, 24) * 22;
+      for (let i = 0; i < Math.min(lines, 8); i++) {
+        this.tone(base + i * 110, 0.18, "sine", 0.09, i * 0.045);
+        this.tone(base * 2 + i * 110, 0.14, "triangle", 0.05, i * 0.045);
       }
     },
     combo(n) {
-      [523, 659, 784, 1046].forEach((f, i) => this.tone(f + Math.min(n, 12) * 8, 0.12, "sine", 0.05, i * 0.05));
+      [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f + Math.min(n, 16) * 10, 0.14, "sine", 0.07, i * 0.045));
     },
     allClear() {
-      [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.18, "triangle", 0.07, i * 0.07));
+      [392, 523, 659, 784, 1046, 1318, 1568].forEach((f, i) => this.tone(f, 0.28, "triangle", 0.09, i * 0.07));
+      this.tone(80, 0.35, "sawtooth", 0.08);
     },
     over() { [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.22, "sawtooth", 0.04, i * 0.12)); },
     deal() { [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06)); }
@@ -848,7 +933,8 @@
       v -= (maxR - minR + 1) * (maxC - minC + 1) * 3;
       v -= Math.min(minR + minC, minR + (7 - maxC), (7 - maxR) + minC, (7 - maxR) + (7 - maxC)) * 10;
     }
-    if (fill < 10) v -= (10 - fill) * 20;
+    if (fill === 0) v += 22000;
+    else if (fill <= 12) v += (12 - fill) * 110;
     if (fill > 46) v -= (fill - 46) * 32;
     v += empty * 2;
     return v;
@@ -918,7 +1004,7 @@
     let q = sc.pts * 7;
     q += res.lines * (160 + comboNow * 35);
     q += sc.combo * sc.combo * 22;
-    if (res.empty) q += 1000;
+    if (res.empty) q += 28000;
     if (comboNow > 0 && sc.combo === 0) q -= 2800 * comboNow;
     if (missNow >= 2 && res.lines === 0) q -= 25000;
     if (missNow >= 2 && res.lines > 0) q += 4000;
@@ -933,7 +1019,7 @@
     tray.forEach((p, i) => { if (p) live.push({ p, i }); });
     if (!live.length) return null;
 
-    const beam = live.length === 3 ? [16, 12, 10] : live.length === 2 ? [28, 20] : [64];
+    const beam = live.length === 3 ? [22, 16, 64] : live.length === 2 ? [36, 64] : [64];
     const finals = [];
 
     function keepLeaf(quick, moves, board, comboNow, missNow, pts) {
@@ -950,7 +1036,8 @@
     function search(board, left, comboNow, missNow, pts, moves, depth) {
       if (!left.length) {
         const comboKill = combo > 2 && comboNow === 0 ? combo * 3500 : 0;
-        keepLeaf(pts * 10 + evalFast(board, comboNow, missNow) + comboNow * comboNow * 40 - comboKill,
+        const vacant = emptyCount(board) === 0 ? 80000 : 0;
+        keepLeaf(pts * 10 + evalFast(board, comboNow, missNow) + comboNow * comboNow * 40 - comboKill + vacant,
           moves, board, comboNow, missNow, pts);
         return;
       }
@@ -986,7 +1073,8 @@
     let best = null;
     for (const f of finals) {
       const comboKill = combo > 2 && f.comboNow === 0 ? combo * 4000 : 0;
-      const value = f.pts * 12 + evaluate(f.board, f.comboNow, f.missNow) + f.comboNow * f.comboNow * 55 - comboKill;
+      const vacant = emptyCount(f.board) === 0 ? 120000 : 0;
+      const value = f.pts * 12 + evaluate(f.board, f.comboNow, f.missNow) + f.comboNow * f.comboNow * 55 - comboKill + vacant;
       if (!best || value > best.value) best = { value, moves: f.moves, pts: f.pts, combo: f.comboNow };
     }
     return best;
@@ -1110,12 +1198,13 @@
     for (const i of indices) {
       const x = (i & 7) * cell + cell / 2;
       const y = (i >> 3) * cell + cell / 2;
-      for (let k = 0; k < 10; k++) {
+      for (let k = 0; k < 22; k++) {
         const a = Math.random() * Math.PI * 2;
-        const sp = 1.2 + Math.random() * 3.4;
+        const sp = 1.6 + Math.random() * 5.2;
         parts.push({
-          x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2,
-          life: 1, s: 2 + Math.random() * 3.5, color: Math.random() < 0.5 ? col.light : col.main
+          x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.8,
+          life: 1, s: 2.4 + Math.random() * 4.2,
+          color: k % 5 === 0 ? "#ffe566" : (Math.random() < 0.5 ? col.light : col.main)
         });
       }
     }
@@ -1188,6 +1277,15 @@
       shout(res.empty ? "PERFECT" : (state.combo >= 2 ? "COMBO x" + state.combo : names[res.lines] || "NICE"),
             res.empty ? "#ffd24a" : "#fff");
       if (res.empty) SFX.allClear();
+      el.frame.classList.remove("juice", "juice2");
+      void el.frame.offsetWidth;
+      el.frame.classList.add(res.empty || res.lines >= 2 ? "juice2" : "juice");
+      if (el.flash) {
+        el.flash.classList.remove("go", "perfect");
+        void el.flash.offsetWidth;
+        el.flash.classList.add(res.empty ? "perfect" : "go");
+      }
+      if (navigator.vibrate) navigator.vibrate(res.empty ? [30, 40, 80] : res.lines >= 2 ? 40 : 22);
       const uniq = [...new Set(res.cleared)];
       for (const i of uniq) {
         cellsDom[i].classList.add("blast");
@@ -1202,7 +1300,7 @@
           cellsDom[i].className = "cell";
         }
         renderBoard();
-      }, 320);
+      }, 420);
     }
 
     const remain = state.tray.filter(Boolean);
@@ -1211,7 +1309,7 @@
         deal();
         renderTray();
         if (!state.tray.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) gameOver();
-      }, res.lines ? 360 : 80);
+      }, res.lines ? (res.empty ? 640 : 480) : 80);
     } else if (!remain.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) {
       setTimeout(gameOver, res.lines ? 380 : 120);
     }
@@ -1262,7 +1360,7 @@
       renderBoard();
       await wait(220);
       commit(mv.slot, mv.r, mv.c, true);
-      await wait(mv.lines ? 420 : 260);
+      await wait(mv.empty ? 780 : mv.lines ? 580 : 240);
     }
     state.hint = null;
     renderBoard();
