@@ -1,10 +1,10 @@
-import { state } from './state.js?v=142';
-import { render } from './ui.js?v=142';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap } from './utils.js?v=142';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=142';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=142';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=142';
-import { db, auth } from './firebase.js?v=142';
+import { state } from './state.js?v=143';
+import { render } from './ui.js?v=143';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, roomUnderPointsCap, marketNameFromId, MARKET_META } from './utils.js?v=143';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=143';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=143';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=143';
+import { db, auth } from './firebase.js?v=143';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1303,10 +1303,14 @@ window.investCustom = async (n) => {
   if (isNaN(a) || a <= 0) return showAlert("正しい金額を入力してください");
   if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`); 
 
+  const dbName = marketNameFromId(n);
+  if (!dbName) return showAlert("この市場は選べません");
+  const meta = MARKET_META[dbName];
+
   await guard(`invest:${n}`, async () => {
     const cur = getCurrentMarketRates();
-    const r = n === 'japan' ? cur.日本 : cur.アメリカ; 
-    const dbName = n === 'japan' ? '日本' : 'アメリカ'; 
+    const r = cur[dbName];
+    if (!(r > 0)) throw new Error('いまの相場が取れませんでした');
 
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
     const ex = state.investments.find(i => i.name === dbName); 
@@ -1316,7 +1320,7 @@ window.investCustom = async (n) => {
       await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: dbName, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
     } 
     setView('invest'); 
-    showToast(`${dbName}株を ${a}pt 買いました`);
+    showToast(`${meta.label}を ${a}pt 買いました`);
   }, { busyLabel: '購入しています...' });
 };
 

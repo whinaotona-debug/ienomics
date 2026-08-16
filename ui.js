@@ -1,7 +1,7 @@
-import { state } from './state.js?v=142';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts } from './utils.js?v=142';
-import { refreshTutorial } from './tutorial.js?v=142';
-import { auth } from './firebase.js?v=142';
+import { state } from './state.js?v=143';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket } from './utils.js?v=143';
+import { refreshTutorial } from './tutorial.js?v=143';
+import { auth } from './firebase.js?v=143';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -549,7 +549,7 @@ function renderHome() {
   const rates = getCurrentMarketRates();
   let investTotal = 0;
   (state.investments || []).forEach(inv => {
-    const cur = inv.name === '日本' ? rates.日本 : rates.アメリカ;
+    const cur = rateForMarket(rates, inv.name);
     investTotal += Math.round((inv.shares || (inv.investedPoints / cur)) * cur);
   });
   const showAssetAmt = state.role === 'parent';
@@ -800,6 +800,11 @@ function renderInvest() {
     const on = range === id;
     return `<button type="button" onclick="setInvestRange('${id}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${label}</button>`;
   };
+  const buyButtons = MARKET_ORDER.map(name => {
+    const m = MARKET_META[name];
+    return `<button type="button" onclick="investCustom('${m.id}')" class="solid-btn py-3 bg-white hover:bg-slate-50 font-bold text-[11px] shadow-sm border border-slate-200">${esc(m.buyLabel)}</button>`;
+  }).join('');
+
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-purple-500">${getIcon('invest')}</div>${rb('資産運用','しさんうんよう')}</h2>
     <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
@@ -814,19 +819,17 @@ function renderInvest() {
         : `<div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
         <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} pt）</p>
         <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full min-w-0 max-w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <div class="flex gap-2">
-          <button onclick="investCustom('japan')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇯🇵 日本株を買う</button>
-          <button onclick="investCustom('us')" class="solid-btn flex-1 py-3 bg-white hover:bg-slate-50 font-bold text-xs shadow-sm border border-slate-200">🇺🇸 米国株を買う</button>
-        </div>
+        <div class="grid grid-cols-2 gap-2">${buyButtons}</div>
       </div>`
     ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">チャート期間を切り替えて値動きを確認できます</p>`}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
-        const cur = inv.name === '日本' ? curRates.日本 : curRates.アメリカ;
+        const cur = rateForMarket(curRates, inv.name);
+        const meta = MARKET_META[inv.name] || { label: inv.name };
         const val = Math.round((inv.shares || inv.investedPoints / cur) * cur);
         const diff = val - inv.investedPoints;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
-        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${inv.name === '日本' ? '🇯🇵 日本株' : '🇺🇸 米国株'}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
+        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">現在、運用中の資産はありません</p>`}
     </div>
   `;
@@ -1237,18 +1240,18 @@ export function drawInvestChart() {
   const cur = getCurrentMarketRates();
   const ctx = canvas.getContext('2d');
 
-  const jpInv = state.investments.find(i => i.name === '日本');
-  const amInv = state.investments.find(i => i.name === 'アメリカ');
-  const jpShares = jpInv ? (jpInv.shares || (jpInv.investedPoints / cur.日本)) : 0;
-  const amShares = amInv ? (amInv.shares || (amInv.investedPoints / cur.アメリカ)) : 0;
-
-  const showIndex = isDetail && !jpInv && !amInv;
-  const datasetJp = showIndex
-    ? rates.日本.map(r => Math.round(100 * r))
-    : rates.日本.map(r => Math.round(jpShares * r));
-  const datasetAm = showIndex
-    ? rates.アメリカ.map(r => Math.round(100 * r))
-    : rates.アメリカ.map(r => Math.round(amShares * r));
+  const holdings = {};
+  for (const name of MARKET_ORDER) {
+    const inv = (state.investments || []).find(i => i.name === name);
+    holdings[name] = inv
+      ? (inv.shares || (inv.investedPoints / rateForMarket(cur, name)))
+      : 0;
+  }
+  const hasAny = MARKET_ORDER.some(name => holdings[name] > 0);
+  const showIndex = !hasAny;
+  const chartMarkets = isDetail || hasAny
+    ? (hasAny ? MARKET_ORDER.filter(name => holdings[name] > 0) : MARKET_ORDER)
+    : ['日本', 'アメリカ'];
 
   if (investChartInstance) investChartInstance.destroy();
 
@@ -1257,29 +1260,23 @@ export function drawInvestChart() {
     type: 'line',
     data: {
       labels: rates.labels,
-      datasets: [
-        {
-          label: '日本',
-          data: datasetJp,
-          borderColor: '#334155',
-          backgroundColor: 'rgba(51,65,85,0.05)',
+      datasets: chartMarkets.map(name => {
+        const meta = MARKET_META[name];
+        const series = showIndex
+          ? rates[name].map(r => Math.round(100 * r))
+          : rates[name].map(r => Math.round(holdings[name] * r));
+        return {
+          label: meta.short,
+          data: series,
+          borderColor: meta.color,
+          backgroundColor: meta.color + '14',
           borderWidth: 1.5,
+          borderDash: meta.dash,
           tension: 0.3,
           pointRadius: isDetail ? 2 : 0,
-          fill: isDetail
-        },
-        {
-          label: '米国',
-          data: datasetAm,
-          borderColor: '#94a3b8',
-          backgroundColor: 'rgba(148,163,184,0.05)',
-          borderWidth: 1.5,
-          borderDash: [4, 4],
-          tension: 0.3,
-          pointRadius: isDetail ? 2 : 0,
-          fill: isDetail
-        }
-      ]
+          fill: isDetail && chartMarkets.length <= 2
+        };
+      })
     },
     options: {
       responsive: true,

@@ -1,4 +1,4 @@
-import { state } from './state.js?v=142';
+import { state } from './state.js?v=143';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -366,6 +366,25 @@ export function groupApprovedEarningsByDay(tasks) {
 }
 
 /** 市場レート（決定論的。range: 'day' | 'week' | 'month'） */
+export const MARKET_ORDER = ['日本', 'アメリカ', '原油', '金'];
+
+export const MARKET_META = {
+  日本: { id: 'japan', label: '🇯🇵 日本株', short: '日本', buyLabel: '日本株を買う', color: '#334155', dash: [] },
+  アメリカ: { id: 'us', label: '🇺🇸 米国株', short: '米国', buyLabel: '米国株を買う', color: '#94a3b8', dash: [4, 4] },
+  原油: { id: 'oil', label: '原油', short: '原油', buyLabel: '原油を買う', color: '#b45309', dash: [2, 2] },
+  金: { id: 'gold', label: '金', short: '金', buyLabel: '金を買う', color: '#ca8a04', dash: [6, 3] }
+};
+
+export function marketNameFromId(id) {
+  const hit = Object.entries(MARKET_META).find(([, m]) => m.id === id);
+  return hit ? hit[0] : null;
+}
+
+export function rateForMarket(rates, name) {
+  const r = rates && rates[name];
+  return Number.isFinite(r) && r > 0 ? r : 1;
+}
+
 function rateAt(date, market) {
   const day = Math.floor(date.getTime() / 86400000);
   const hour = date.getHours() + date.getMinutes() / 60;
@@ -373,12 +392,21 @@ function rateAt(date, market) {
   if (market === '日本') {
     return Math.max(0.1, 1.0 + Math.sin(t * 0.1) * 0.2 + Math.sin(t * 0.03) * 0.3 + Math.sin(hour * 0.55) * 0.025);
   }
-  return Math.max(0.1, 1.0 + Math.cos(t * 0.08) * 0.3 + Math.sin(t * 0.04) * 0.4 + Math.cos(hour * 0.4) * 0.03);
+  if (market === 'アメリカ') {
+    return Math.max(0.1, 1.0 + Math.cos(t * 0.08) * 0.3 + Math.sin(t * 0.04) * 0.4 + Math.cos(hour * 0.4) * 0.03);
+  }
+  if (market === '原油') {
+    // 原油は振れ幅が大きめ
+    return Math.max(0.1, 1.0 + Math.sin(t * 0.15) * 0.45 + Math.cos(t * 0.05) * 0.25 + Math.sin(hour * 0.7) * 0.05);
+  }
+  // 金は比較的なだらか
+  return Math.max(0.1, 1.0 + Math.sin(t * 0.045) * 0.18 + Math.cos(t * 0.02) * 0.12 + Math.sin(hour * 0.25) * 0.015);
 }
 
 export function getMarketRates(range = 'month') {
   const now = new Date();
-  const rates = { 日本: [], アメリカ: [], labels: [] };
+  const rates = { labels: [] };
+  for (const name of MARKET_ORDER) rates[name] = [];
   let steps = 30;
   let stepMs = 86400000;
   let labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
@@ -400,8 +428,7 @@ export function getMarketRates(range = 'month') {
   for (let i = steps - 1; i >= 0; i--) {
     const d = new Date(now.getTime() - i * stepMs);
     rates.labels.push(labelFn(d));
-    rates.日本.push(rateAt(d, '日本'));
-    rates.アメリカ.push(rateAt(d, 'アメリカ'));
+    for (const name of MARKET_ORDER) rates[name].push(rateAt(d, name));
   }
   return rates;
 }
@@ -409,8 +436,7 @@ export function getMarketRates(range = 'month') {
 /** 売買・評価用の現在レート（表示期間に依存しない） */
 export function getCurrentMarketRates() {
   const now = new Date();
-  return {
-    日本: rateAt(now, '日本'),
-    アメリカ: rateAt(now, 'アメリカ')
-  };
+  const out = {};
+  for (const name of MARKET_ORDER) out[name] = rateAt(now, name);
+  return out;
 }
