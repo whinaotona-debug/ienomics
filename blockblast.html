@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#07122c">
+  <title>Block Blast</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700;800&family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #07122c;
+      --panel: #1a2c5c;
+      --cell: #0c1736;
+      --ink: #f4f7ff;
+      --muted: #9db0d8;
+      --gold: #ffd24a;
+      --gap: 5px;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; height: 100%;
+      background: radial-gradient(1200px 700px at 50% -10%, #1a3a78 0%, var(--bg0) 55%);
+      color: var(--ink);
+      font-family: "M PLUS Rounded 1c", "Fredoka", sans-serif;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+    #app {
+      height: 100%;
+      max-width: 460px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      padding: calc(10px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));
+    }
+    header { margin-bottom: 8px; }
+    .brand {
+      font-family: Fredoka, sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      letter-spacing: .06em;
+      color: var(--gold);
+      text-align: center;
+      text-shadow: 0 2px 0 #c47a00, 0 5px 10px rgba(0,0,0,.4);
+      margin-bottom: 8px;
+    }
+    .hud {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      background: linear-gradient(180deg, #2a4478, #1b2f5c);
+      border-radius: 14px;
+      padding: 6px 10px;
+      text-align: center;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.15), 0 4px 0 #0b1733;
+    }
+    .stat b {
+      display: block;
+      font-family: Fredoka, sans-serif;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+    .stat span { font-size: 10px; color: var(--muted); letter-spacing: .08em; }
+    .combo-badge {
+      background: linear-gradient(180deg, #ff7a32, #e03810);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 0 #8d1c00;
+      opacity: .35;
+      transition: opacity .2s, transform .2s;
+    }
+    .combo-badge.on { opacity: 1; animation: comboPulse .7s ease-in-out infinite; }
+    .combo-badge b { color: #fff; }
+    @keyframes comboPulse {
+      0%,100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+    .board-wrap {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .board-frame {
+      position: relative;
+      width: min(100%, 92vw, calc(100dvh - 280px));
+      aspect-ratio: 1;
+      background: linear-gradient(180deg, #24386a, #16264c);
+      border-radius: 22px;
+      padding: 10px;
+      box-shadow: 0 10px 0 #0a142c, 0 18px 40px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    #board {
+      width: 100%; height: 100%;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      gap: var(--gap);
+    }
+    .cell {
+      position: relative;
+      border-radius: 8px;
+      background: var(--cell);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,.45);
+    }
+    .block {
+      position: absolute;
+      inset: 0;
+      border-radius: 8px;
+      background: linear-gradient(180deg, var(--light) 0%, var(--main) 42%, var(--main) 62%, var(--dark) 100%);
+      box-shadow:
+        inset 0 2px 0 rgba(255,255,255,.5),
+        inset 0 -3px 0 rgba(0,0,0,.25),
+        0 3px 0 var(--dark),
+        0 5px 8px rgba(0,0,0,.28);
+    }
+    .block::before {
+      content: "";
+      position: absolute;
+      top: 9%; left: 12%;
+      width: 42%; height: 24%;
+      border-radius: 50%;
+      background: linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,0));
+      pointer-events: none;
+    }
+    .block::after {
+      content: "";
+      position: absolute;
+      inset: 3px;
+      border-radius: 6px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+      pointer-events: none;
+    }
+    .cell.ghost .block { opacity: .42; box-shadow: none; }
+    .cell.ghost .block::before, .cell.ghost .block::after { display: none; }
+    .cell.bad .block {
+      background: linear-gradient(180deg, #ff8a8a, #e11d1d);
+      opacity: .55;
+    }
+    .cell.blast .block { animation: blast .34s ease-in forwards; }
+    @keyframes blast {
+      0% { transform: scale(1); filter: brightness(1); }
+      35% { transform: scale(1.18); filter: brightness(3.2); }
+      100% { transform: scale(.2); opacity: 0; filter: brightness(4); }
+    }
+    .block.pop { animation: popin .22s cubic-bezier(.2,1.4,.3,1) both; }
+    @keyframes popin {
+      from { transform: scale(.2); }
+      to { transform: scale(1); }
+    }
+    #fx {
+      position: absolute; inset: 10px;
+      width: calc(100% - 20px); height: calc(100% - 20px);
+      pointer-events: none;
+    }
+    #pop {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+      font-family: Fredoka, sans-serif;
+      font-weight: 800;
+      font-size: 42px;
+      letter-spacing: .04em;
+      text-shadow: 0 4px 0 rgba(0,0,0,.35), 0 8px 18px rgba(0,0,0,.4);
+      opacity: 0;
+      transform: scale(.6);
+    }
+    #pop.show { animation: shout .7s ease-out forwards; }
+    @keyframes shout {
+      0% { opacity: 0; transform: scale(.5) translateY(10px); }
+      18% { opacity: 1; transform: scale(1.12) translateY(0); }
+      70% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.08) translateY(-18px); }
+    }
+    #ai-line {
+      min-height: 28px;
+      margin: 8px 2px 4px;
+      font-size: 12px;
+      color: #cfe0ff;
+      text-align: center;
+      line-height: 1.35;
+      opacity: .92;
+    }
+    #ai-line em { color: var(--gold); font-style: normal; }
+    .tray {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      padding: 10px;
+      background: linear-gradient(180deg, #223764, #17284e);
+      border-radius: 20px;
+      box-shadow: 0 8px 0 #0a142c, inset 0 1px 0 rgba(255,255,255,.12);
+    }
+    .slot {
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.18);
+      border-radius: 16px;
+      cursor: grab;
+    }
+    .slot.gone { opacity: .25; pointer-events: none; }
+    .slot.used { visibility: hidden; pointer-events: none; }
+    .mini {
+      display: grid;
+      gap: 3px;
+      pointer-events: none;
+    }
+    .mini i {
+      width: 14px; height: 14px;
+      border-radius: 4px;
+      background: linear-gradient(180deg, var(--light), var(--main) 55%, var(--dark));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 var(--dark);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr 1fr auto auto;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    button {
+      font-family: inherit;
+      font-weight: 800;
+      border: 0;
+      border-radius: 14px;
+      padding: 11px 8px;
+      color: #fff;
+      cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 4px 0 var(--btn-shadow);
+      transform: translateY(0);
+    }
+    button:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 1px 0 var(--btn-shadow); }
+    .ai { background: linear-gradient(180deg, #5ce1a6, #19a86a); --btn-shadow: #0e6b42; color: #07331f; }
+    .auto { background: linear-gradient(180deg, #7aa7ff, #3b6adf); --btn-shadow: #1d3f96; }
+    .hint { background: linear-gradient(180deg, #ffd56a, #f0a20a); --btn-shadow: #b06d00; color: #4a2e00; }
+    .icon {
+      width: 44px;
+      background: linear-gradient(180deg, #3a5080, #243560);
+      --btn-shadow: #121c36;
+      font-size: 16px;
+    }
+    #drag {
+      position: fixed; left: 0; top: 0;
+      pointer-events: none;
+      z-index: 20;
+      display: none;
+      filter: drop-shadow(0 12px 16px rgba(0,0,0,.45));
+    }
+    #overlay, #start {
+      position: fixed; inset: 0;
+      background: rgba(5,10,28,.72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 30;
+      padding: 20px;
+    }
+    #start { display: flex; }
+    .modal {
+      width: min(360px, 100%);
+      background: linear-gradient(180deg, #2b4782, #182c58);
+      border-radius: 24px;
+      padding: 28px 22px 22px;
+      text-align: center;
+      box-shadow: 0 16px 0 #0a142c, 0 30px 50px rgba(0,0,0,.4);
+    }
+    .logo {
+      font-family: Fredoka, sans-serif;
+      font-weight: 800;
+      font-size: 42px;
+      line-height: .95;
+      color: var(--gold);
+      text-shadow: 0 3px 0 #c47a00, 0 8px 0 #7a4300, 0 14px 20px rgba(0,0,0,.35);
+      margin-bottom: 8px;
+    }
+    .modal p { color: #c5d4f5; margin: 8px 0 18px; font-size: 14px; }
+    .play {
+      width: 100%;
+      background: linear-gradient(180deg, #ffd24a, #f0a000);
+      color: #4a2e00;
+      --btn-shadow: #b06d00;
+      font-size: 18px;
+      padding: 14px;
+    }
+    .shake { animation: shake .28s linear; }
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="brand">BLOCK BLAST</div>
+      <div class="hud">
+        <div class="stat">
+          <span>SCORE</span>
+          <b id="score">0</b>
+        </div>
+        <div class="stat combo-badge" id="comboBox">
+          <span>COMBO</span>
+          <b id="combo">0</b>
+        </div>
+        <div class="stat">
+          <span>BEST</span>
+          <b id="best">0</b>
+        </div>
+      </div>
+    </header>
+
+    <div class="board-wrap">
+      <div class="board-frame" id="frame">
+        <div id="board"></div>
+        <canvas id="fx"></canvas>
+        <div id="pop"></div>
+      </div>
+    </div>
+
+    <div id="ai-line">3つのブロックを盤面に置いて、行と列を消そう</div>
+    <div class="tray" id="tray"></div>
+    <div class="controls">
+      <button class="ai" id="btnAi">AI配置</button>
+      <button class="auto" id="btnAuto">おまかせ</button>
+      <button class="hint" id="btnHint">ヒント</button>
+      <button class="icon" id="btnMute" title="音">🔊</button>
+      <button class="icon" id="btnRetry" title="やり直し">↺</button>
+    </div>
+  </div>
+
+  <div id="drag"></div>
+  <div id="start">
+    <div class="modal">
+      <div class="logo">BLOCK<br>BLAST</div>
+      <p>原作と同じ 8×8。行と列を消してコンボを伸ばそう。<br>AIが盤面を読んで最善の置き方をするよ。</p>
+      <button class="play" id="btnStart">はじめる</button>
+    </div>
+  </div>
+  <div id="overlay">
+    <div class="modal">
+      <div class="logo" style="font-size:32px">GAME OVER</div>
+      <p>スコア <b id="endScore">0</b></p>
+      <button class="play" id="btnAgain">もう一度</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const N = 8;
+  const COLORS = [
+    { main: "#ff3b5c", light: "#ff8aa0", dark: "#c4103a" },
+    { main: "#ff8a1f", light: "#ffc07a", dark: "#c45e00" },
+    { main: "#ffd11a", light: "#fff08a", dark: "#c49a00" },
+    { main: "#3ddc7a", light: "#8af0b4", dark: "#1a9a4c" },
+    { main: "#22d3ee", light: "#7aeff8", dark: "#0e8aa0" },
+    { main: "#3b8bff", light: "#8ab8ff", dark: "#1a58c4" },
+    { main: "#9b5cff", light: "#c9a3ff", dark: "#6a2ed0" },
+    { main: "#ff5cbc", light: "#ff9ada", dark: "#c41d80" }
+  ];
+
+  const SHAPES = [
+    [[0,0]],
+    [[0,0],[0,1]], [[0,0],[1,0]],
+    [[0,0],[0,1],[0,2]], [[0,0],[1,0],[2,0]],
+    [[0,0],[0,1],[0,2],[0,3]], [[0,0],[1,0],[2,0],[3,0]],
+    [[0,0],[0,1],[0,2],[0,3],[0,4]], [[0,0],[1,0],[2,0],[3,0],[4,0]],
+    [[0,0],[0,1],[1,0],[1,1]],
+    [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],
+    [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],
+    [[0,0],[1,0],[1,1]], [[0,0],[0,1],[1,0]], [[0,0],[0,1],[1,1]], [[0,1],[1,0],[1,1]],
+    [[0,0],[1,0],[2,0],[2,1]], [[0,0],[0,1],[0,2],[1,0]],
+    [[0,0],[0,1],[1,1],[2,1]], [[0,2],[1,0],[1,1],[1,2]],
+    [[0,1],[1,1],[2,0],[2,1]], [[0,0],[1,0],[1,1],[1,2]],
+    [[0,0],[0,1],[1,0],[2,0]], [[0,0],[0,1],[0,2],[1,2]],
+    [[0,0],[0,1],[0,2],[1,1]], [[0,1],[1,0],[1,1],[2,1]],
+    [[0,1],[1,0],[1,1],[1,2]], [[0,0],[1,0],[1,1],[2,0]],
+    [[0,1],[0,2],[1,0],[1,1]], [[0,0],[1,0],[1,1],[2,1]],
+    [[0,0],[0,1],[1,1],[1,2]], [[0,1],[1,0],[1,1],[2,0]],
+    [[0,0],[1,0],[2,0],[3,0],[3,1]], [[0,0],[0,1],[0,2],[0,3],[1,0]],
+    [[0,0],[0,1],[1,1],[2,1],[3,1]], [[1,0],[1,1],[1,2],[1,3],[0,3]],
+    [[0,1],[1,0],[1,1],[1,2],[2,1]],
+    [[0,0],[0,1],[0,2],[1,0],[2,0]], [[0,0],[0,1],[0,2],[1,2],[2,2]],
+    [[0,2],[1,2],[2,0],[2,1],[2,2]], [[0,0],[1,0],[2,0],[2,1],[2,2]],
+    [[0,0],[0,2],[1,0],[1,1],[1,2]], [[0,0],[0,1],[1,0],[2,0],[2,1]],
+    [[0,0],[0,1],[0,2],[1,0],[1,2]], [[0,0],[0,1],[1,1],[2,0],[2,1]]
+  ].map((cells) => {
+    const h = 1 + Math.max(...cells.map(c => c[0]));
+    const w = 1 + Math.max(...cells.map(c => c[1]));
+    return { cells, h, w, n: cells.length };
+  });
+
+  const WEIGHT = SHAPES.map(p => {
+    if (p.n === 9) return 1.2;
+    if (p.n >= 6) return 2;
+    if (p.n === 5 && (p.h === 1 || p.w === 1)) return 2.2;
+    if (p.n === 1) return 3.2;
+    return 4;
+  });
+
+  const el = {
+    board: document.getElementById("board"),
+    tray: document.getElementById("tray"),
+    score: document.getElementById("score"),
+    best: document.getElementById("best"),
+    combo: document.getElementById("combo"),
+    comboBox: document.getElementById("comboBox"),
+    aiLine: document.getElementById("ai-line"),
+    drag: document.getElementById("drag"),
+    fx: document.getElementById("fx"),
+    pop: document.getElementById("pop"),
+    frame: document.getElementById("frame"),
+    overlay: document.getElementById("overlay"),
+    start: document.getElementById("start"),
+    endScore: document.getElementById("endScore")
+  };
+
+  const cellsDom = [];
+  for (let i = 0; i < 64; i++) {
+    const d = document.createElement("div");
+    d.className = "cell";
+    el.board.appendChild(d);
+    cellsDom.push(d);
+  }
+
+  const state = {
+    occ: new Uint8Array(8),
+    color: new Uint8Array(64),
+    tray: [null, null, null],
+    score: 0,
+    combo: 0,
+    misses: 0,
+    best: Number(localStorage.getItem("blockblast-best") || 0),
+    over: false,
+    busy: false,
+    auto: false,
+    muted: false,
+    hint: null,
+    drag: null
+  };
+  el.best.textContent = state.best;
+
+  const SFX = {
+    ctx: null,
+    ensure() {
+      if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (this.ctx.state === "suspended") this.ctx.resume();
+    },
+    tone(freq, dur, type, gain, at) {
+      if (state.muted || !this.ctx) return;
+      const t = this.ctx.currentTime + (at || 0);
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(this.ctx.destination);
+      o.start(t);
+      o.stop(t + dur + 0.02);
+    },
+    pickup() { this.tone(740, 0.06, "sine", 0.05); this.tone(1180, 0.05, "triangle", 0.03, 0.02); },
+    place() { this.tone(180, 0.09, "triangle", 0.08); this.tone(320, 0.06, "sine", 0.04); },
+    bad() { this.tone(110, 0.12, "square", 0.04); },
+    clear(lines, combo) {
+      const base = 420 + Math.min(combo, 20) * 18;
+      for (let i = 0; i < Math.min(lines, 6); i++) {
+        this.tone(base + i * 90, 0.14, "sine", 0.07, i * 0.04);
+        this.tone(base * 2 + i * 90, 0.1, "triangle", 0.03, i * 0.04);
+      }
+    },
+    combo(n) {
+      [523, 659, 784, 1046].forEach((f, i) => this.tone(f + Math.min(n, 12) * 8, 0.12, "sine", 0.05, i * 0.05));
+    },
+    allClear() {
+      [523, 659, 784, 1046, 1318].forEach((f, i) => this.tone(f, 0.18, "triangle", 0.07, i * 0.07));
+    },
+    over() { [392, 330, 262, 196].forEach((f, i) => this.tone(f, 0.22, "sawtooth", 0.04, i * 0.12)); },
+    deal() { [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06)); }
+  };
+
+  const cloneOcc = (occ) => Uint8Array.from(occ);
+
+  function canPlace(occ, cells, r, c) {
+    for (const [dr, dc] of cells) {
+      const rr = r + dr, cc = c + dc;
+      if (rr < 0 || rr >= N || cc < 0 || cc >= N) return false;
+      if (occ[rr] & (1 << cc)) return false;
+    }
+    return true;
+  }
+
+  function hasAny(occ, cells, h, w) {
+    for (let r = 0; r <= N - h; r++) {
+      for (let c = 0; c <= N - w; c++) {
+        if (canPlace(occ, cells, r, c)) return true;
+      }
+    }
+    return false;
+  }
+
+  function placements(occ, piece) {
+    const out = [];
+    for (let r = 0; r <= N - piece.h; r++) {
+      for (let c = 0; c <= N - piece.w; c++) {
+        if (canPlace(occ, piece.cells, r, c)) out.push(r * N + c);
+      }
+    }
+    return out;
+  }
+
+  function popcount(x) {
+    x = x - ((x >> 1) & 0x55);
+    x = (x & 0x33) + ((x >> 2) & 0x33);
+    return (((x + (x >> 4)) & 0x0f) * 0x01) & 0xff;
+  }
+
+  function applyPlace(occ, cells, r, c) {
+    const next = cloneOcc(occ);
+    for (const [dr, dc] of cells) next[r + dr] |= 1 << (c + dc);
+    let rows = 0, cols = 0;
+    for (let i = 0; i < N; i++) if (next[i] === 255) rows |= 1 << i;
+    for (let col = 0; col < N; col++) {
+      let full = true;
+      for (let row = 0; row < N; row++) if (!(next[row] & (1 << col))) { full = false; break; }
+      if (full) cols |= 1 << col;
+    }
+    const lines = popcount(rows) + popcount(cols);
+    const cleared = [];
+    if (lines) {
+      for (let i = 0; i < N; i++) {
+        if (rows & (1 << i)) {
+          for (let col = 0; col < N; col++) cleared.push(i * N + col);
+          next[i] = 0;
+        } else if (cols) {
+          for (let col = 0; col < N; col++) if (cols & (1 << col)) {
+            cleared.push(i * N + col);
+            next[i] &= ~(1 << col);
+          }
+        }
+      }
+    }
+    let empty = true;
+    for (let i = 0; i < N; i++) if (next[i]) { empty = false; break; }
+    return { next, lines, empty, cleared, rows, cols };
+  }
+
+  function scoreMove(cells, lines, allClear, combo, misses) {
+    let pts = cells;
+    let nextCombo = combo;
+    let nextMiss = misses;
+    if (lines > 0) {
+      nextCombo = combo + 1;
+      nextMiss = 0;
+      pts += 10 * (lines * (lines + 1) / 2) * nextCombo;
+      if (allClear) pts += 360;
+    } else {
+      nextMiss = misses + 1;
+      if (nextMiss >= 3) {
+        nextCombo = 0;
+        nextMiss = 0;
+      }
+    }
+    return { pts, combo: nextCombo, misses: nextMiss };
+  }
+
+  function emptyCount(occ) {
+    let n = 0;
+    for (let r = 0; r < N; r++) n += 8 - popcount(occ[r]);
+    return n;
+  }
+
+  function cheapQuality(occ) {
+    let empty = 0, holes = 0, near = 0;
+    for (let r = 0; r < N; r++) {
+      const f = popcount(occ[r]);
+      empty += 8 - f;
+      if (f >= 6) near += f === 7 ? 2 : 1;
+      for (let c = 0; c < N; c++) {
+        if (occ[r] & (1 << c)) continue;
+        let n = 0;
+        if (r === 0 || (occ[r - 1] & (1 << c))) n++;
+        if (r === 7 || (occ[r + 1] & (1 << c))) n++;
+        if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
+        if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
+        if (n >= 3) holes++;
+      }
+    }
+    for (let c = 0; c < N; c++) {
+      let f = 0;
+      for (let r = 0; r < N; r++) if (occ[r] & (1 << c)) f++;
+      if (f >= 6) near += f === 7 ? 2 : 1;
+    }
+    return empty * 4 + near * 18 - holes * 36;
+  }
+
+  function heuristic(occ, combo, misses) {
+    let h = emptyCount(occ) * 4;
+    h += combo * 55;
+    h -= misses * 28;
+    let holes = 0, near = 0, sq2 = 0, sq3 = 0, islands = 0;
+    for (let r = 0; r < N; r++) {
+      const fillR = popcount(occ[r]);
+      if (fillR >= 6) near += fillR === 7 ? 3 : 1;
+      for (let c = 0; c < N; c++) {
+        if (occ[r] & (1 << c)) continue;
+        let n = 0;
+        if (r === 0 || (occ[r - 1] & (1 << c))) n++;
+        if (r === 7 || (occ[r + 1] & (1 << c))) n++;
+        if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
+        if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
+        if (n >= 3) holes++;
+        if (r < 7 && c < 7 &&
+            !(occ[r] & (1 << c)) && !(occ[r] & (1 << (c + 1))) &&
+            !(occ[r + 1] & (1 << c)) && !(occ[r + 1] & (1 << (c + 1)))) sq2++;
+        if (r < 6 && c < 6) {
+          let ok = true;
+          for (let dr = 0; dr < 3 && ok; dr++) {
+            for (let dc = 0; dc < 3; dc++) if (occ[r + dr] & (1 << (c + dc))) { ok = false; break; }
+          }
+          if (ok) sq3++;
+        }
+      }
+    }
+    for (let c = 0; c < N; c++) {
+      let fill = 0;
+      for (let r = 0; r < N; r++) if (occ[r] & (1 << c)) fill++;
+      if (fill >= 6) near += fill === 7 ? 3 : 1;
+    }
+    const seen = new Uint8Array(64);
+    for (let i = 0; i < 64; i++) {
+      const r = i >> 3, c = i & 7;
+      if ((occ[r] & (1 << c)) || seen[i]) continue;
+      let size = 0, stack = [i];
+      seen[i] = 1;
+      while (stack.length) {
+        const k = stack.pop();
+        size++;
+        const rr = k >> 3, cc = k & 7;
+        const nbs = [[rr - 1, cc], [rr + 1, cc], [rr, cc - 1], [rr, cc + 1]];
+        for (const [nr, nc] of nbs) {
+          if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+          const j = nr * 8 + nc;
+          if (seen[j] || (occ[nr] & (1 << nc))) continue;
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+      if (size === 1) islands += 18;
+      else if (size === 2) islands += 8;
+      else if (size === 3) islands += 3;
+    }
+    h += near * 22 + sq2 * 10 + sq3 * 36;
+    h -= holes * 42 + islands;
+    return h;
+  }
+
+  function pickShape() {
+    const occ = emptyCount(state.occ);
+    let total = 0;
+    const w = WEIGHT.map((base, i) => {
+      const n = SHAPES[i].n;
+      let x = base;
+      if (occ < 22 && n >= 6) x *= 0.25;
+      else if (occ < 30 && n >= 5) x *= 0.55;
+      return x;
+    });
+    for (const x of w) total += x;
+    let r = Math.random() * total;
+    for (let i = 0; i < SHAPES.length; i++) {
+      r -= w[i];
+      if (r <= 0) return SHAPES[i];
+    }
+    return SHAPES[0];
+  }
+
+  function deal() {
+    let pack = null;
+    for (let t = 0; t < 12; t++) {
+      const colors = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => Math.random() - 0.5);
+      pack = [0, 1, 2].map(i => ({ shape: pickShape(), color: colors[i] }));
+      if (pack.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) break;
+    }
+    state.tray = pack;
+    SFX.deal();
+  }
+
+  function findBest(occ, tray, combo, misses) {
+    const live = [];
+    tray.forEach((p, i) => { if (p) live.push({ p, i }); });
+    if (!live.length) return null;
+    let best = { value: -1e15, moves: [] };
+    const beam = live.length === 3 ? [20, 14, 12] : [28, 18];
+
+    function search(board, left, comboNow, missNow, pts, moves, depth) {
+      if (!left.length) {
+        const value = pts * 18 + heuristic(board, comboNow, missNow);
+        if (value > best.value) best = { value, moves: moves.slice(), pts, combo: comboNow };
+        return;
+      }
+      let any = false;
+      for (let li = 0; li < left.length; li++) {
+        const cur = left[li];
+        const spots = placements(board, cur.p.shape);
+        if (!spots.length) continue;
+        any = true;
+        const rest = left.filter((_, k) => k !== li);
+        const ranked = spots.map(rc => {
+          const r = rc >> 3, c = rc & 7;
+          const res = applyPlace(board, cur.p.shape.cells, r, c);
+          const sc = scoreMove(cur.p.shape.n, res.lines, res.empty, comboNow, missNow);
+          const q = sc.pts * 22 + res.lines * 90 + cheapQuality(res.next) + (res.empty ? 400 : 0);
+          return { r, c, res, sc, q };
+        }).sort((a, b) => b.q - a.q).slice(0, beam[depth] || 12);
+
+        for (const m of ranked) {
+          moves.push({ slot: cur.i, r: m.r, c: m.c, lines: m.res.lines, empty: m.res.empty, pts: m.sc.pts });
+          search(m.res.next, rest, m.sc.combo, m.sc.misses, pts + m.sc.pts, moves, depth + 1);
+          moves.pop();
+        }
+      }
+      if (!any) {
+        const value = pts * 18 + heuristic(board, comboNow, missNow) - 80000;
+        if (value > best.value) best = { value, moves: moves.slice(), pts, combo: comboNow };
+      }
+    }
+    search(occ, live, combo, misses, 0, [], 0);
+    return best.moves.length ? best : null;
+  }
+
+  function explain(plan) {
+    if (!plan || !plan.moves.length) return "置ける場所を探している…";
+    const m = plan.moves;
+    const lines = m.reduce((a, x) => a + x.lines, 0);
+    const multi = m.filter(x => x.lines >= 2);
+    const all = m.find(x => x.empty);
+    if (all) return "いま置けば <em>全消し</em> できる。360点ボーナスを取りにいく";
+    if (multi.length) return `ここに置けば <em>${multi[0].lines}ライン同時消し</em>。コンボも伸びる`;
+    if (lines >= 2) return "3手の中でラインを連続で消して、<em>コンボを切らさない</em>配置";
+    if (lines === 1) return "あと少しで揃う列／行を埋めて、<em>コンボをつなぐ</em>";
+    if (state.combo > 0 && state.misses === 2) return "コンボが切れそう。消せる位置を優先する";
+    return "穴を作らず、次の大きいブロックが入りやすい空きを残す配置";
+  }
+
+  function paintBlock(node, colorIdx) {
+    const col = COLORS[colorIdx];
+    const b = document.createElement("div");
+    b.className = "block";
+    b.style.setProperty("--main", col.main);
+    b.style.setProperty("--light", col.light);
+    b.style.setProperty("--dark", col.dark);
+    node.appendChild(b);
+    return b;
+  }
+
+  function renderBoard(ghostCells, bad) {
+    for (let i = 0; i < 64; i++) {
+      const node = cellsDom[i];
+      if (node.classList.contains("blast")) continue;
+      node.innerHTML = "";
+      node.className = "cell";
+      if (state.color[i]) paintBlock(node, state.color[i] - 1);
+    }
+    if (ghostCells) {
+      for (const { i, color } of ghostCells) {
+        if (state.color[i]) continue;
+        cellsDom[i].classList.add(bad ? "bad" : "ghost");
+        paintBlock(cellsDom[i], color);
+      }
+    }
+    if (state.hint) {
+      for (const { i, color } of state.hint) {
+        if (state.color[i] || (ghostCells && ghostCells.some(g => g.i === i))) continue;
+        cellsDom[i].classList.add("ghost");
+        paintBlock(cellsDom[i], color);
+      }
+    }
+  }
+
+  function renderTray() {
+    el.tray.innerHTML = "";
+    state.tray.forEach((p, idx) => {
+      const slot = document.createElement("div");
+      slot.className = "slot" + (p ? "" : " used");
+      slot.dataset.slot = idx;
+      if (p) {
+        const mini = document.createElement("div");
+        mini.className = "mini";
+        mini.style.gridTemplateColumns = `repeat(${p.shape.w}, 14px)`;
+        const col = COLORS[p.color];
+        const fill = new Set(p.shape.cells.map(([r, c]) => r + "," + c));
+        for (let r = 0; r < p.shape.h; r++) {
+          for (let c = 0; c < p.shape.w; c++) {
+            const i = document.createElement("i");
+            if (fill.has(r + "," + c)) {
+              i.style.setProperty("--main", col.main);
+              i.style.setProperty("--light", col.light);
+              i.style.setProperty("--dark", col.dark);
+            } else i.style.visibility = "hidden";
+            mini.appendChild(i);
+          }
+        }
+        slot.appendChild(mini);
+      }
+      el.tray.appendChild(slot);
+    });
+  }
+
+  function renderHUD() {
+    el.score.textContent = state.score;
+    el.combo.textContent = state.combo;
+    el.comboBox.classList.toggle("on", state.combo > 0);
+    el.best.textContent = state.best;
+  }
+
+  function shout(text, color) {
+    el.pop.textContent = text;
+    el.pop.style.color = color || "#fff";
+    el.pop.classList.remove("show");
+    void el.pop.offsetWidth;
+    el.pop.classList.add("show");
+  }
+
+  function burst(indices, colorIdx) {
+    const canvas = el.fx;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    const cell = rect.width / 8;
+    const col = COLORS[colorIdx] || COLORS[0];
+    const parts = [];
+    for (const i of indices) {
+      const x = (i & 7) * cell + cell / 2;
+      const y = (i >> 3) * cell + cell / 2;
+      for (let k = 0; k < 10; k++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1.2 + Math.random() * 3.4;
+        parts.push({
+          x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2,
+          life: 1, s: 2 + Math.random() * 3.5, color: Math.random() < 0.5 ? col.light : col.main
+        });
+      }
+    }
+    const t0 = performance.now();
+    function tick(now) {
+      const g = Math.min(1, (now - t0) / 420);
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      for (const p of parts) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.18;
+        p.life -= 0.04;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (g < 1) requestAnimationFrame(tick);
+      else ctx.clearRect(0, 0, rect.width, rect.height);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function ghostFor(piece, r, c) {
+    return piece.shape.cells.map(([dr, dc]) => ({ i: (r + dr) * N + (c + dc), color: piece.color }));
+  }
+
+  function commit(slot, r, c, animate) {
+    const piece = state.tray[slot];
+    if (!piece || state.over) return false;
+    if (!canPlace(state.occ, piece.shape.cells, r, c)) return false;
+
+    const res = applyPlace(state.occ, piece.shape.cells, r, c);
+    const sc = scoreMove(piece.shape.n, res.lines, res.empty, state.combo, state.misses);
+    const placed = [];
+    for (const [dr, dc] of piece.shape.cells) {
+      const i = (r + dr) * N + (c + dc);
+      state.color[i] = piece.color + 1;
+      placed.push(i);
+    }
+    state.occ = res.next;
+    state.tray[slot] = null;
+    state.score += sc.pts;
+    state.combo = sc.combo;
+    state.misses = sc.misses;
+    if (state.score > state.best) {
+      state.best = state.score;
+      localStorage.setItem("blockblast-best", String(state.best));
+    }
+    state.hint = null;
+    SFX.place();
+    if (navigator.vibrate) navigator.vibrate(res.lines ? 18 : 8);
+
+    renderBoard();
+    renderTray();
+    renderHUD();
+    if (animate) {
+      for (const i of placed) {
+        const b = cellsDom[i].querySelector(".block");
+        if (b) b.classList.add("pop");
+      }
+    }
+
+    if (res.lines) {
+      SFX.clear(res.lines, state.combo);
+      if (state.combo >= 2) SFX.combo(state.combo);
+      const names = ["", "NICE", "GREAT", "EXCELLENT", "AMAZING", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE"];
+      shout(res.empty ? "PERFECT" : (state.combo >= 2 ? "COMBO x" + state.combo : names[res.lines] || "NICE"),
+            res.empty ? "#ffd24a" : "#fff");
+      if (res.empty) SFX.allClear();
+      const uniq = [...new Set(res.cleared)];
+      for (const i of uniq) {
+        cellsDom[i].classList.add("blast");
+        const b = cellsDom[i].querySelector(".block");
+        if (b) b.classList.add("blast");
+      }
+      burst(uniq, piece.color);
+      setTimeout(() => {
+        for (const i of uniq) {
+          state.color[i] = 0;
+          cellsDom[i].innerHTML = "";
+          cellsDom[i].className = "cell";
+        }
+        renderBoard();
+      }, 320);
+    }
+
+    const remain = state.tray.filter(Boolean);
+    if (remain.length === 0) {
+      setTimeout(() => {
+        deal();
+        renderTray();
+        if (!state.tray.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) gameOver();
+      }, res.lines ? 360 : 80);
+    } else if (!remain.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) {
+      setTimeout(gameOver, res.lines ? 380 : 120);
+    }
+    return true;
+  }
+
+  function gameOver() {
+    if (state.over) return;
+    state.over = true;
+    state.auto = false;
+    document.getElementById("btnAuto").textContent = "おまかせ";
+    SFX.over();
+    el.endScore.textContent = state.score;
+    el.overlay.style.display = "flex";
+    el.aiLine.innerHTML = "置ける場所がなくなった";
+  }
+
+  function newGame() {
+    state.occ = new Uint8Array(8);
+    state.color = new Uint8Array(64);
+    state.score = 0;
+    state.combo = 0;
+    state.misses = 0;
+    state.over = false;
+    state.busy = false;
+    state.auto = false;
+    state.hint = null;
+    document.getElementById("btnAuto").textContent = "おまかせ";
+    el.overlay.style.display = "none";
+    deal();
+    renderBoard();
+    renderTray();
+    renderHUD();
+    el.aiLine.textContent = "3つのブロックを盤面に置いて、行と列を消そう";
+  }
+
+  function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  async function playPlan(plan) {
+    if (!plan || state.busy || state.over) return;
+    state.busy = true;
+    el.aiLine.innerHTML = explain(plan);
+    for (const mv of plan.moves) {
+      if (state.over) break;
+      const piece = state.tray[mv.slot];
+      if (!piece) continue;
+      state.hint = ghostFor(piece, mv.r, mv.c);
+      renderBoard();
+      await wait(220);
+      commit(mv.slot, mv.r, mv.c, true);
+      await wait(mv.lines ? 420 : 260);
+    }
+    state.hint = null;
+    renderBoard();
+    state.busy = false;
+    if (state.auto && !state.over) {
+      await wait(180);
+      runAi(true);
+    }
+  }
+
+  function runAi(fromAuto) {
+    if (state.over || state.busy) return;
+    const plan = findBest(state.occ, state.tray, state.combo, state.misses);
+    if (!plan) {
+      gameOver();
+      return;
+    }
+    if (!fromAuto) state.auto = false;
+    playPlan(plan);
+  }
+
+  function showHint() {
+    if (state.over || state.busy) return;
+    const plan = findBest(state.occ, state.tray, state.combo, state.misses);
+    if (!plan) return;
+    const mv = plan.moves[0];
+    const piece = state.tray[mv.slot];
+    state.hint = ghostFor(piece, mv.r, mv.c);
+    el.aiLine.innerHTML = "ヒント: " + explain(plan);
+    renderBoard();
+  }
+
+  function pieceHtml(piece, size) {
+    const wrap = document.createElement("div");
+    wrap.className = "mini";
+    wrap.style.gap = "4px";
+    wrap.style.gridTemplateColumns = `repeat(${piece.shape.w}, ${size}px)`;
+    const col = COLORS[piece.color];
+    const fill = new Set(piece.shape.cells.map(([r, c]) => r + "," + c));
+    for (let r = 0; r < piece.shape.h; r++) {
+      for (let c = 0; c < piece.shape.w; c++) {
+        const i = document.createElement("i");
+        i.style.width = i.style.height = size + "px";
+        i.style.borderRadius = "6px";
+        if (fill.has(r + "," + c)) {
+          i.style.setProperty("--main", col.main);
+          i.style.setProperty("--light", col.light);
+          i.style.setProperty("--dark", col.dark);
+        } else i.style.visibility = "hidden";
+        wrap.appendChild(i);
+      }
+    }
+    return wrap;
+  }
+
+  function onDown(e) {
+    if (state.busy || state.over) return;
+    const slotEl = e.target.closest(".slot");
+    if (!slotEl) return;
+    const slot = Number(slotEl.dataset.slot);
+    const piece = state.tray[slot];
+    if (!piece) return;
+    e.preventDefault();
+    SFX.ensure();
+    SFX.pickup();
+    if (slotEl.setPointerCapture) slotEl.setPointerCapture(e.pointerId);
+    const cell = el.board.getBoundingClientRect().width / 8;
+    el.drag.innerHTML = "";
+    el.drag.appendChild(pieceHtml(piece, Math.max(18, cell * 0.78)));
+    el.drag.style.display = "block";
+    slotEl.classList.add("gone");
+    state.drag = { slot, piece, touch: e.pointerType === "touch" };
+    moveDrag(e.clientX, e.clientY);
+  }
+
+  function moveDrag(x, y) {
+    if (!state.drag) return;
+    const lift = state.drag.touch ? 78 : 10;
+    el.drag.style.transform = `translate(${x - el.drag.offsetWidth / 2}px, ${y - el.drag.offsetHeight - lift + 16}px)`;
+    const p = state.drag.piece;
+    const board = el.board.getBoundingClientRect();
+    const drag = el.drag.getBoundingClientRect();
+    const s = board.width / 8;
+    const r0 = Math.round((drag.top - board.top) / s);
+    const c0 = Math.round((drag.left - board.left) / s);
+    const over = r0 > -p.shape.h && r0 < N && c0 > -p.shape.w && c0 < N;
+    let ghost = null, bad = false;
+    if (over) {
+      const snap = snapPlace(p, r0, c0);
+      if (snap) ghost = ghostFor(p, snap.r, snap.c);
+      else {
+        bad = true;
+        ghost = [];
+        for (const [dr, dc] of p.shape.cells) {
+          const rr = r0 + dr, cc = c0 + dc;
+          if (rr >= 0 && rr < N && cc >= 0 && cc < N) ghost.push({ i: rr * N + cc, color: p.color });
+        }
+      }
+      state.drag.snap = snap;
+    } else state.drag.snap = null;
+    renderBoard(ghost, bad);
+  }
+
+  function snapPlace(piece, r, c) {
+    if (canPlace(state.occ, piece.shape.cells, r, c)) return { r, c };
+    let best = null, bestD = 99;
+    for (let rr = 0; rr <= N - piece.shape.h; rr++) {
+      for (let cc = 0; cc <= N - piece.shape.w; cc++) {
+        if (!canPlace(state.occ, piece.shape.cells, rr, cc)) continue;
+        const d = Math.abs(rr - r) + Math.abs(cc - c);
+        if (d < bestD) { bestD = d; best = { r: rr, c: cc }; }
+      }
+    }
+    return bestD <= 1 ? best : null;
+  }
+
+  function onMove(e) {
+    if (!state.drag) return;
+    moveDrag(e.clientX, e.clientY);
+  }
+
+  function onUp() {
+    if (!state.drag) return;
+    const { slot, snap } = state.drag;
+    el.drag.style.display = "none";
+    state.drag = null;
+    if (snap) commit(slot, snap.r, snap.c, true);
+    else {
+      SFX.bad();
+      el.frame.classList.remove("shake");
+      void el.frame.offsetWidth;
+      el.frame.classList.add("shake");
+    }
+    renderBoard();
+    renderTray();
+  }
+
+  el.tray.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+
+  document.getElementById("btnAi").onclick = () => { SFX.ensure(); runAi(false); };
+  document.getElementById("btnHint").onclick = () => { SFX.ensure(); showHint(); };
+  document.getElementById("btnAuto").onclick = () => {
+    SFX.ensure();
+    if (state.over) return;
+    state.auto = !state.auto;
+    document.getElementById("btnAuto").textContent = state.auto ? "停止" : "おまかせ";
+    if (state.auto) runAi(true);
+  };
+  document.getElementById("btnMute").onclick = () => {
+    state.muted = !state.muted;
+    document.getElementById("btnMute").textContent = state.muted ? "🔇" : "🔊";
+  };
+  document.getElementById("btnRetry").onclick = () => { SFX.ensure(); newGame(); };
+  document.getElementById("btnAgain").onclick = () => { SFX.ensure(); newGame(); };
+  document.getElementById("btnStart").onclick = () => {
+    SFX.ensure();
+    el.start.style.display = "none";
+    newGame();
+  };
+})();
+</script>
+</body>
+</html>
