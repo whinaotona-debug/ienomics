@@ -435,7 +435,27 @@
       box-shadow: 0 6px 0 #0a142c;
     }
     .shop-card.eq { box-shadow: 0 0 0 2px var(--gold), 0 6px 0 #0a142c; }
-    .shop-card .ico { font-size: 30px; line-height: 1.2; }
+    .shop-card .ico { height: 56px; display: flex; align-items: center; justify-content: center; }
+    .shop-card .ico svg { width: 56px; height: 56px; display: block; }
+    .draw-coin {
+      display: inline-block;
+      width: 1.15em; height: 1.15em;
+      vertical-align: -0.22em;
+      border-radius: 46% 54% 49% 51%;
+      background:
+        radial-gradient(circle at 32% 30%, #fff6c4 0 18%, transparent 22%),
+        radial-gradient(circle at 50% 54%, #ffd24a 0 58%, #e0a000 62% 78%, #c47a00 82%);
+      box-shadow: inset 0 0 0 2px #c47a00, 0 2px 0 #8a5200;
+      position: relative;
+    }
+    .draw-coin::after {
+      content: "";
+      position: absolute;
+      inset: 22%;
+      border-radius: 48% 52%;
+      border: 1.6px solid rgba(140,80,0,.5);
+    }
+    .icon svg { width: 20px; height: 20px; display: block; margin: 0 auto; }
     .shop-card .nm { font-size: 13px; margin: 4px 0 2px; }
     .shop-card .pr { font-size: 12px; color: var(--gold); margin-bottom: 8px; }
     .shop-card button { width: 100%; padding: 8px; font-size: 13px; }
@@ -548,17 +568,76 @@
       box-shadow: 0 4px 0 rgba(255,255,255,.25);
     }
 
-    html[data-skin="cat"] .block, html[data-skin="cat"] .mini i {
-      border-radius: 40% 40% 46% 46% / 32% 32% 55% 55%;
-      clip-path: polygon(16% 24%, 20% 0, 40% 18%, 60% 18%, 80% 0, 84% 24%, 100% 40%, 100% 100%, 0 100%, 0 40%);
-    }
-    html[data-skin="cat"] .block::after {
-      content: ""; inset: auto; top: 38%; left: 20%; width: 60%; height: 38%;
-      border-radius: 0; box-shadow: none;
+    html[data-skin="cat"] .cell,
+    html[data-skin="cat"] .slot,
+    html[data-skin="cat"] .mini,
+    html[data-skin="cat"] .block,
+    html[data-skin="cat"] .mini i { overflow: visible; }
+    html[data-skin="cat"] .mini i { position: relative; }
+    html[data-skin="cat"] .block,
+    html[data-skin="cat"] .mini i {
+      border-radius: 58% 42% 55% 45% / 52% 48% 55% 45%;
       background:
-        radial-gradient(circle at 24% 30%, #2a1a12 0 14%, transparent 16%),
-        radial-gradient(circle at 76% 30%, #2a1a12 0 14%, transparent 16%),
-        radial-gradient(ellipse at 50% 80%, #2a1a12 0 16%, transparent 18%);
+        radial-gradient(circle at 28% 26%, rgba(255,255,255,.5) 0 12%, transparent 18%),
+        radial-gradient(circle at 18% 58%, rgba(255,255,255,.18) 0 14%, transparent 20%),
+        radial-gradient(circle at 78% 62%, rgba(0,0,0,.08) 0 16%, transparent 22%),
+        radial-gradient(circle at 50% 108%, var(--dark) 0 22%, transparent 38%),
+        radial-gradient(circle at 50% 52%, var(--light) 0 38%, var(--main) 68%, var(--dark));
+      box-shadow:
+        -10px -2px 3px -4px var(--main),
+        10px -2px 3px -4px var(--main),
+        -9px 9px 3px -4px var(--light),
+        9px 9px 3px -4px var(--light),
+        0 11px 4px -4px var(--dark),
+        0 0 8px 2px var(--main),
+        0 4px 8px rgba(0,0,0,.22);
+      animation: fluff 1.7s ease-in-out infinite;
+    }
+    html[data-skin="cat"] .block::before,
+    html[data-skin="cat"] .mini i::before {
+      content: "";
+      position: absolute;
+      top: -28%; left: 4%;
+      width: 92%; height: 58%;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 24% 52%, #ffc4d2 0 9%, var(--light) 10% 18%, var(--main) 19% 32%, transparent 34%),
+        radial-gradient(circle at 76% 52%, #ffc4d2 0 9%, var(--light) 10% 18%, var(--main) 19% 32%, transparent 34%);
+      box-shadow: none;
+      opacity: 1;
+      pointer-events: none;
+    }
+    html[data-skin="cat"] .block::after,
+    html[data-skin="cat"] .mini i::after {
+      content: "";
+      position: absolute;
+      inset: auto;
+      top: 30%; left: 12%;
+      width: 76%; height: 52%;
+      border-radius: 0;
+      box-shadow: none;
+      background:
+        radial-gradient(circle at 14% 72%, rgba(255,150,170,.7) 0 16%, transparent 18%),
+        radial-gradient(circle at 86% 72%, rgba(255,150,170,.7) 0 16%, transparent 18%),
+        radial-gradient(circle at 30% 34%, #fff 0 7%, transparent 8%),
+        radial-gradient(circle at 28% 40%, #2a1810 0 13%, transparent 15%),
+        radial-gradient(circle at 70% 34%, #fff 0 7%, transparent 8%),
+        radial-gradient(circle at 68% 40%, #2a1810 0 13%, transparent 15%),
+        radial-gradient(ellipse at 50% 66%, #e8899a 0 8%, transparent 10%);
+      pointer-events: none;
+    }
+    html[data-skin="cat"] .cell.ghost .block::before,
+    html[data-skin="cat"] .cell.ghost .block::after { display: block; }
+    html[data-skin="cat"] .cell.ghost .block {
+      box-shadow:
+        -8px -2px 3px -4px var(--main),
+        8px -2px 3px -4px var(--main),
+        0 0 6px 2px var(--main);
+    }
+    html[data-skin="cat"] #drag { overflow: visible; }
+    @keyframes fluff {
+      0%,100% { transform: scale(1,1) rotate(-1.2deg); }
+      50% { transform: scale(1.06,.95) rotate(1.2deg); }
     }
 
     html[data-skin="crystal"] .block, html[data-skin="crystal"] .mini i {
@@ -694,7 +773,7 @@
           <span>BEST</span>
           <b id="best">0</b>
         </div>
-        <div class="brand">🪙 <span class="coin-n" id="hudCoins">0</span></div>
+        <div class="brand"><i class="draw-coin"></i> <span class="coin-n" id="hudCoins">0</span></div>
         <div class="stat combo-badge" id="comboBox">
           <span>COMBO</span>
           <b id="combo">0</b>
@@ -723,9 +802,9 @@
       <button class="ai" id="btnAi">AI配置</button>
       <button class="auto" id="btnAuto">おまかせ</button>
       <button class="hint" id="btnHint">ヒント</button>
-      <button class="icon" id="btnMute" title="音">🔊</button>
+      <button class="icon" id="btnMute" title="音"></button>
       <button class="icon" id="btnRetry" title="やり直し">↺</button>
-      <button class="icon" id="btnHome" title="ホーム">🏠</button>
+      <button class="icon" id="btnHome" title="ホーム"></button>
     </div>
   </div>
 
@@ -733,7 +812,7 @@
   <div id="home" class="show">
     <div class="home-box">
       <div class="logo">BLOCK<br>BLAST</div>
-      <div class="coin-chip">🪙 <b id="homeCoins">0</b></div>
+      <div class="coin-chip"><i class="draw-coin"></i> <b id="homeCoins">0</b></div>
       <div class="home-meta">BEST <em id="homeBest">0</em>　全消し <em id="homePerfects">0</em></div>
       <button class="play" id="btnStart">はじめる</button>
       <button class="play alt" id="btnShop" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96;margin-top:10px">ショップ</button>
@@ -744,8 +823,8 @@
   <div id="shop">
     <div class="shop-head">
       <b>ショップ</b>
-      <span class="coin-chip" style="margin:0">🪙 <b id="shopCoins">0</b></span>
-      <button class="icon" id="btnShopClose" style="width:44px">✕</button>
+      <span class="coin-chip" style="margin:0"><i class="draw-coin"></i> <b id="shopCoins">0</b></span>
+      <button class="icon" id="btnShopClose" style="width:44px" title="とじる"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="tabs" id="shopTabs"></div>
     <div class="shop-grid" id="shopGrid"></div>
@@ -753,7 +832,7 @@
   <div id="howto">
     <div class="modal">
       <div class="logo" style="font-size:28px">あそびかた</div>
-      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>🪙 コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ショップではブロック・背景・盤面・演出・音が買える。点数アップアイテムはないよ。</p>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ショップではブロック・背景・盤面・演出・音が買える。点数アップアイテムはないよ。</p>
       <button class="play" id="btnHowClose">とじる</button>
     </div>
   </div>
@@ -1032,67 +1111,67 @@
 
   const CATALOG = {
     skins: [
-      { id: "candy", name: "キャンディ", price: 0, icon: "🍬" },
-      { id: "simple", name: "シンプル", price: 40, icon: "▫️" },
-      { id: "egg", name: "目玉焼き", price: 90, icon: "🍳" },
-      { id: "jelly", name: "プルプル", price: 90, icon: "🫧" },
-      { id: "face", name: "にこにこ", price: 100, icon: "😊" },
-      { id: "wood", name: "ウッド", price: 70, icon: "🪵" },
-      { id: "neon", name: "ネオン", price: 110, icon: "💡" },
-      { id: "pixel", name: "ドット", price: 80, icon: "👾" },
-      { id: "glass", name: "ガラス", price: 100, icon: "🔮" },
-      { id: "metal", name: "メタル", price: 100, icon: "⚙️" },
-      { id: "pastel", name: "パステル", price: 70, icon: "🎀" },
-      { id: "brick", name: "レゴ", price: 90, icon: "🧱" },
-      { id: "ice", name: "アイス", price: 100, icon: "🧊" },
-      { id: "lava", name: "マグマ", price: 120, icon: "🌋" },
-      { id: "cloud", name: "くも", price: 80, icon: "☁️" },
-      { id: "cat", name: "ねこ", price: 130, icon: "🐱" },
-      { id: "crystal", name: "クリスタル", price: 140, icon: "💎" },
-      { id: "paper", name: "おりがみ", price: 70, icon: "📄" },
-      { id: "water", name: "みずたま", price: 90, icon: "💧" },
-      { id: "rainbow", name: "にじ", price: 160, icon: "🌈" }
+      { id: "candy", name: "キャンディ", price: 0 },
+      { id: "simple", name: "シンプル", price: 40 },
+      { id: "egg", name: "目玉焼き", price: 90 },
+      { id: "jelly", name: "プルプル", price: 90 },
+      { id: "face", name: "にこにこ", price: 100 },
+      { id: "wood", name: "ウッド", price: 70 },
+      { id: "neon", name: "ネオン", price: 110 },
+      { id: "pixel", name: "ドット", price: 80 },
+      { id: "glass", name: "ガラス", price: 100 },
+      { id: "metal", name: "メタル", price: 100 },
+      { id: "pastel", name: "パステル", price: 70 },
+      { id: "brick", name: "レゴ", price: 90 },
+      { id: "ice", name: "アイス", price: 100 },
+      { id: "lava", name: "マグマ", price: 120 },
+      { id: "cloud", name: "くも", price: 80 },
+      { id: "cat", name: "ねこ", price: 130 },
+      { id: "crystal", name: "クリスタル", price: 140 },
+      { id: "paper", name: "おりがみ", price: 70 },
+      { id: "water", name: "みずたま", price: 90 },
+      { id: "rainbow", name: "にじ", price: 160 }
     ],
     bgs: [
-      { id: "navy", name: "ミッドナイト", price: 0, icon: "🌙" },
-      { id: "space", name: "宇宙", price: 80, icon: "🚀" },
-      { id: "arcade", name: "ゲーセン", price: 110, icon: "🕹️" },
-      { id: "ocean", name: "うみ", price: 80, icon: "🌊" },
-      { id: "forest", name: "もり", price: 80, icon: "🌲" },
-      { id: "sunset", name: "ゆうやけ", price: 90, icon: "🌅" },
-      { id: "sakura", name: "さくら", price: 100, icon: "🌸" },
-      { id: "city", name: "よるのまち", price: 100, icon: "🌃" },
-      { id: "sweets", name: "スイーツ", price: 90, icon: "🍭" },
-      { id: "desert", name: "さばく", price: 70, icon: "🏜️" },
-      { id: "snow", name: "ゆき", price: 90, icon: "❄️" },
-      { id: "retro", name: "レトロ", price: 110, icon: "📺" },
-      { id: "circuit", name: "でんし", price: 100, icon: "💻" },
-      { id: "onsen", name: "おんせん", price: 90, icon: "♨️" },
-      { id: "aurora", name: "オーロラ", price: 130, icon: "✨" }
+      { id: "navy", name: "ミッドナイト", price: 0 },
+      { id: "space", name: "宇宙", price: 80 },
+      { id: "arcade", name: "ゲーセン", price: 110 },
+      { id: "ocean", name: "うみ", price: 80 },
+      { id: "forest", name: "もり", price: 80 },
+      { id: "sunset", name: "ゆうやけ", price: 90 },
+      { id: "sakura", name: "さくら", price: 100 },
+      { id: "city", name: "よるのまち", price: 100 },
+      { id: "sweets", name: "スイーツ", price: 90 },
+      { id: "desert", name: "さばく", price: 70 },
+      { id: "snow", name: "ゆき", price: 90 },
+      { id: "retro", name: "レトロ", price: 110 },
+      { id: "circuit", name: "でんし", price: 100 },
+      { id: "onsen", name: "おんせん", price: 90 },
+      { id: "aurora", name: "オーロラ", price: 130 }
     ],
     boards: [
-      { id: "classic", name: "クラシック", price: 0, icon: "🟦" },
-      { id: "wood", name: "木枠", price: 60, icon: "🪵" },
-      { id: "neon", name: "ネオン枠", price: 80, icon: "💠" },
-      { id: "gold", name: "ゴールド", price: 120, icon: "🥇" },
-      { id: "arcade", name: "筐体", price: 80, icon: "🎰" },
-      { id: "stone", name: "いし", price: 60, icon: "🪨" },
-      { id: "pastel", name: "パステル枠", price: 60, icon: "🩷" },
-      { id: "holo", name: "ホロ", price: 100, icon: "🪩" }
+      { id: "classic", name: "クラシック", price: 0 },
+      { id: "wood", name: "木枠", price: 60 },
+      { id: "neon", name: "ネオン枠", price: 80 },
+      { id: "gold", name: "ゴールド", price: 120 },
+      { id: "arcade", name: "筐体", price: 80 },
+      { id: "stone", name: "いし", price: 60 },
+      { id: "pastel", name: "パステル枠", price: 60 },
+      { id: "holo", name: "ホロ", price: 100 }
     ],
     fx: [
-      { id: "spark", name: "スパーク", price: 0, icon: "✨" },
-      { id: "bubble", name: "バブル", price: 70, icon: "🫧" },
-      { id: "star", name: "ほし", price: 80, icon: "⭐" },
-      { id: "petal", name: "はなびら", price: 90, icon: "🌸" },
-      { id: "pixel", name: "ドット", price: 70, icon: "🟦" },
-      { id: "heart", name: "ハート", price: 90, icon: "💗" }
+      { id: "spark", name: "スパーク", price: 0 },
+      { id: "bubble", name: "バブル", price: 70 },
+      { id: "star", name: "ほし", price: 80 },
+      { id: "petal", name: "はなびら", price: 90 },
+      { id: "pixel", name: "ドット", price: 70 },
+      { id: "heart", name: "ハート", price: 90 }
     ],
     sfx: [
-      { id: "pop", name: "ポップ", price: 0, icon: "🎵" },
-      { id: "bit", name: "8ビット", price: 80, icon: "👾" },
-      { id: "soft", name: "やわらか", price: 60, icon: "🎹" },
-      { id: "arcade", name: "アーケード", price: 90, icon: "🔊" }
+      { id: "pop", name: "ポップ", price: 0 },
+      { id: "bit", name: "8ビット", price: 80 },
+      { id: "soft", name: "やわらか", price: 60 },
+      { id: "arcade", name: "アーケード", price: 90 }
     ]
   };
   const TABS = [
@@ -1103,6 +1182,77 @@
     { key: "sfx", label: "音" }
   ];
   const EQ_KEY = { skins: "skin", bgs: "bg", boards: "board", fx: "fx", sfx: "sfx" };
+
+  function svgWrap(inner) {
+    return `<svg viewBox="0 0 64 64" fill="none" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+  }
+  const INK = "#3a2416";
+  const DOODLE = {
+    "skins-candy": `<rect x="14" y="14" width="36" height="36" rx="10" fill="#ff6b8a" stroke="${INK}" stroke-width="2.4"/><path d="M22 24c8-6 18 2 12 10" stroke="#fff" stroke-width="3"/>`,
+    "skins-simple": `<rect x="16" y="16" width="32" height="32" rx="3" fill="#7aa7ff" stroke="${INK}" stroke-width="2.4"/>`,
+    "skins-egg": `<ellipse cx="32" cy="34" rx="20" ry="16" fill="#fff6e8" stroke="${INK}" stroke-width="2.4"/><circle cx="34" cy="34" r="8" fill="#f0c01a" stroke="${INK}" stroke-width="1.8"/>`,
+    "skins-jelly": `<path d="M18 30c-2-10 8-16 16-16s16 8 14 16c8 2 6 16-6 18H24c-12-1-14-14-6-18z" fill="#7ae0ff" stroke="${INK}" stroke-width="2.4"/><path d="M26 26c4-3 10 1 8 6" stroke="#fff" stroke-width="2.4"/>`,
+    "skins-face": `<circle cx="32" cy="32" r="18" fill="#ffe08a" stroke="${INK}" stroke-width="2.4"/><circle cx="25" cy="29" r="2.4" fill="${INK}"/><circle cx="39" cy="29" r="2.4" fill="${INK}"/><path d="M24 40c4 6 12 6 16 0" stroke="${INK}" stroke-width="2.4"/>`,
+    "skins-wood": `<rect x="14" y="18" width="36" height="28" rx="3" fill="#c47a3a" stroke="${INK}" stroke-width="2.4"/><path d="M18 28h28M18 36h22" stroke="${INK}" stroke-width="1.6" opacity=".45"/>`,
+    "skins-neon": `<rect x="16" y="16" width="32" height="32" rx="8" fill="#1a1030" stroke="#5ce1ff" stroke-width="3"/><rect x="24" y="24" width="16" height="16" rx="4" fill="#5ce1ff"/>`,
+    "skins-pixel": `<rect x="14" y="14" width="16" height="16" fill="#ff5c7a" stroke="${INK}" stroke-width="2"/><rect x="34" y="14" width="16" height="16" fill="#3ddc7a" stroke="${INK}" stroke-width="2"/><rect x="14" y="34" width="16" height="16" fill="#3b8bff" stroke="${INK}" stroke-width="2"/><rect x="34" y="34" width="16" height="16" fill="#ffd24a" stroke="${INK}" stroke-width="2"/>`,
+    "skins-glass": `<path d="M32 12l16 20-16 20L16 32z" fill="#b8e8ff" stroke="${INK}" stroke-width="2.4" opacity=".95"/><path d="M32 20l8 10" stroke="#fff" stroke-width="3"/>`,
+    "skins-metal": `<rect x="14" y="18" width="36" height="28" rx="4" fill="#c8cdd8" stroke="${INK}" stroke-width="2.4"/><circle cx="22" cy="32" r="3" fill="#8a90a0" stroke="${INK}" stroke-width="1.4"/><circle cx="42" cy="32" r="3" fill="#8a90a0" stroke="${INK}" stroke-width="1.4"/>`,
+    "skins-pastel": `<rect x="14" y="16" width="36" height="32" rx="14" fill="#f2b6d4" stroke="${INK}" stroke-width="2.4"/><path d="M22 28c6-4 14 0 10 8" stroke="#fff" stroke-width="2.6"/>`,
+    "skins-brick": `<rect x="12" y="16" width="18" height="14" fill="#d45a3a" stroke="${INK}" stroke-width="2"/><rect x="34" y="16" width="18" height="14" fill="#d45a3a" stroke="${INK}" stroke-width="2"/><rect x="22" y="34" width="20" height="14" fill="#c44a2a" stroke="${INK}" stroke-width="2"/>`,
+    "skins-ice": `<rect x="16" y="16" width="32" height="32" rx="6" fill="#d8f4ff" stroke="${INK}" stroke-width="2.4"/><path d="M22 22l20 20M42 22L22 42" stroke="#8ad0f0" stroke-width="2"/>`,
+    "skins-lava": `<path d="M20 44c-6-8 2-22 12-24 10-2 18 10 14 20-8 2-10 8-14 8s-8-2-12-4z" fill="#ff5a2a" stroke="${INK}" stroke-width="2.4"/><circle cx="30" cy="30" r="4" fill="#ffe566"/>`,
+    "skins-cloud": `<circle cx="24" cy="34" r="10" fill="#f4f7ff" stroke="${INK}" stroke-width="2.2"/><circle cx="36" cy="32" r="12" fill="#f4f7ff" stroke="${INK}" stroke-width="2.2"/><circle cx="44" cy="36" r="8" fill="#f4f7ff" stroke="${INK}" stroke-width="2.2"/>`,
+    "skins-cat": `<circle cx="16" cy="24" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="48" cy="24" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="14" cy="38" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="50" cy="38" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="22" cy="48" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="42" cy="48" r="8" fill="#e8b07a" stroke="${INK}" stroke-width="2.1"/><circle cx="32" cy="36" r="16" fill="#e8b07a" stroke="${INK}" stroke-width="2.3"/><circle cx="18" cy="24" r="3.6" fill="#f4b8c6"/><circle cx="46" cy="24" r="3.6" fill="#f4b8c6"/><circle cx="26" cy="34" r="2.3" fill="${INK}"/><circle cx="38" cy="34" r="2.3" fill="${INK}"/><circle cx="27" cy="33" r=".8" fill="#fff"/><circle cx="39" cy="33" r=".8" fill="#fff"/><ellipse cx="32" cy="41" rx="2.2" ry="1.5" fill="#d4788a"/><path d="M18 38c-8 1-11-1-12-2M18 42c-8 2-11 3-12 4M46 38c8 1 11-1 12-2M46 42c8 2 11 3 12 4" stroke="${INK}" stroke-width="1.5"/><circle cx="22" cy="44" r="3.2" fill="#f4b8c6" opacity=".75"/><circle cx="42" cy="44" r="3.2" fill="#f4b8c6" opacity=".75"/>`,
+    "skins-crystal": `<path d="M32 10l14 16-14 28L18 26z" fill="#c9a3ff" stroke="${INK}" stroke-width="2.4"/><path d="M32 10v44M18 26h28" stroke="#fff" stroke-width="1.4" opacity=".6"/>`,
+    "skins-paper": `<path d="M18 14h22l10 12v24H18z" fill="#fff4d8" stroke="${INK}" stroke-width="2.4"/><path d="M40 14v12h10" stroke="${INK}" stroke-width="2.2"/>`,
+    "skins-water": `<path d="M32 12c12 16 18 24 18 32a18 18 0 1 1-36 0c0-8 6-16 18-32z" fill="#5ec8ff" stroke="${INK}" stroke-width="2.4"/><path d="M24 40c2-6 8-8 12-6" stroke="#fff" stroke-width="2.4"/>`,
+    "skins-rainbow": `<path d="M12 44a20 20 0 0 1 40 0" stroke="#ff5c7a" stroke-width="5"/><path d="M16 44a16 16 0 0 1 32 0" stroke="#ffd24a" stroke-width="5"/><path d="M20 44a12 12 0 0 1 24 0" stroke="#3ddc7a" stroke-width="5"/><path d="M24 44a8 8 0 0 1 16 0" stroke="#3b8bff" stroke-width="5"/>`,
+    "bgs-navy": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#0b1a40" stroke="${INK}" stroke-width="2.2"/><path d="M40 22a10 10 0 1 1-8 16 12 12 0 0 0 8-16z" fill="#ffe9a0" stroke="${INK}" stroke-width="1.8"/>`,
+    "bgs-space": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#120428" stroke="${INK}" stroke-width="2.2"/><circle cx="28" cy="30" r="10" fill="#6a4ad0" stroke="${INK}" stroke-width="1.8"/><circle cx="44" cy="20" r="2" fill="#fff"/><circle cx="18" cy="18" r="1.4" fill="#fff"/><circle cx="46" cy="44" r="1.6" fill="#fff"/>`,
+    "bgs-arcade": `<path d="M18 12h28v16H18zM22 28h20v24H22z" fill="#5a1a78" stroke="${INK}" stroke-width="2.2"/><rect x="26" y="16" width="12" height="8" rx="2" fill="#5ce1ff"/><circle cx="28" cy="40" r="3" fill="#ff5c7a"/><circle cx="36" cy="40" r="3" fill="#ffd24a"/>`,
+    "bgs-ocean": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#1a6fb5" stroke="${INK}" stroke-width="2.2"/><path d="M10 36c6-6 10 6 16 0s10 6 16 0 10 6 16 0" stroke="#d8f4ff" stroke-width="2.6"/><path d="M10 46c6-6 10 6 16 0s10 6 16 0 10 6 16 0" stroke="#d8f4ff" stroke-width="2.2"/>`,
+    "bgs-forest": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#163820" stroke="${INK}" stroke-width="2.2"/><path d="M22 48V36M42 48V38" stroke="#5a3416" stroke-width="3"/><path d="M22 20l12 18H10z" fill="#2d8a48" stroke="${INK}" stroke-width="2"/><path d="M42 18l10 16H32z" fill="#247a3c" stroke="${INK}" stroke-width="2"/>`,
+    "bgs-sunset": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#ff7a4a" stroke="${INK}" stroke-width="2.2"/><circle cx="32" cy="30" r="10" fill="#ffe08a" stroke="${INK}" stroke-width="1.8"/><path d="M10 44c8-8 16-4 22 0s14 6 22-2v14H10z" fill="#4a1a5c"/>`,
+    "bgs-sakura": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#f4c4d4" stroke="${INK}" stroke-width="2.2"/><circle cx="32" cy="32" r="5" fill="#ffe9a0"/><circle cx="32" cy="18" r="7" fill="#ff8ab0"/><circle cx="46" cy="28" r="7" fill="#ff8ab0"/><circle cx="18" cy="28" r="7" fill="#ff8ab0"/><circle cx="22" cy="44" r="7" fill="#ff8ab0"/><circle cx="42" cy="44" r="7" fill="#ff8ab0"/>`,
+    "bgs-city": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#14102a" stroke="${INK}" stroke-width="2.2"/><path d="M14 50V28h8v22M26 50V18h10v32M40 50V32h10v18" fill="#3a2a60" stroke="${INK}" stroke-width="1.8"/><rect x="29" y="24" width="4" height="4" fill="#ffd24a"/>`,
+    "bgs-sweets": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#ffd0dc" stroke="${INK}" stroke-width="2.2"/><circle cx="32" cy="28" r="12" fill="#ff8ab0" stroke="${INK}" stroke-width="2"/><path d="M32 40v12" stroke="${INK}" stroke-width="3"/><path d="M24 24l16 8M24 32l16-8" stroke="#fff" stroke-width="2"/>`,
+    "bgs-desert": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#f0c06a" stroke="${INK}" stroke-width="2.2"/><circle cx="44" cy="20" r="8" fill="#ffe08a" stroke="${INK}" stroke-width="1.8"/><path d="M10 46c10-10 16-2 22 0s14-8 22 2v8H10z" fill="#d49a48" stroke="${INK}" stroke-width="1.8"/>`,
+    "bgs-snow": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#d0e4f8" stroke="${INK}" stroke-width="2.2"/><circle cx="32" cy="40" r="10" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="32" cy="24" r="7" fill="#fff" stroke="${INK}" stroke-width="2"/><path d="M20 22l-6-4M44 22l6-4M18 40h-6M46 40h6" stroke="${INK}" stroke-width="1.8"/>`,
+    "bgs-retro": `<rect x="12" y="14" width="40" height="30" rx="4" fill="#2a1440" stroke="${INK}" stroke-width="2.4"/><rect x="18" y="20" width="28" height="16" fill="#5ce1a6"/><rect x="24" y="44" width="16" height="6" fill="#3a2416"/>`,
+    "bgs-circuit": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#042018" stroke="${INK}" stroke-width="2.2"/><path d="M16 20h12v8h20M16 44h20v-10h12" stroke="#3ddc7a" stroke-width="2.4"/><circle cx="16" cy="20" r="3" fill="#3ddc7a"/><circle cx="48" cy="28" r="3" fill="#3ddc7a"/><circle cx="48" cy="34" r="3" fill="#3ddc7a"/>`,
+    "bgs-onsen": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#c4b49a" stroke="${INK}" stroke-width="2.2"/><ellipse cx="32" cy="40" rx="18" ry="10" fill="#8ab4c4" stroke="${INK}" stroke-width="2"/><path d="M24 24c0-6 4-8 4-12M32 22c0-7 4-8 4-14M40 24c0-6 3-8 3-12" stroke="#fff" stroke-width="2.2"/>`,
+    "bgs-aurora": `<rect x="8" y="8" width="48" height="48" rx="12" fill="#041428" stroke="${INK}" stroke-width="2.2"/><path d="M10 28c8-10 14 4 22-2s14-8 22 4" stroke="#5ce1a6" stroke-width="5"/><path d="M10 36c10-8 16 6 24 0s16-6 20 4" stroke="#9b7aff" stroke-width="4"/>`,
+    "boards-classic": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#24386a" stroke="${INK}" stroke-width="2.4"/><path d="M22 22h20v20H22z" fill="#0c1736"/>`,
+    "boards-wood": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#8b5a2b" stroke="${INK}" stroke-width="2.4"/><path d="M18 24h28M18 32h22M18 40h26" stroke="${INK}" stroke-width="1.5" opacity=".4"/>`,
+    "boards-neon": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#0a0a18" stroke="#5ce1ff" stroke-width="3"/>`,
+    "boards-gold": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#e0b84a" stroke="${INK}" stroke-width="2.4"/><rect x="22" y="22" width="20" height="20" rx="3" fill="#8a6010"/>`,
+    "boards-arcade": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#5a1a78" stroke="#ffd24a" stroke-width="3"/>`,
+    "boards-stone": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#6a7080" stroke="${INK}" stroke-width="2.4"/><path d="M20 28l8-6 10 4 6 10-12 8-12-6z" fill="#4a5060"/>`,
+    "boards-pastel": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#f2c6d8" stroke="${INK}" stroke-width="2.4"/>`,
+    "boards-holo": `<rect x="12" y="12" width="40" height="40" rx="8" fill="#c9a3ff" stroke="${INK}" stroke-width="2.4"/><path d="M12 32h40" stroke="#5ce1ff" stroke-width="6" opacity=".6"/>`,
+    "fx-spark": `<path d="M32 10l4 18 18 4-18 4-4 18-4-18-18-4 18-4z" fill="#ffe566" stroke="${INK}" stroke-width="2.2"/>`,
+    "fx-bubble": `<circle cx="26" cy="30" r="12" fill="#b8e8ff" stroke="${INK}" stroke-width="2.2"/><circle cx="40" cy="40" r="8" fill="#d8f4ff" stroke="${INK}" stroke-width="2"/><circle cx="22" cy="24" r="3" fill="#fff"/>`,
+    "fx-star": `<path d="M32 10l6 14 16 2-12 10 4 16-14-8-14 8 4-16-12-10 16-2z" fill="#ffe566" stroke="${INK}" stroke-width="2.2"/>`,
+    "fx-petal": `<ellipse cx="32" cy="22" rx="8" ry="14" fill="#ffb7c5" stroke="${INK}" stroke-width="2" transform="rotate(-20 32 22)"/><ellipse cx="42" cy="34" rx="8" ry="14" fill="#ff9ab4" stroke="${INK}" stroke-width="2" transform="rotate(40 42 34)"/><ellipse cx="24" cy="36" rx="8" ry="14" fill="#ffc4d2" stroke="${INK}" stroke-width="2" transform="rotate(-50 24 36)"/>`,
+    "fx-pixel": `<rect x="16" y="16" width="12" height="12" fill="#ff5c7a" stroke="${INK}" stroke-width="2"/><rect x="36" y="20" width="12" height="12" fill="#3b8bff" stroke="${INK}" stroke-width="2"/><rect x="24" y="36" width="12" height="12" fill="#ffd24a" stroke="${INK}" stroke-width="2"/>`,
+    "fx-heart": `<path d="M32 52s-18-10-18-24c0-8 6-12 10-12 4 0 8 3 8 8 0-5 4-8 8-8 4 0 10 4 10 12 0 14-18 24-18 24z" fill="#ff6b9d" stroke="${INK}" stroke-width="2.3"/>`,
+    "sfx-pop": `<ellipse cx="24" cy="40" rx="8" ry="6" fill="#fff" stroke="${INK}" stroke-width="2.2"/><path d="M30 38c8-10 14-12 18-22" stroke="${INK}" stroke-width="2.4"/><circle cx="50" cy="14" r="4" fill="#ffd24a" stroke="${INK}" stroke-width="1.8"/>`,
+    "sfx-bit": `<rect x="12" y="28" width="8" height="16" fill="#3ddc7a" stroke="${INK}" stroke-width="1.8"/><rect x="24" y="16" width="8" height="28" fill="#3ddc7a" stroke="${INK}" stroke-width="1.8"/><rect x="36" y="22" width="8" height="22" fill="#3ddc7a" stroke="${INK}" stroke-width="1.8"/><rect x="48" y="10" width="8" height="34" fill="#3ddc7a" stroke="${INK}" stroke-width="1.8"/>`,
+    "sfx-soft": `<rect x="12" y="18" width="40" height="28" rx="3" fill="#f4efe4" stroke="${INK}" stroke-width="2.2"/><path d="M20 18v28M28 18v28M36 18v28M44 18v28" stroke="${INK}" stroke-width="1.5"/><rect x="19" y="18" width="6" height="14" fill="${INK}"/>`,
+    "sfx-arcade": `<path d="M18 28h12l8-10v28l-8-10H18z" fill="#fff" stroke="${INK}" stroke-width="2.2"/><path d="M42 24c6 4 6 12 0 16M46 18c10 8 10 20 0 28" stroke="${INK}" stroke-width="2.4"/>`
+  };
+  function doodle(kind, id) {
+    return svgWrap(DOODLE[kind + "-" + id] || `<circle cx="32" cy="32" r="16" fill="#7aa7ff" stroke="${INK}" stroke-width="2.4"/>`);
+  }
+  const UI_ICO = {
+    home: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 12 5l8 7.5"/><path d="M7 11.5V19h10v-7.5"/><path d="M10 19v-5h4v5"/></svg>`,
+    speaker: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h4l6-5v14l-6-5H4z"/><path d="M16 9.5c1.4 1.2 1.4 4 0 5.2"/><path d="M18.5 7c2.6 2.2 2.6 7.8 0 10"/></svg>`,
+    muted: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h4l6-5v14l-6-5H4z"/><path d="M16 9l6 6M22 9l-6 6"/></svg>`
+  };
+  function paintMute() {
+    document.getElementById("btnMute").innerHTML = state.muted ? UI_ICO.muted : UI_ICO.speaker;
+  }
 
   function defaultSave() {
     return {
@@ -1186,7 +1336,7 @@
     save.daily = t;
     save.coins += 25;
     persist();
-    toast("ログインボーナス +25 🪙");
+    toast("ログインボーナス +25コイン");
   }
   function coinFromScore(score) {
     if (score < 50) return 0;
@@ -1239,9 +1389,9 @@
       const btn = document.createElement("button");
       if (eqNow) { btn.className = "eqb"; btn.textContent = "装備中"; }
       else if (have) { btn.className = "own"; btn.textContent = "装備する"; }
-      else { btn.className = "buy"; btn.textContent = item.price ? item.price + " 🪙" : "無料"; }
+      else { btn.className = "buy"; btn.textContent = item.price ? item.price + "コイン" : "無料"; }
       btn.onclick = () => buyOrEquip(shopTab, item.id);
-      card.innerHTML = `<div class="ico">${item.icon}</div><div class="nm">${item.name}</div><div class="pr">${have ? "所持" : (item.price ? item.price + " コイン" : "はじめから")}</div>`;
+      card.innerHTML = `<div class="ico">${doodle(shopTab, item.id)}</div><div class="nm">${item.name}</div><div class="pr">${have ? "所持" : (item.price ? item.price + "コイン" : "はじめから")}</div>`;
       card.appendChild(btn);
       el.shopGrid.appendChild(card);
     });
@@ -1297,6 +1447,8 @@
     usedAi: false
   };
   el.best.textContent = state.best;
+  document.getElementById("btnHome").innerHTML = UI_ICO.home;
+  paintMute();
 
   const SFX = {
     ctx: null,
@@ -2193,7 +2345,7 @@
   };
   document.getElementById("btnMute").onclick = () => {
     state.muted = !state.muted;
-    document.getElementById("btnMute").textContent = state.muted ? "🔇" : "🔊";
+    paintMute();
   };
   document.getElementById("btnRetry").onclick = () => { SFX.ensure(); newGame(); };
   document.getElementById("btnAgain").onclick = () => { SFX.ensure(); newGame(); };
