@@ -1300,7 +1300,7 @@
           cellsDom[i].className = "cell";
         }
         renderBoard();
-      }, 420);
+      }, 480);
     }
 
     const remain = state.tray.filter(Boolean);
@@ -1309,9 +1309,9 @@
         deal();
         renderTray();
         if (!state.tray.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) gameOver();
-      }, res.lines ? (res.empty ? 640 : 480) : 80);
+      }, res.lines ? (res.empty ? 1100 : 850) : 380);
     } else if (!remain.some(p => hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w))) {
-      setTimeout(gameOver, res.lines ? 380 : 120);
+      setTimeout(gameOver, res.lines ? 700 : 200);
     }
     return true;
   }
@@ -1358,15 +1358,15 @@
       if (!piece) continue;
       state.hint = ghostFor(piece, mv.r, mv.c);
       renderBoard();
-      await wait(220);
+      await wait(420);
       commit(mv.slot, mv.r, mv.c, true);
-      await wait(mv.empty ? 780 : mv.lines ? 580 : 240);
+      await wait(mv.empty ? 1500 : mv.lines ? 1100 : 520);
     }
     state.hint = null;
     renderBoard();
     state.busy = false;
     if (state.auto && !state.over) {
-      await wait(180);
+      await wait(700);
       runAi(true);
     }
   }
