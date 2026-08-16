@@ -412,13 +412,13 @@
     [[0,0]],
     [[0,0],[0,1]], [[0,0],[1,0]],
     [[0,0],[0,1],[0,2]], [[0,0],[1,0],[2,0]],
+    [[0,0],[1,0],[1,1]], [[0,0],[0,1],[1,0]], [[0,0],[0,1],[1,1]], [[0,1],[1,0],[1,1]],
     [[0,0],[0,1],[0,2],[0,3]], [[0,0],[1,0],[2,0],[3,0]],
     [[0,0],[0,1],[0,2],[0,3],[0,4]], [[0,0],[1,0],[2,0],[3,0],[4,0]],
     [[0,0],[0,1],[1,0],[1,1]],
     [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2]],
     [[0,0],[0,1],[1,0],[1,1],[2,0],[2,1]],
     [[0,0],[0,1],[0,2],[1,0],[1,1],[1,2],[2,0],[2,1],[2,2]],
-    [[0,0],[1,0],[1,1]], [[0,0],[0,1],[1,0]], [[0,0],[0,1],[1,1]], [[0,1],[1,0],[1,1]],
     [[0,0],[1,0],[2,0],[2,1]], [[0,0],[0,1],[0,2],[1,0]],
     [[0,0],[0,1],[1,1],[2,1]], [[0,2],[1,0],[1,1],[1,2]],
     [[0,1],[1,1],[2,0],[2,1]], [[0,0],[1,0],[1,1],[1,2]],
@@ -429,11 +429,11 @@
     [[0,0],[0,1],[1,1],[1,2]], [[0,1],[1,0],[1,1],[2,0]],
     [[0,0],[1,0],[2,0],[3,0],[3,1]], [[0,0],[0,1],[0,2],[0,3],[1,0]],
     [[0,0],[0,1],[1,1],[2,1],[3,1]], [[1,0],[1,1],[1,2],[1,3],[0,3]],
+    [[0,1],[1,1],[2,1],[3,0],[3,1]], [[0,0],[1,0],[1,1],[1,2],[1,3]],
+    [[0,0],[0,1],[1,0],[2,0],[3,0]], [[0,0],[0,1],[0,2],[0,3],[1,3]],
     [[0,1],[1,0],[1,1],[1,2],[2,1]],
     [[0,0],[0,1],[0,2],[1,0],[2,0]], [[0,0],[0,1],[0,2],[1,2],[2,2]],
-    [[0,2],[1,2],[2,0],[2,1],[2,2]], [[0,0],[1,0],[2,0],[2,1],[2,2]],
-    [[0,0],[0,2],[1,0],[1,1],[1,2]], [[0,0],[0,1],[1,0],[2,0],[2,1]],
-    [[0,0],[0,1],[0,2],[1,0],[1,2]], [[0,0],[0,1],[1,1],[2,0],[2,1]]
+    [[0,2],[1,2],[2,0],[2,1],[2,2]], [[0,0],[1,0],[2,0],[2,1],[2,2]]
   ].map((cells) => {
     const h = 1 + Math.max(...cells.map(c => c[0]));
     const w = 1 + Math.max(...cells.map(c => c[1]));
@@ -462,20 +462,27 @@
         best = { res, sc, r: rc >> 3, c: rc & 7 };
       }
     }
-    let help = bestQ + shape.n * 6 + Math.random() * 50;
+    let help = bestQ + shape.n * 6 + Math.random() * 40;
     if (shape.n >= 8 && emptyCount(occ) < 30) help -= 500;
-    if (shape.n === 1) help -= 40;
+    const empty = emptyCount(occ);
+    if (shape.n <= 3) {
+      const penalty = shape.n === 1 ? 1600 : shape.n === 2 ? 1200 : 900;
+      help -= empty > 16 ? penalty : penalty * 0.2;
+    }
     return { help, shape, canClear, maxLines, best };
   }
 
   function bestRemaining(occ, combo, misses, used) {
-    let top = null;
+    let top = null, topSmall = null;
     for (const shape of SHAPES) {
       if (used.includes(shape)) continue;
       const h = pieceHelp(occ, shape, combo, misses);
-      if (h.best && (!top || h.help > top.help)) top = h;
+      if (!h.best) continue;
+      if (shape.n <= 3) {
+        if (!topSmall || h.help > topSmall.help) topSmall = h;
+      } else if (!top || h.help > top.help) top = h;
     }
-    return top;
+    return top || topSmall;
   }
 
   function scoreTrio(occ, combo, misses, shapes) {
@@ -524,10 +531,14 @@
 
     const seeds = [];
     const clears = ranked.filter(x => x.canClear);
-    if (needClear && clears.length) {
-      for (let i = 0; i < Math.min(5, clears.length); i++) seeds.push(clears[i]);
+    const bigClears = clears.filter(x => x.shape.n >= 4);
+    const big = ranked.filter(x => x.shape.n >= 4);
+    if (needClear && (bigClears.length || clears.length)) {
+      const src = bigClears.length ? bigClears : clears;
+      for (let i = 0; i < Math.min(5, src.length); i++) seeds.push(src[i]);
     } else {
-      for (let i = 0; i < Math.min(6, ranked.length); i++) seeds.push(ranked[i]);
+      const src = big.length ? big : ranked;
+      for (let i = 0; i < Math.min(6, src.length); i++) seeds.push(src[i]);
     }
 
     let bestShapes = null, bestS = -1e9;
