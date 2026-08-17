@@ -1,10 +1,10 @@
-import { state } from './state.js?v=144';
-import { render } from './ui.js?v=144';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue } from './utils.js?v=144';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=144';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=144';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=144';
-import { db, auth } from './firebase.js?v=144';
+import { state } from './state.js?v=147';
+import { render } from './ui.js?v=147';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=147';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=147';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=147';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=147';
+import { db, auth } from './firebase.js?v=147';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -731,6 +731,7 @@ function setupListeners() {
       state.stockCap = Number(data.stockCap) > 0 ? Number(data.stockCap) : null;
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
+      applyMarketSheetUrl(data.marketSheetUrl || '');
       render(); 
     }
     // 親がこの口座を削除した。子供の端末に古い残高を見せ続けないよう初期設定へ戻す。
@@ -1263,6 +1264,12 @@ window.investCustom = async (n) => {
 
   const dbName = marketNameFromId(n);
   if (!dbName) return showAlert("この市場は選べません");
+  if (state.marketSheetStatus !== 'ok') {
+    return showAlert('設定でスプレッドシートをつないでから買ってください', { title: '実際の相場がまだありません' });
+  }
+  if (!(state.marketSheetMarkets || []).includes(dbName)) {
+    return showAlert(`表に「${dbName}」の列がありません`, { title: 'この市場は買えません' });
+  }
   const meta = MARKET_META[dbName];
   const currentStockValue = getInvestmentPortfolioValue(
     state.investments,
@@ -1377,6 +1384,91 @@ window.withdrawBank = async () => {
     setView('home');
     showToast(`${total}pt 引き出しました`);
   }, { busyLabel: '引き出しています...' });
+};
+
+/* ===== スプレッドシートの相場 ===== */
+
+const MARKET_SHEET_RELOAD_MS = 15 * 60 * 1000;
+let marketSheetTimer = null;
+let marketSheetLoadedUrl = null;
+
+/** 家族データのURLが変わったときだけ読み直す */
+function applyMarketSheetUrl(url) {
+  const next = String(url || '').trim();
+  state.marketSheetUrl = next;
+
+  if (next === marketSheetLoadedUrl) return;
+  marketSheetLoadedUrl = next;
+
+  if (marketSheetTimer) {
+    clearInterval(marketSheetTimer);
+    marketSheetTimer = null;
+  }
+  if (!next) {
+    setMarketSheetSeries(null);
+    state.marketSheetStatus = 'off';
+    state.marketSheetMarkets = [];
+    state.marketSheetError = '';
+    state.marketSheetUpdatedAt = null;
+    return;
+  }
+  loadMarketSheet(next);
+  marketSheetTimer = setInterval(() => loadMarketSheet(next), MARKET_SHEET_RELOAD_MS);
+}
+
+async function loadMarketSheet(url) {
+  state.marketSheetStatus = 'loading';
+  state.marketSheetError = '';
+  render();
+  try {
+    const res = await fetch(normalizeSheetUrl(url), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`表を読めませんでした（${res.status}）`);
+    const series = parseMarketSheetCsv(await res.text());
+    setMarketSheetSeries(series);
+    state.marketSheetStatus = 'ok';
+    state.marketSheetMarkets = Object.keys(series);
+    state.marketSheetUpdatedAt = Date.now();
+  } catch (error) {
+    console.error('[marketSheet]', error);
+    setMarketSheetSeries(null);
+    state.marketSheetStatus = 'error';
+    state.marketSheetMarkets = [];
+    state.marketSheetError = error?.message || '表を読めませんでした';
+  }
+  render();
+}
+
+/** 相場の表を読み直す（設定画面のボタン用） */
+window.reloadMarketSheet = () => {
+  if (!state.marketSheetUrl) return showAlert('先にスプレッドシートのURLを保存してください');
+  loadMarketSheet(state.marketSheetUrl);
+};
+
+/**
+ * 相場のスプレッドシートURLを保存する。
+ * 相場は兄弟で共通なので、その親の子ども全員に同じURLを入れる。
+ */
+window.saveMarketSheetUrl = async () => {
+  if (state.role !== 'parent' || !state.familyCode) return;
+  const el = document.getElementById('market-sheet-input');
+  if (!el) return;
+  const url = String(el.value || '').trim();
+  if (url && !/^https:\/\/docs\.google\.com\/spreadsheets\//.test(url)) {
+    return showAlert('Googleスプレッドシートのアドレス（https://docs.google.com/spreadsheets/...）を貼ってください');
+  }
+
+  await guard('saveMarketSheetUrl', async () => {
+    const codes = (state.children || []).map(c => c.id);
+    if (!codes.includes(state.familyCode)) codes.push(state.familyCode);
+    await Promise.all(codes.map(code =>
+      updateDoc(doc(db, "families", code), {
+        marketSheetUrl: url || deleteField()
+      })
+    ));
+    applyMarketSheetUrl(url);
+    showToast(url ? 'スプレッドシートにつなぎました' : 'スプレッドシートの接続を外しました');
+    render();
+  }, { busyLabel: '保存しています...' });
 };
 
 /** いま表示中の子の株評価額上限を保存。空欄または 0 は制限なし */

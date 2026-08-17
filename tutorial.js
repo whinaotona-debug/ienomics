@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=144';
+import { esc } from './utils.js?v=147';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -56,7 +56,7 @@ const PARENT_STEPS = [
   {
     target: 'invest',
     title: '資産運用',
-    body: '日本株・米国株・原油・金に見立てた値動きにポイントを投資できます。1日・1週間・1か月で値動きを切り替えて見られます。'
+    body: 'スプレッドシートの実際の値動きにポイントを投資できます。設定で表をつないでから使います。'
   },
   {
     target: 'payments',

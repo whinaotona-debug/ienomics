@@ -1,7 +1,7 @@
-import { state } from './state.js?v=144';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues } from './utils.js?v=144';
-import { refreshTutorial } from './tutorial.js?v=144';
-import { auth } from './firebase.js?v=144';
+import { state } from './state.js?v=147';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets } from './utils.js?v=147';
+import { refreshTutorial } from './tutorial.js?v=147';
+import { auth } from './firebase.js?v=147';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -795,7 +795,8 @@ function renderInvest() {
     const on = range === id;
     return `<button type="button" onclick="setInvestRange('${id}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${label}</button>`;
   };
-  const buyButtons = MARKET_ORDER.map(name => {
+  const tradeable = state.marketSheetStatus === 'ok' ? getTradeableMarkets() : [];
+  const buyButtons = tradeable.map(name => {
     const m = MARKET_META[name];
     return `<button type="button" onclick="investCustom('${m.id}')" class="solid-btn py-3 bg-white hover:bg-slate-50 font-bold text-[11px] shadow-sm border border-slate-200">${esc(m.buyLabel)}</button>`;
   }).join('');
@@ -808,6 +809,13 @@ function renderInvest() {
       ${rangeBtn('month', '1か月')}
     </div>
     <div class="w-full h-[180px] mb-6 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
+    <p class="text-[9px] font-bold text-center mb-4 ${state.marketSheetStatus === 'ok' ? 'text-emerald-600' : 'text-[#7a8f88]'}">
+      ${state.marketSheetStatus === 'ok'
+        ? `スプレッドシートの実際の値動き（${esc(tradeable.join('・'))}）`
+        : (state.marketSheetStatus === 'loading'
+          ? 'スプレッドシートを読み込み中...'
+          : '設定でスプレッドシートをつなぐと、実際の値動きになります')}
+    </p>
     ${stockCap != null ? `
       <div class="mb-4 px-4 py-3 rounded-xl border ${capReached ? 'bg-amber-50 border-amber-200' : 'bg-[#f4f9f7] border-[#eaf1ee]'}">
         <div class="flex justify-between gap-2 text-xs font-bold">
@@ -820,11 +828,13 @@ function renderInvest() {
     ${state.role === 'child' ? (
       locked
         ? `<div class="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl text-center"><p class="text-xs font-bold text-red-500">残高がマイナスのため株の購入はできません</p><p class="text-[10px] font-bold text-red-400 mt-1">お手伝いでポイントを取り戻しましょう</p></div>`
-        : `<div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+        : (state.marketSheetStatus !== 'ok'
+          ? `<div class="mb-6 p-4 bg-slate-50 border border-slate-100 rounded-xl text-center"><p class="text-xs font-bold text-slate-500">株を買うには、親が設定でスプレッドシートをつないでください</p></div>`
+          : `<div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
         <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} pt）</p>
         <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full min-w-0 max-w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <div class="grid grid-cols-2 gap-2">${buyButtons}</div>
-      </div>`
+        <div class="grid grid-cols-2 gap-2">${buyButtons || `<p class="text-[10px] font-bold text-slate-400 col-span-2 text-center">表に日本・アメリカなどの列がありません</p>`}</div>
+      </div>`)
     ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">チャート期間を切り替えて値動きを確認できます</p>`}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
@@ -1170,6 +1180,22 @@ function renderSettings() {
     </button>
   `;
 
+  const sheetMarkets = (state.marketSheetMarkets || []).join('・');
+  const sheetUpdated = state.marketSheetUpdatedAt
+    ? formatJapanClock(new Date(state.marketSheetUpdatedAt))
+    : '';
+  let sheetStatusText = 'まだつないでいません。つないだあとだけ実際の値動きになります。';
+  let sheetStatusTone = 'text-slate-400';
+  if (state.marketSheetStatus === 'loading') {
+    sheetStatusText = '読み込んでいます...';
+  } else if (state.marketSheetStatus === 'ok') {
+    sheetStatusText = `つながっています（${sheetMarkets}）${sheetUpdated ? ` / ${sheetUpdated} 更新` : ''}`;
+    sheetStatusTone = 'text-emerald-600';
+  } else if (state.marketSheetStatus === 'error') {
+    sheetStatusText = `読めませんでした: ${esc(state.marketSheetError || '')}`;
+    sheetStatusTone = 'text-rose-500';
+  }
+
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-slate-500">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}
@@ -1192,6 +1218,23 @@ function renderSettings() {
           <span class="text-xs font-bold text-slate-400 shrink-0">pt</span>
           <button type="button" onclick="saveStockCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>
         </div>
+      </div>
+
+      <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
+        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${rb('相場','そうば')}のスプレッドシート</p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">
+          Googleスプレッドシートを「ファイル → 共有 → ウェブに公開」してから、そのアドレスを貼ってください。
+          1行目に <span class="font-mono">日付・日本・アメリカ・原油・金</span> の見出しを置くと、その値動きを使います。
+        </p>
+        <input type="url" id="market-sheet-input" inputmode="url"
+               value="${esc(state.marketSheetUrl || '')}"
+               placeholder="https://docs.google.com/spreadsheets/..."
+               class="w-full min-w-0 p-3 mb-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs focus:outline-none" />
+        <div class="flex gap-2">
+          <button type="button" onclick="saveMarketSheetUrl()" class="solid-btn primary-btn flex-1 py-3 text-xs font-bold">保存してつなぐ</button>
+          <button type="button" onclick="reloadMarketSheet()" class="solid-btn px-4 py-3 text-xs font-bold text-slate-500 border border-slate-200">再読込</button>
+        </div>
+        <p class="text-[10px] font-bold mt-2 ${sheetStatusTone}">${sheetStatusText}</p>
       </div>
     `}
 
@@ -1254,8 +1297,10 @@ export function drawInvestChart() {
   const showIndex = !hasAny;
   const stockCap = Number(state.stockCap) > 0 ? Number(state.stockCap) : null;
   const chartMarkets = isDetail || hasAny
-    ? (hasAny ? MARKET_ORDER.filter(name => holdings[name] > 0) : MARKET_ORDER)
-    : ['日本', 'アメリカ'];
+    ? (hasAny
+      ? MARKET_ORDER.filter(name => holdings[name] > 0)
+      : (state.marketSheetStatus === 'ok' ? getTradeableMarkets() : ['日本', 'アメリカ']))
+    : (state.marketSheetStatus === 'ok' ? getTradeableMarkets().slice(0, 2) : ['日本', 'アメリカ']);
 
   if (investChartInstance) investChartInstance.destroy();
 

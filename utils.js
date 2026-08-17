@@ -1,4 +1,4 @@
-import { state } from './state.js?v=144';
+import { state } from './state.js?v=147';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -373,6 +373,160 @@ export function marketNameFromId(id) {
   return hit ? hit[0] : null;
 }
 
+/* ===== スプレッドシートの相場 =====
+   Googleスプレッドシートを「ウェブに公開」した表を読んで、実際の値動きだけを使う。
+   つながっていないあいだは倍率1.0（動かない）にし、疑似の上下は使わない。 */
+
+// 列の見出しは家庭ごとに書き方が違うので、それらしい言葉で拾う
+const SHEET_COLUMN_ALIASES = {
+  日本: ['日本', '日本株', '日経', '日経平均', 'nikkei', 'japan', 'jp'],
+  アメリカ: ['アメリカ', '米国', '米国株', 'sp500', 's&p500', 's&p', 'nasdaq', 'dow', 'us', 'usa'],
+  原油: ['原油', 'オイル', 'oil', 'wti', 'crude', 'brent'],
+  金: ['金', 'ゴールド', 'gold', 'xau']
+};
+const SHEET_DATE_ALIASES = ['日付', '日時', '年月日', 'date', 'day', 'datetime'];
+
+/** 表のURLを、そのまま読めるCSVのURLに直す */
+export function normalizeSheetUrl(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (raw.includes('output=csv') || raw.includes('/gviz/tq')) return raw;
+
+  // 「ウェブに公開」した /pub 形式
+  if (raw.includes('/spreadsheets/d/e/')) {
+    const [base, queryText = ''] = raw.split('?');
+    const query = new URLSearchParams(queryText);
+    query.set('single', 'true');
+    query.set('output', 'csv');
+    const path = `${base.replace(/\/(pubhtml|pub|edit|view)?\/*$/, '')}/pub`;
+    return `${path}?${query.toString()}`;
+  }
+
+  // 通常の共有URL
+  const idMatch = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (idMatch) {
+    const gidMatch = raw.match(/[#?&]gid=(\d+)/);
+    const gid = gidMatch ? gidMatch[1] : '0';
+    return `https://docs.google.com/spreadsheets/d/${idMatch[1]}/gviz/tq?tqx=out:csv&gid=${gid}`;
+  }
+  return raw;
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ',') { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows.filter(r => r.some(cell => String(cell).trim() !== ''));
+}
+
+function matchColumn(header, aliases) {
+  const h = String(header || '').trim().toLowerCase();
+  if (!h) return false;
+  if (aliases.some(a => h === a)) return true;
+  return aliases.some(a => a.length >= 2 && h.includes(a));
+}
+
+function parseSheetNumber(value) {
+  const cleaned = String(value ?? '').replace(/[,¥$￥\s]/g, '');
+  if (cleaned === '') return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function parseSheetDate(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  // Google の Date(2026,7,17) 形式
+  const gviz = raw.match(/^Date\((\d+),(\d+),(\d+)/);
+  if (gviz) {
+    return Date.UTC(Number(gviz[1]), Number(gviz[2]), Number(gviz[3]), 3) ;
+  }
+  const ymd = raw.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+  if (ymd) {
+    return Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 3);
+  }
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * CSVの本文から、市場ごとの値動きを取り出す。
+ * 値は「いちばん古い行を1.0」とした倍率にする。
+ * 生の株価をそのまま倍率にすると、持ち株の評価額が桁違いに変わってしまうため。
+ */
+export function parseMarketSheetCsv(text) {
+  const rows = parseCsv(String(text || ''));
+  if (rows.length < 2) throw new Error('表のデータが足りません');
+
+  const header = rows[0];
+  const dateIndex = header.findIndex(h => matchColumn(h, SHEET_DATE_ALIASES));
+  const columns = {};
+  for (const [name, aliases] of Object.entries(SHEET_COLUMN_ALIASES)) {
+    const index = header.findIndex((h, i) => i !== dateIndex && matchColumn(h, aliases));
+    if (index >= 0) columns[name] = index;
+  }
+  if (!Object.keys(columns).length) {
+    throw new Error('日本・アメリカ・原油・金 の列が見つかりません');
+  }
+
+  const series = {};
+  for (const [name, index] of Object.entries(columns)) {
+    const points = [];
+    for (let r = 1; r < rows.length; r++) {
+      const price = parseSheetNumber(rows[r][index]);
+      if (price == null) continue;
+      const ms = dateIndex >= 0 ? parseSheetDate(rows[r][dateIndex]) : r;
+      points.push({ ms: ms ?? r, price });
+    }
+    if (points.length < 2) continue;
+    points.sort((a, b) => a.ms - b.ms);
+    const base = points[0].price;
+    series[name] = points.map(p => ({ ms: p.ms, rate: p.price / base, price: p.price }));
+  }
+  if (!Object.keys(series).length) throw new Error('数字の入った行が見つかりません');
+  return series;
+}
+
+let sheetSeries = null;
+
+export function setMarketSheetSeries(series) {
+  sheetSeries = series && Object.keys(series).length ? series : null;
+}
+
+export function getMarketSheetMarkets() {
+  return sheetSeries ? Object.keys(sheetSeries) : [];
+}
+
+function sheetRateAt(name, ms) {
+  const points = sheetSeries?.[name];
+  if (!points || !points.length) return null;
+  let value = points[0].rate;
+  for (const p of points) {
+    if (p.ms > ms) break;
+    value = p.rate;
+  }
+  return value;
+}
+
+function sheetLatestRate(name) {
+  const points = sheetSeries?.[name];
+  return points && points.length ? points[points.length - 1].rate : null;
+}
+
 export function rateForMarket(rates, name) {
   const r = rates && rates[name];
   return Number.isFinite(r) && r > 0 ? r : 1;
@@ -402,24 +556,6 @@ export function getInvestmentValues(investments, rates, stockCap) {
   return Object.fromEntries(rows.map(row => [row.id, Math.round(row.raw * scale)]));
 }
 
-function rateAt(date, market) {
-  const day = Math.floor(date.getTime() / 86400000);
-  const hour = date.getHours() + date.getMinutes() / 60;
-  const t = day + hour / 24;
-  if (market === '日本') {
-    return Math.max(0.1, 1.0 + Math.sin(t * 0.1) * 0.2 + Math.sin(t * 0.03) * 0.3 + Math.sin(hour * 0.55) * 0.025);
-  }
-  if (market === 'アメリカ') {
-    return Math.max(0.1, 1.0 + Math.cos(t * 0.08) * 0.3 + Math.sin(t * 0.04) * 0.4 + Math.cos(hour * 0.4) * 0.03);
-  }
-  if (market === '原油') {
-    // 原油は振れ幅が大きめ
-    return Math.max(0.1, 1.0 + Math.sin(t * 0.15) * 0.45 + Math.cos(t * 0.05) * 0.25 + Math.sin(hour * 0.7) * 0.05);
-  }
-  // 金は比較的なだらか
-  return Math.max(0.1, 1.0 + Math.sin(t * 0.045) * 0.18 + Math.cos(t * 0.02) * 0.12 + Math.sin(hour * 0.25) * 0.015);
-}
-
 export function getMarketRates(range = 'month') {
   const now = new Date();
   const rates = { labels: [] };
@@ -442,18 +578,41 @@ export function getMarketRates(range = 'month') {
     labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
   }
 
+  // 表がつながっているときは、表の日付と実際の値だけを使う
+  const reference = MARKET_ORDER
+    .map(name => sheetSeries?.[name])
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)[0];
+
+  if (reference) {
+    const points = reference.slice(-steps);
+    for (const p of points) {
+      const d = new Date(p.ms);
+      rates.labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
+      for (const name of MARKET_ORDER) {
+        // 表にない市場は線を引かない（nullではなく同じ行の最新実値がないので1固定）
+        rates[name].push(sheetRateAt(name, p.ms) ?? 1);
+      }
+    }
+    return rates;
+  }
+
   for (let i = steps - 1; i >= 0; i--) {
     const d = new Date(now.getTime() - i * stepMs);
     rates.labels.push(labelFn(d));
-    for (const name of MARKET_ORDER) rates[name].push(rateAt(d, name));
+    for (const name of MARKET_ORDER) rates[name].push(1);
   }
   return rates;
 }
 
-/** 売買・評価用の現在レート（表示期間に依存しない） */
+/** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */
 export function getCurrentMarketRates() {
-  const now = new Date();
   const out = {};
-  for (const name of MARKET_ORDER) out[name] = rateAt(now, name);
+  for (const name of MARKET_ORDER) out[name] = sheetLatestRate(name) ?? 1;
   return out;
+}
+
+/** いま表から相場が取れる市場だけ */
+export function getTradeableMarkets() {
+  return getMarketSheetMarkets().filter(name => MARKET_ORDER.includes(name));
 }

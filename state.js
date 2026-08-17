@@ -30,6 +30,11 @@ export const state = {
   // Firebaseから取得するデータ
   points: 0,
   stockCap: null, // 親が決める株全体の評価額上限。null / 0 は制限なし
+  marketSheetUrl: '',      // 相場を読むスプレッドシートのURL
+  marketSheetStatus: 'off', // 'off' | 'loading' | 'ok' | 'error'
+  marketSheetMarkets: [],   // 表から読めた市場名
+  marketSheetUpdatedAt: null,
+  marketSheetError: '',
   childLinked: true,
   tasks: [],
   taskTemplates: [],
