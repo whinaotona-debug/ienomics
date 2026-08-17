@@ -1,7 +1,7 @@
-import { state } from './state.js?v=147';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets } from './utils.js?v=147';
-import { refreshTutorial } from './tutorial.js?v=147';
-import { auth } from './firebase.js?v=147';
+import { state } from './state.js?v=148';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets } from './utils.js?v=148';
+import { refreshTutorial } from './tutorial.js?v=148';
+import { auth } from './firebase.js?v=148';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1223,8 +1223,7 @@ function renderSettings() {
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
         <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${rb('相場','そうば')}のスプレッドシート</p>
         <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">
-          Googleスプレッドシートを「ファイル → 共有 → ウェブに公開」してから、そのアドレスを貼ってください。
-          1行目に <span class="font-mono">日付・日本・アメリカ・原油・金</span> の見出しを置くと、その値動きを使います。
+          実際の値動きを読む表です。アプリに標準の表が入っているので、普段はそのままで大丈夫です。
         </p>
         <input type="url" id="market-sheet-input" inputmode="url"
                value="${esc(state.marketSheetUrl || '')}"

@@ -1,10 +1,10 @@
-import { state } from './state.js?v=147';
-import { render } from './ui.js?v=147';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=147';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=147';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=147';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=147';
-import { db, auth } from './firebase.js?v=147';
+import { state } from './state.js?v=148';
+import { render } from './ui.js?v=148';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=148';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=148';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=148';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=148';
+import { db, auth } from './firebase.js?v=148';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1388,13 +1388,17 @@ window.withdrawBank = async () => {
 
 /* ===== スプレッドシートの相場 ===== */
 
+/** 公開済みの相場シート（コードに固定。設定で上書きもできる） */
+const DEFAULT_MARKET_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/e/2PACX-1vQH6dOvrrmdx5rSEd-yTFGqi5ZJ-9qsxKxpslLoETxSCXKdzvdzgWS7dzLTYjPwrc2dRROqqnNAFewk/pubhtml?gid=860392213&single=true';
+
 const MARKET_SHEET_RELOAD_MS = 15 * 60 * 1000;
 let marketSheetTimer = null;
 let marketSheetLoadedUrl = null;
 
-/** 家族データのURLが変わったときだけ読み直す */
+/** 家族データのURLが変わったときだけ読み直す。空ならデフォルトの表を使う */
 function applyMarketSheetUrl(url) {
-  const next = String(url || '').trim();
+  const next = String(url || '').trim() || DEFAULT_MARKET_SHEET_URL;
   state.marketSheetUrl = next;
 
   if (next === marketSheetLoadedUrl) return;
@@ -1403,14 +1407,6 @@ function applyMarketSheetUrl(url) {
   if (marketSheetTimer) {
     clearInterval(marketSheetTimer);
     marketSheetTimer = null;
-  }
-  if (!next) {
-    setMarketSheetSeries(null);
-    state.marketSheetStatus = 'off';
-    state.marketSheetMarkets = [];
-    state.marketSheetError = '';
-    state.marketSheetUpdatedAt = null;
-    return;
   }
   loadMarketSheet(next);
   marketSheetTimer = setInterval(() => loadMarketSheet(next), MARKET_SHEET_RELOAD_MS);
