@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=154';
+import { esc } from './utils.js?v=155';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 

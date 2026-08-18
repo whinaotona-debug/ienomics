@@ -1,4 +1,4 @@
-import { state } from './state.js?v=154';
+import { state } from './state.js?v=155';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -567,7 +567,8 @@ export function rateForMarket(rates, name) {
   return Number.isFinite(r) && r > 0 ? r : 1;
 }
 
-/** 買ったときの価格。古い持ち株は購入日の表から復元する */
+/** 買ったときの価格。古い持ち株は購入日の表から復元する。
+ * 正解: 今の価値 = 入れたpt × (今の価格 / 買った価格)。売る額は画面の今の価値。 */
 export function getBuyRate(inv, currentRate) {
   const stored = Number(inv?.buyRate);
   if (stored > 0) return stored;
@@ -618,27 +619,14 @@ export function getInvestmentValues(investments, rates, stockCap) {
 
 export function getMarketRates(range = 'month') {
   const now = new Date();
-  const rates = { labels: [] };
+  const rates = { labels: [], ms: [] };
   for (const name of MARKET_ORDER) rates[name] = [];
   let steps = 30;
-  let stepMs = 86400000;
-  let labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
 
-  if (range === 'day') {
-    steps = 24;
-    stepMs = 3600000;
-    labelFn = (d) => `${d.getHours()}時`;
-  } else if (range === 'week') {
-    steps = 7;
-    stepMs = 86400000;
-    labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-  } else {
-    steps = 30;
-    stepMs = 86400000;
-    labelFn = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-  }
+  if (range === 'day') steps = 5;
+  else if (range === 'week') steps = 7;
+  else steps = 22;
 
-  // 表がつながっているときは、表の日付と実際の値だけを使う
   const reference = MARKET_ORDER
     .map(name => sheetSeries?.[name])
     .filter(Boolean)
@@ -646,14 +634,10 @@ export function getMarketRates(range = 'month') {
 
   if (reference) {
     const points = reference.slice(-steps);
-    const sheetInfo = getMarketSheetInfo();
     for (const p of points) {
       const j = japanParts(new Date(p.ms));
-      rates.labels.push(
-        sheetInfo?.isStale
-          ? `${String(j.year).slice(2)}/${j.month}/${j.day}`
-          : `${j.month}/${j.day}`
-      );
+      rates.labels.push(`${j.month}/${j.day}`);
+      rates.ms.push(p.ms);
       for (const name of MARKET_ORDER) {
         const fallback = sheetLatestRate(name) ?? 1;
         rates[name].push(sheetRateAt(name, p.ms) ?? fallback);
@@ -663,11 +647,39 @@ export function getMarketRates(range = 'month') {
   }
 
   for (let i = steps - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * stepMs);
-    rates.labels.push(labelFn(d));
+    const d = new Date(now.getTime() - i * 86400000);
+    const j = japanParts(d);
+    rates.labels.push(`${j.month}/${j.day}`);
+    rates.ms.push(japanDayStartMs(d));
     for (const name of MARKET_ORDER) rates[name].push(sheetLatestRate(name) ?? 1);
   }
   return rates;
+}
+
+/**
+ * その日までに入れたptと、その日の終値で持っていたpt。
+ * 最終点の「持っていた」は、カード／売却額と同じ計算（上限があれば切る）。
+ */
+export function getPortfolioHistory(investments, range = 'week', stockCap) {
+  const rates = getMarketRates(range);
+  const cap = Number(stockCap);
+  const useCap = Number.isFinite(cap) && cap > 0;
+  const putIn = [];
+  const held = [];
+
+  for (let i = 0; i < rates.labels.length; i++) {
+    const ms = rates.ms[i];
+    const owned = (investments || []).filter(inv => {
+      const created = Number(inv.createdAt) || 0;
+      if (!created) return true;
+      return japanDayStartMs(new Date(created)) <= japanDayStartMs(new Date(ms));
+    });
+    const dayRates = {};
+    for (const name of MARKET_ORDER) dayRates[name] = sheetRateAt(name, ms) ?? 1;
+    putIn.push(owned.reduce((sum, inv) => sum + (Number(inv.investedPoints) || 0), 0));
+    held.push(getInvestmentPortfolioValue(owned, dayRates, useCap ? cap : null));
+  }
+  return { labels: rates.labels, putIn, held };
 }
 
 /** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */
