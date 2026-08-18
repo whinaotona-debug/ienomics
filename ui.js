@@ -1,7 +1,7 @@
-import { state } from './state.js?v=150';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares } from './utils.js?v=150';
-import { refreshTutorial } from './tutorial.js?v=150';
-import { auth } from './firebase.js?v=150';
+import { state } from './state.js?v=152';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares, getMarketSheetInfo } from './utils.js?v=152';
+import { refreshTutorial } from './tutorial.js?v=152';
+import { auth } from './firebase.js?v=152';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -796,6 +796,7 @@ function renderInvest() {
     return `<button type="button" onclick="setInvestRange('${id}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${label}</button>`;
   };
   const tradeable = state.marketSheetStatus === 'ok' ? getTradeableMarkets() : [];
+  const sheetInfo = state.marketSheetStatus === 'ok' ? getMarketSheetInfo() : null;
   const buyButtons = tradeable.map(name => {
     const m = MARKET_META[name];
     return `<button type="button" onclick="investCustom('${m.id}')" class="solid-btn py-3 bg-white hover:bg-slate-50 font-bold text-[11px] shadow-sm border border-slate-200">${esc(m.buyLabel)}</button>`;
@@ -803,15 +804,23 @@ function renderInvest() {
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-purple-500">${getIcon('invest')}</div>${rb('資産運用','しさんうんよう')}</h2>
+    ${sheetInfo?.isStale ? `
+      <div class="mb-4 px-4 py-3 rounded-xl border bg-amber-50 border-amber-200">
+        <p class="text-xs font-bold text-amber-800">表の最終日は ${esc(sheetInfo.lastLabel)}（${sheetInfo.staleDays}日前）です</p>
+        <p class="text-[10px] font-bold text-amber-700 mt-1 leading-relaxed">スプレッドシートの「相場」タブで、いちばん下の日付が今日付近になるまで、2行目を下にコピーしてください。</p>
+      </div>
+    ` : ''}
     <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
       ${rangeBtn('day', '1日')}
       ${rangeBtn('week', '1週間')}
       ${rangeBtn('month', '1か月')}
     </div>
     <div class="w-full h-[180px] mb-6 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
-    <p class="text-[9px] font-bold text-center mb-4 ${state.marketSheetStatus === 'ok' ? 'text-emerald-600' : 'text-[#7a8f88]'}">
+    <p class="text-[9px] font-bold text-center mb-4 ${sheetInfo?.isStale ? 'text-amber-700' : (state.marketSheetStatus === 'ok' ? 'text-emerald-600' : 'text-[#7a8f88]')}">
       ${state.marketSheetStatus === 'ok'
-        ? `スプレッドシートの実際の値動き（${esc(tradeable.join('・'))}）`
+        ? (sheetInfo?.isStale
+          ? `最終データ ${esc(sheetInfo.lastLabel)}（${esc(tradeable.join('・'))}）`
+          : `実際の値動き（${esc(tradeable.join('・'))}）`)
         : (state.marketSheetStatus === 'loading'
           ? 'スプレッドシートを読み込み中...'
           : '設定でスプレッドシートをつなぐと、実際の値動きになります')}
@@ -1189,8 +1198,11 @@ function renderSettings() {
   if (state.marketSheetStatus === 'loading') {
     sheetStatusText = '読み込んでいます...';
   } else if (state.marketSheetStatus === 'ok') {
-    sheetStatusText = `つながっています（${sheetMarkets}）${sheetUpdated ? ` / ${sheetUpdated} 更新` : ''}`;
-    sheetStatusTone = 'text-emerald-600';
+    const info = getMarketSheetInfo();
+    const last = info ? ` / 最終データ ${info.lastLabel}` : '';
+    const lag = info?.isStale ? `（${info.staleDays}日前）` : '';
+    sheetStatusText = `つながっています（${sheetMarkets}）${last}${lag}${sheetUpdated ? ` / ${sheetUpdated} 読込` : ''}`;
+    sheetStatusTone = info?.isStale ? 'text-amber-700' : 'text-emerald-600';
   } else if (state.marketSheetStatus === 'error') {
     sheetStatusText = `読めませんでした: ${esc(state.marketSheetError || '')}`;
     sheetStatusTone = 'text-rose-500';
@@ -1221,12 +1233,12 @@ function renderSettings() {
       </div>
 
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
-        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${rb('相場','そうば')}のスプレッドシート</p>
+        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${rb('相場','そうば')}の表</p>
         <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">
-          実際の値動きを読む表です。アプリに標準の表が入っているので、普段はそのままで大丈夫です。
+          普段は空欄のままで大丈夫です。アプリが日経・S&P500・原油・金の終値を読みます。自分の表を使うときだけURLを入れてください。
         </p>
         <input type="url" id="market-sheet-input" inputmode="url"
-               value="${esc(state.marketSheetUrl || '')}"
+               value="${esc((state.marketSheetUrl || '').includes('market.csv') ? '' : (state.marketSheetUrl || ''))}"
                placeholder="https://docs.google.com/spreadsheets/..."
                class="w-full min-w-0 p-3 mb-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs focus:outline-none" />
         <div class="flex gap-2">
@@ -1352,7 +1364,17 @@ export function drawInvestChart() {
           enabled: isDetail,
           backgroundColor: 'rgba(15,23,42,0.9)',
           padding: 10,
-          cornerRadius: 8
+          cornerRadius: 8,
+          callbacks: {
+            label: (item) => {
+              const name = chartMarkets[item.datasetIndex];
+              const price = rates[name]?.[item.dataIndex];
+              const priceText = Number.isFinite(price)
+                ? `（表の価格 ${Number(price).toLocaleString()}）`
+                : '';
+              return `${item.dataset.label}: ${item.formattedValue}${showIndex ? priceText : ''}`;
+            }
+          }
         }
       },
       scales: {

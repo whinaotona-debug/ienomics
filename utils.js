@@ -1,4 +1,4 @@
-import { state } from './state.js?v=150';
+import { state } from './state.js?v=152';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -522,6 +522,30 @@ export function getMarketSheetMarkets() {
   return sheetSeries ? Object.keys(sheetSeries) : [];
 }
 
+/** 表の最終日と、今日から何日遅れているか */
+export function getMarketSheetInfo(now = new Date()) {
+  if (!sheetSeries) return null;
+  let lastMs = null;
+  for (const pts of Object.values(sheetSeries)) {
+    if (!pts?.length) continue;
+    const ms = pts[pts.length - 1].ms;
+    if (lastMs == null || ms > lastMs) lastMs = ms;
+  }
+  if (lastMs == null) return null;
+  const last = japanParts(new Date(lastMs));
+  const today = japanParts(now);
+  const staleDays = Math.round(
+    (Date.UTC(today.year, today.month - 1, today.day) -
+      Date.UTC(last.year, last.month - 1, last.day)) / 86400000
+  );
+  return {
+    lastMs,
+    lastLabel: `${last.year}/${last.month}/${last.day}`,
+    staleDays,
+    isStale: staleDays > 4
+  };
+}
+
 function sheetRateAt(name, ms) {
   const points = sheetSeries?.[name];
   if (!points || !points.length) return null;
@@ -606,9 +630,14 @@ export function getMarketRates(range = 'month') {
 
   if (reference) {
     const points = reference.slice(-steps);
+    const sheetInfo = getMarketSheetInfo();
     for (const p of points) {
-      const d = new Date(p.ms);
-      rates.labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
+      const j = japanParts(new Date(p.ms));
+      rates.labels.push(
+        sheetInfo?.isStale
+          ? `${String(j.year).slice(2)}/${j.month}/${j.day}`
+          : `${j.month}/${j.day}`
+      );
       for (const name of MARKET_ORDER) {
         const fallback = sheetLatestRate(name) ?? 1;
         rates[name].push(sheetRateAt(name, p.ms) ?? fallback);

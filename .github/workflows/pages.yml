@@ -10,6 +10,9 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # 米国市場の終了後（日本時間 朝6時・平日）に終値を取り直す
+    - cron: '0 21 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -31,6 +34,10 @@ jobs:
     steps:
       - name: リポジトリを取得
         uses: actions/checkout@v4
+
+      - name: 相場CSVを更新
+        run: node tools/update-market.mjs
+        continue-on-error: true
 
       - name: Pages の設定を読み込む
         uses: actions/configure-pages@v5
