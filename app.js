@@ -1,10 +1,10 @@
-import { state } from './state.js?v=149';
-import { render } from './ui.js?v=149';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=149';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=149';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=149';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=149';
-import { db, auth } from './firebase.js?v=149';
+import { state } from './state.js?v=150';
+import { render } from './ui.js?v=150';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=150';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=150';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=150';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=150';
+import { db, auth } from './firebase.js?v=150';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1230,8 +1230,14 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
   showToast("使用済みにしました");
 });
 
-window.sellCustom = async (id, v) => {
-  const value = Number(v) || 0;
+window.sellCustom = async (id) => {
+  const inv = state.investments.find(i => i.id === id);
+  if (!inv) return showAlert('この投資は見つかりませんでした');
+  const cur = getCurrentMarketRates();
+  const r = cur[inv.name];
+  if (!(r > 0)) return showAlert('いまの相場が取れませんでした');
+  const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / r);
+  const value = Math.max(0, Math.round(shares * r));
   const ok = await showConfirm(
     `今の価値は ${value}pt です。売ってポイントに戻します。`,
     { title: '売却しますか？', okLabel: '売却する' }

@@ -1,4 +1,4 @@
-import { state } from './state.js?v=149';
+import { state } from './state.js?v=150';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -463,63 +463,22 @@ function parseSheetDate(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-const MARKET_BASE_KEY = 'ienomics_market_bases_v1';
-/** 1日でこれ以上動いた点は表のズレ・欠測とみなして捨てる（原油でも一晩5倍はあり得ない） */
-const MAX_DAY_MOVE = 0.25;
-
-function loadMarketBases() {
-  try {
-    const raw = localStorage.getItem(MARKET_BASE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveMarketBases(bases) {
-  try {
-    localStorage.setItem(MARKET_BASE_KEY, JSON.stringify(bases));
-  } catch {}
-}
-
-function medianPrice(prices) {
-  const s = prices.filter(n => n > 0).sort((a, b) => a - b);
-  if (!s.length) return 0;
-  return s[Math.floor(s.length / 2)];
-}
-
-/** 前後の終値から大きく飛んだ日は、列ズレや欠測なので使わない */
-function scrubPricePoints(points) {
-  if (points.length < 3) return points;
-  const med = medianPrice(points.map(p => p.price));
-  const cleaned = [];
+/** 日付重複があれば後ろ（新しい取得結果）を優先して整列 */
+function normalizePricePoints(points) {
+  const map = new Map();
   for (const p of points) {
-    if (med > 0 && (p.price > med * 2 || p.price < med * 0.5)) continue;
-    const prev = cleaned[cleaned.length - 1];
-    if (prev && (p.price > prev.price * (1 + MAX_DAY_MOVE) || p.price < prev.price * (1 - MAX_DAY_MOVE))) {
-      continue;
-    }
-    cleaned.push(p);
+    if (!Number.isFinite(p.ms) || !Number.isFinite(p.price) || p.price <= 0) continue;
+    map.set(p.ms, p.price);
   }
-  return cleaned.length >= 2 ? cleaned : points;
-}
-
-function stableBaseFor(name, prices) {
-  const bases = loadMarketBases();
-  const existing = Number(bases[name]);
-  if (existing > 0) return existing;
-  const base = medianPrice(prices);
-  if (base > 0) {
-    bases[name] = base;
-    saveMarketBases(bases);
-  }
-  return base || 1;
+  return [...map.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ms, price]) => ({ ms, price }));
 }
 
 /**
  * CSVの本文から、市場ごとの値動きを取り出す。
- * 倍率は「端末に一度決めた基準値＝1.0」で、表の先頭行が毎日ずれても変わらない。
+ * 倍率は使わず、実際の価格をそのまま rate に入れる。
+ * （以前の倍率基準ズレで、日をまたぐと数倍に見える不具合が出ていた）
  */
 export function parseMarketSheetCsv(text) {
   const rows = parseCsv(String(text || ''));
@@ -545,11 +504,9 @@ export function parseMarketSheetCsv(text) {
       const ms = dateIndex >= 0 ? parseSheetDate(rows[r][dateIndex]) : r;
       points.push({ ms: ms ?? r, price });
     }
-    points.sort((a, b) => a.ms - b.ms);
-    const cleaned = scrubPricePoints(points);
+    const cleaned = normalizePricePoints(points);
     if (cleaned.length < 2) continue;
-    const base = stableBaseFor(name, cleaned.map(p => p.price));
-    series[name] = cleaned.map(p => ({ ms: p.ms, rate: p.price / base, price: p.price }));
+    series[name] = cleaned.map(p => ({ ms: p.ms, rate: p.price, price: p.price }));
   }
   if (!Object.keys(series).length) throw new Error('数字の入った行が見つかりません');
   return series;
@@ -592,7 +549,8 @@ export function getHoldingShares(inv, rate) {
   const shares = Number(inv.shares) || (rate > 0 ? invested / rate : 0);
   if (!(invested > 0) || !(rate > 0)) return shares;
   const value = shares * rate;
-  if (value > invested * 1.8 || value < invested * 0.55) return invested / rate;
+  // 旧バージョンの倍率バグで極端値になっている持ち株だけ補正する
+  if (value > invested * 8 || value < invested * 0.125) return invested / rate;
   return shares;
 }
 
@@ -652,8 +610,8 @@ export function getMarketRates(range = 'month') {
       const d = new Date(p.ms);
       rates.labels.push(`${d.getMonth() + 1}/${d.getDate()}`);
       for (const name of MARKET_ORDER) {
-        // 表にない市場は線を引かない（nullではなく同じ行の最新実値がないので1固定）
-        rates[name].push(sheetRateAt(name, p.ms) ?? 1);
+        const fallback = sheetLatestRate(name) ?? 1;
+        rates[name].push(sheetRateAt(name, p.ms) ?? fallback);
       }
     }
     return rates;
@@ -662,7 +620,7 @@ export function getMarketRates(range = 'month') {
   for (let i = steps - 1; i >= 0; i--) {
     const d = new Date(now.getTime() - i * stepMs);
     rates.labels.push(labelFn(d));
-    for (const name of MARKET_ORDER) rates[name].push(1);
+    for (const name of MARKET_ORDER) rates[name].push(sheetLatestRate(name) ?? 1);
   }
   return rates;
 }

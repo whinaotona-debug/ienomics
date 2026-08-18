@@ -1,7 +1,7 @@
-import { state } from './state.js?v=149';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares } from './utils.js?v=149';
-import { refreshTutorial } from './tutorial.js?v=149';
-import { auth } from './firebase.js?v=149';
+import { state } from './state.js?v=150';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares } from './utils.js?v=150';
+import { refreshTutorial } from './tutorial.js?v=150';
+import { auth } from './firebase.js?v=150';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -842,7 +842,7 @@ function renderInvest() {
         const val = investmentValues[inv.id] || 0;
         const diff = val - inv.investedPoints;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
-        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}', ${val})" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
+        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">現在、運用中の資産はありません</p>`}
     </div>
   `;
