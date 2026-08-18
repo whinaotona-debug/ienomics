@@ -1,7 +1,7 @@
-import { state } from './state.js?v=152';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares, getMarketSheetInfo } from './utils.js?v=152';
-import { refreshTutorial } from './tutorial.js?v=152';
-import { auth } from './firebase.js?v=152';
+import { state } from './state.js?v=153';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares, getMarketSheetInfo } from './utils.js?v=153';
+import { refreshTutorial } from './tutorial.js?v=153';
+import { auth } from './firebase.js?v=153';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -820,7 +820,7 @@ function renderInvest() {
       ${state.marketSheetStatus === 'ok'
         ? (sheetInfo?.isStale
           ? `最終データ ${esc(sheetInfo.lastLabel)}（${esc(tradeable.join('・'))}）`
-          : `実際の値動き（${esc(tradeable.join('・'))}）`)
+          : `最初の日を100とした値動き（${esc(tradeable.join('・'))}）`)
         : (state.marketSheetStatus === 'loading'
           ? 'スプレッドシートを読み込み中...'
           : '設定でスプレッドシートをつなぐと、実際の値動きになります')}
@@ -1305,8 +1305,6 @@ export function drawInvestChart() {
       : 0;
   }
   const hasAny = MARKET_ORDER.some(name => holdings[name] > 0);
-  const showIndex = !hasAny;
-  const stockCap = Number(state.stockCap) > 0 ? Number(state.stockCap) : null;
   const chartMarkets = isDetail || hasAny
     ? (hasAny
       ? MARKET_ORDER.filter(name => holdings[name] > 0)
@@ -1322,21 +1320,12 @@ export function drawInvestChart() {
       labels: rates.labels,
       datasets: chartMarkets.map(name => {
         const meta = MARKET_META[name];
-        const series = showIndex
-          ? rates[name].map(r => {
-              const start = rates[name].find(v => v > 0) || 1;
-              return Math.round(100 * r / start);
-            })
-          : rates[name].map((r, index) => {
-              const rawTotal = MARKET_ORDER.reduce(
-                (sum, market) => sum + holdings[market] * rates[market][index],
-                0
-              );
-              const scale = stockCap != null && rawTotal > stockCap
-                ? stockCap / rawTotal
-                : 1;
-              return Math.round(holdings[name] * r * scale);
-            });
+        const values = rates[name] || [];
+        const start = values.find(v => Number.isFinite(v) && v > 0) || 1;
+        // 期間の最初を100。保有ptだと今日の評価額が同じ線に重なる
+        const series = values.map(r => (
+          Number.isFinite(r) && r > 0 ? Math.round((1000 * r) / start) / 10 : null
+        ));
         return {
           label: meta.short,
           data: series,
@@ -1369,10 +1358,13 @@ export function drawInvestChart() {
             label: (item) => {
               const name = chartMarkets[item.datasetIndex];
               const price = rates[name]?.[item.dataIndex];
+              const idx = Number(item.parsed.y);
+              const pct = idx - 100;
+              const pctText = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
               const priceText = Number.isFinite(price)
-                ? `（表の価格 ${Number(price).toLocaleString()}）`
+                ? ` / ${Number(price).toLocaleString()}`
                 : '';
-              return `${item.dataset.label}: ${item.formattedValue}${showIndex ? priceText : ''}`;
+              return `${item.dataset.label}: ${idx}（${pctText}）${priceText}`;
             }
           }
         }
