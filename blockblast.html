@@ -132,6 +132,7 @@
       transition: opacity .2s, transform .2s;
     }
     .combo-badge.on { opacity: 1; animation: comboPulse .7s ease-in-out infinite; }
+    .combo-badge.hot { box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 4px 0 #8d1c00, 0 0 18px #ff7a32; }
     .combo-badge b { color: #fff; }
     @keyframes comboPulse {
       0%,100% { transform: scale(1); }
@@ -347,7 +348,7 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 4px 0 var(--btn-shadow);
       transform: translateY(0);
     }
-    button:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 1px 0 var(--btn-shadow); }
+    button:disabled { opacity: .35; pointer-events: none; }
     .ai { background: linear-gradient(180deg, #5ce1a6, #19a86a); --btn-shadow: #0e6b42; color: #07331f; }
     .auto { background: linear-gradient(180deg, #7aa7ff, #3b6adf); --btn-shadow: #1d3f96; }
     .hint { background: linear-gradient(180deg, #ffd56a, #f0a20a); --btn-shadow: #b06d00; color: #4a2e00; }
@@ -458,10 +459,66 @@
     .coin-chip b { font-family: Fredoka, sans-serif; color: var(--gold); }
     .home-meta { color: #c5d4f5; font-size: 13px; margin: 8px 0 16px; line-height: 1.5; }
     .home-meta em { color: var(--gold); font-style: normal; }
-    .note {
-      font-size: 12px; color: #9db0d8; line-height: 1.45;
-      background: rgba(0,0,0,.22); border-radius: 14px; padding: 10px 12px; margin: 12px 0 0;
+    .home-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 10px;
     }
+    .home-grid .play { margin-top: 0; font-size: 15px; padding: 12px 8px; }
+    .streak { color: #ffd24a; font-size: 13px; margin-top: 10px; }
+    .mid-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 6px;
+    }
+    #ai-line { margin: 6px 2px 4px; }
+    .sheet {
+      position: absolute; inset: 0;
+      z-index: 46;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
+      background: rgba(5,10,22,.9);
+      padding: 16px 18px max(20px, env(safe-area-inset-bottom));
+    }
+    .sheet.show { display: flex; }
+    .sheet-body { width: min(420px, 100%); padding-bottom: 20px; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 10px 0 16px;
+    }
+    .stat-card {
+      background: linear-gradient(180deg, #2b4782, #182c58);
+      border-radius: 14px;
+      padding: 12px 10px;
+      text-align: center;
+      box-shadow: 0 5px 0 #0a142c;
+    }
+    .stat-card b { display: block; font-family: Fredoka, sans-serif; font-size: 20px; color: var(--gold); }
+    .stat-card span { font-size: 11px; color: #9db0d8; }
+    .mission, .ach {
+      background: linear-gradient(180deg, #2b4782, #182c58);
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      box-shadow: 0 4px 0 #0a142c;
+      text-align: left;
+    }
+    .mission b, .ach b { display: block; font-size: 14px; }
+    .mission span, .ach span { font-size: 12px; color: #c5d4f5; }
+    .bar { height: 8px; background: #0b1733; border-radius: 99px; margin-top: 8px; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffd24a, #f0a000); border-radius: 99px; }
+    .mission.done, .ach.done { outline: 2px solid var(--gold); }
+    .rank { color: var(--gold); font-size: 18px; margin: 0 0 8px; }
+    .rec { display: flex; justify-content: space-between; padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 13px; }
+    .rec em { color: var(--gold); font-style: normal; }
     @media (max-height: 740px) {
       header { margin-bottom: 2px; }
       .score-hero { margin-top: 0; }
@@ -868,7 +925,10 @@
       </div>
     </div>
 
-    <div id="ai-line">3つのブロックを盤面に置いて、行と列を消そう</div>
+    <div class="mid-row">
+      <div id="ai-line">3つのブロックを盤面に置いて、行と列を消そう</div>
+      <button class="icon" id="btnUndo" title="ひとつ戻す" disabled>↩</button>
+    </div>
     <div class="tray" id="tray"></div>
     <div class="controls">
       <button class="ai" id="btnAi">AI配置</button>
@@ -887,8 +947,13 @@
       <div class="coin-chip"><i class="draw-coin"></i> <b id="homeCoins">0</b></div>
       <div class="home-meta">BEST <em id="homeBest">0</em>　全消し <em id="homePerfects">0</em></div>
       <button class="play" id="btnStart">はじめる</button>
-      <button class="play alt" id="btnShop" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96;margin-top:10px">ショップ</button>
-      <button class="play" id="btnHow" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36;margin-top:10px">あそびかた</button>
+      <div class="home-grid">
+        <button class="play" id="btnShop" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96">ショップ</button>
+        <button class="play" id="btnMissions" style="background:linear-gradient(180deg,#5ce1a6,#19a86a);color:#07331f;--btn-shadow:#0e6b42">ミッション</button>
+        <button class="play" id="btnRecords" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">きろく</button>
+        <button class="play" id="btnHow" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">あそびかた</button>
+      </div>
+      <div class="streak" id="homeStreak"></div>
       <div class="note">手で置いた点数だけコインになるよ。<br>AI配置・おまかせを使うとその回は <b>0枚</b>。<br>ヒントはOK。見た目だけ変えられるよ。</div>
     </div>
   </div>
@@ -899,21 +964,38 @@
       <button class="icon" id="btnShopClose" style="width:44px" title="とじる"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     <div class="tabs" id="shopTabs"></div>
-    <div class="shop-grid" id="shopGrid"></div>
+    <div class="shop-grid" id="shopGrid">    </div>
+  </div>
+  <div id="missions" class="sheet">
+    <div class="shop-head">
+      <b>ミッション</b>
+      <button class="icon" id="btnMissionsClose" style="width:44px" title="とじる"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body" id="missionList"></div>
+  </div>
+  <div id="records" class="sheet">
+    <div class="shop-head">
+      <b>きろく</b>
+      <button class="icon" id="btnRecordsClose" style="width:44px" title="とじる"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="sheet-body" id="recordList"></div>
   </div>
   <div id="howto">
     <div class="modal">
       <div class="logo" style="font-size:28px">あそびかた</div>
-      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ショップではブロック・背景・盤面・演出・音が買える。点数アップアイテムはないよ。</p>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。ひとつ戻すは、配られた3つのうち最後の1手だけ。<br><br>ショップの見た目は点数に影響しないよ。</p>
       <button class="play" id="btnHowClose">とじる</button>
     </div>
   </div>
   <div id="overlay">
     <div class="modal">
       <div class="logo" style="font-size:32px">GAME OVER</div>
+      <div class="rank" id="endRank"></div>
       <p>スコア <b id="endScore">0</b></p>
       <p id="endCoins"></p>
+      <p id="endExtra" style="color:#c5d4f5;font-size:13px;min-height:18px;margin:0 0 12px"></p>
       <button class="play" id="btnAgain">もう一度</button>
+      <button class="play" id="btnShare" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96">結果をシェア</button>
       <button class="play" id="btnEndHome" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">ホーム</button>
     </div>
   </div>
@@ -1146,6 +1228,8 @@
     while (bestShapes.length < 3) bestShapes.push(ranked[0].shape);
 
     state.tray = bestShapes.map((shape, i) => ({ shape, color: colors[i] }));
+    state.undo = null;
+    setUndo(false);
     SFX.deal();
   }
 
@@ -1165,9 +1249,13 @@
     home: document.getElementById("home"),
     shop: document.getElementById("shop"),
     howto: document.getElementById("howto"),
+    missions: document.getElementById("missions"),
+    records: document.getElementById("records"),
     app: document.getElementById("app"),
     endScore: document.getElementById("endScore"),
     endCoins: document.getElementById("endCoins"),
+    endRank: document.getElementById("endRank"),
+    endExtra: document.getElementById("endExtra"),
     floatScore: document.getElementById("floatScore"),
     flash: document.getElementById("flash"),
     hudCoins: document.getElementById("hudCoins"),
@@ -1175,10 +1263,14 @@
     shopCoins: document.getElementById("shopCoins"),
     homeBest: document.getElementById("homeBest"),
     homePerfects: document.getElementById("homePerfects"),
+    homeStreak: document.getElementById("homeStreak"),
     coinWarn: document.getElementById("coinWarn"),
     toast: document.getElementById("toast"),
     shopTabs: document.getElementById("shopTabs"),
-    shopGrid: document.getElementById("shopGrid")
+    shopGrid: document.getElementById("shopGrid"),
+    missionList: document.getElementById("missionList"),
+    recordList: document.getElementById("recordList"),
+    btnUndo: document.getElementById("btnUndo")
   };
 
   const CATALOG = {
@@ -1334,7 +1426,16 @@
       eq: { skin: "candy", bg: "navy", board: "classic", fx: "spark", sfx: "pop" },
       games: 0,
       perfects: 0,
-      daily: ""
+      daily: "",
+      streak: 0,
+      bestCombo: 0,
+      bestManual: 0,
+      lines: 0,
+      places: 0,
+      ach: [],
+      missions: null,
+      recs: [],
+      seenHow: false
     };
   }
   function loadBest() {
@@ -1356,6 +1457,15 @@
         base.games = Number(s.games) || 0;
         base.perfects = Number(s.perfects) || 0;
         base.daily = s.daily || "";
+        base.streak = Number(s.streak) || 0;
+        base.bestCombo = Number(s.bestCombo) || 0;
+        base.bestManual = Number(s.bestManual) || 0;
+        base.lines = Number(s.lines) || 0;
+        base.places = Number(s.places) || 0;
+        base.ach = Array.isArray(s.ach) ? s.ach : [];
+        base.missions = s.missions || null;
+        base.recs = Array.isArray(s.recs) ? s.recs : [];
+        base.seenHow = !!s.seenHow;
         if (s.owned) {
           for (const k of Object.keys(base.owned)) {
             if (Array.isArray(s.owned[k])) base.owned[k] = s.owned[k];
@@ -1391,6 +1501,7 @@
     el.shopCoins.textContent = n;
     el.homeBest.textContent = save.best;
     el.homePerfects.textContent = save.perfects;
+    if (el.homeStreak) el.homeStreak.textContent = save.streak ? ("連続ログイン " + save.streak + "日目") : "";
   }
   function toast(msg) {
     el.toast.textContent = msg;
@@ -1402,17 +1513,232 @@
     const d = new Date();
     return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
   }
+  function yesterdayStr() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
   function grantDaily() {
     const t = todayStr();
-    if (save.daily === t) return;
+    if (save.daily === t) {
+      ensureMissions();
+      return;
+    }
+    save.streak = save.daily === yesterdayStr() ? (save.streak || 0) + 1 : 1;
     save.daily = t;
-    save.coins += 25;
+    const bonus = 25 + Math.min(35, (save.streak - 1) * 5);
+    save.coins += bonus;
+    save.missions = null;
+    ensureMissions();
     persist();
-    toast("ログインボーナス +25コイン");
+    toast("ログイン " + save.streak + "日目 +" + bonus + "コイン");
   }
   function coinFromScore(score) {
     if (score < 50) return 0;
     return Math.min(220, Math.max(1, Math.floor(score / 200)));
+  }
+
+  const MISSION_POOL = [
+    { id: "combo5", name: "コンボを5までつなぐ", target: 5, reward: 20, kind: "combo" },
+    { id: "combo10", name: "コンボを10までつなぐ", target: 10, reward: 40, kind: "combo" },
+    { id: "perfect", name: "全消しを1回する", target: 1, reward: 30, kind: "perfect" },
+    { id: "double", name: "2ライン以上を3回", target: 3, reward: 25, kind: "double" },
+    { id: "score3k", name: "1プレイで3000点", target: 3000, reward: 25, kind: "score" },
+    { id: "score8k", name: "1プレイで8000点", target: 8000, reward: 40, kind: "score" },
+    { id: "places20", name: "ブロックを20個置く", target: 20, reward: 18, kind: "places" },
+    { id: "lines8", name: "ラインを8本消す", target: 8, reward: 22, kind: "lines" }
+  ];
+  const ACH_LIST = [
+    { id: "first", name: "はじめの一局", desc: "1回プレイする", coin: 15, test: s => s.games >= 1 },
+    { id: "g10", name: "常連", desc: "10回プレイ", coin: 25, test: s => s.games >= 10 },
+    { id: "g30", name: "マニア", desc: "30回プレイ", coin: 40, test: s => s.games >= 30 },
+    { id: "c5", name: "コンボ入門", desc: "コンボ5", coin: 20, test: s => s.bestCombo >= 5 },
+    { id: "c10", name: "コンボ好き", desc: "コンボ10", coin: 35, test: s => s.bestCombo >= 10 },
+    { id: "c20", name: "コンボ職人", desc: "コンボ20", coin: 60, test: s => s.bestCombo >= 20 },
+    { id: "p1", name: "きれい好き", desc: "全消し1回", coin: 20, test: s => s.perfects >= 1 },
+    { id: "p10", name: "全消し名人", desc: "全消し10回", coin: 50, test: s => s.perfects >= 10 },
+    { id: "s10k", name: "万点", desc: "BEST 10000", coin: 30, test: s => s.best >= 10000 },
+    { id: "s50k", name: "五万点", desc: "BEST 50000", coin: 80, test: s => s.best >= 50000 },
+    { id: "st3", name: "3日連続", desc: "連続ログイン3日", coin: 20, test: s => s.streak >= 3 },
+    { id: "st7", name: "1週間", desc: "連続ログイン7日", coin: 50, test: s => s.streak >= 7 },
+    { id: "own5", name: "おしゃれ", desc: "スキンを5種持つ", coin: 25, test: s => (s.owned.skins || []).length >= 5 },
+    { id: "ownAll", name: "コレクター", desc: "スキンを10種持つ", coin: 60, test: s => (s.owned.skins || []).length >= 10 },
+    { id: "hand", name: "素手の誇り", desc: "手置きBEST 8000", coin: 40, test: s => s.bestManual >= 8000 }
+  ];
+
+  function seedPick(seed, n, len) {
+    const out = [];
+    let x = seed || 1;
+    while (out.length < n) {
+      x = (x * 1103515245 + 12345) & 0x7fffffff;
+      const i = x % len;
+      if (!out.includes(i)) out.push(i);
+    }
+    return out;
+  }
+  function ensureMissions() {
+    const t = todayStr();
+    if (save.missions && save.missions.date === t && Array.isArray(save.missions.items) && save.missions.items.length) return;
+    const seed = t.split("-").reduce((a, x) => a + Number(x), 7);
+    const idx = seedPick(seed, 3, MISSION_POOL.length);
+    save.missions = {
+      date: t,
+      items: idx.map(i => {
+        const m = MISSION_POOL[i];
+        return { id: m.id, name: m.name, target: m.target, reward: m.reward, kind: m.kind, progress: 0, done: false };
+      })
+    };
+  }
+  function bumpMission(kind, value, add) {
+    if (state.usedAi) return;
+    ensureMissions();
+    let got = 0;
+    for (const m of save.missions.items) {
+      if (m.done || m.kind !== kind) continue;
+      if (add) m.progress += value;
+      else m.progress = Math.max(m.progress, value);
+      if (m.progress >= m.target) {
+        m.progress = m.target;
+        m.done = true;
+        save.coins += m.reward;
+        got += m.reward;
+        toast(m.name + " クリア +" + m.reward);
+      }
+    }
+    if (got) persist();
+  }
+  function checkAch() {
+    let got = 0;
+    for (const a of ACH_LIST) {
+      if (save.ach.includes(a.id)) continue;
+      if (!a.test(save)) continue;
+      save.ach.push(a.id);
+      save.coins += a.coin;
+      got += a.coin;
+      toast(a.name + " +" + a.coin);
+    }
+    if (got) persist();
+    return got;
+  }
+  function rankName(score) {
+    if (score >= 50000) return "レジェンド";
+    if (score >= 20000) return "達人";
+    if (score >= 10000) return "すご腕";
+    if (score >= 5000) return "やり手";
+    if (score >= 2000) return "一人前";
+    if (score >= 500) return "見習い";
+    return "はじめの一歩";
+  }
+  function renderMissions() {
+    ensureMissions();
+    el.missionList.innerHTML = "<p style='color:#c5d4f5;font-size:13px;margin:0 0 12px'>今日の3つ。手置きだけカウント。AIを使うとその回は進まないよ。</p>";
+    save.missions.items.forEach(m => {
+      const d = document.createElement("div");
+      d.className = "mission" + (m.done ? " done" : "");
+      const pct = Math.min(100, Math.round(100 * m.progress / m.target));
+      d.innerHTML = `<b>${m.name}</b><span>${m.done ? "クリア！" : m.progress + " / " + m.target}　報酬 ${m.reward}コイン</span><div class="bar"><i style="width:${pct}%"></i></div>`;
+      el.missionList.appendChild(d);
+    });
+    const wrap = document.createElement("div");
+    wrap.style.marginTop = "18px";
+    wrap.innerHTML = "<b style='display:block;margin-bottom:8px'>称号</b>";
+    ACH_LIST.forEach(a => {
+      const have = save.ach.includes(a.id);
+      const d = document.createElement("div");
+      d.className = "ach" + (have ? " done" : "");
+      d.innerHTML = `<b>${a.name}</b><span>${a.desc}　${have ? "解除ずみ" : "+" + a.coin + "コイン"}</span>`;
+      wrap.appendChild(d);
+    });
+    el.missionList.appendChild(wrap);
+  }
+  function renderRecords() {
+    const ownedSkins = (save.owned.skins || []).length;
+    el.recordList.innerHTML = "";
+    const stats = [
+      ["BEST", save.best],
+      ["手置きBEST", save.bestManual],
+      ["プレイ回数", save.games],
+      ["全消し", save.perfects],
+      ["最高コンボ", save.bestCombo],
+      ["消したライン", save.lines],
+      ["置いた数", save.places],
+      ["スキン", ownedSkins + " / 20"]
+    ];
+    const grid = document.createElement("div");
+    grid.className = "stat-grid";
+    stats.forEach(([k, v]) => {
+      const c = document.createElement("div");
+      c.className = "stat-card";
+      c.innerHTML = `<b>${v}</b><span>${k}</span>`;
+      grid.appendChild(c);
+    });
+    el.recordList.appendChild(grid);
+    const h = document.createElement("b");
+    h.textContent = "最近のプレイ";
+    h.style.display = "block";
+    h.style.margin = "8px 0";
+    el.recordList.appendChild(h);
+    if (!save.recs.length) {
+      const p = document.createElement("p");
+      p.style.color = "#9db0d8";
+      p.textContent = "まだ記録がないよ";
+      el.recordList.appendChild(p);
+    } else {
+      save.recs.forEach(r => {
+        const d = document.createElement("div");
+        d.className = "rec";
+        d.innerHTML = `<span>${r.date} ${r.ai ? "AI" : "手置き"}</span><em>${r.score}点 / x${r.combo}</em>`;
+        el.recordList.appendChild(d);
+      });
+    }
+  }
+  function snapshot() {
+    return {
+      occ: Uint8Array.from(state.occ),
+      color: Uint8Array.from(state.color),
+      tray: state.tray.map(p => p ? { shape: p.shape, color: p.color } : null),
+      score: state.score,
+      combo: state.combo,
+      misses: state.misses
+    };
+  }
+  function setUndo(on) {
+    state.canUndo = !!on;
+    if (el.btnUndo) el.btnUndo.disabled = !on;
+  }
+  function undoMove() {
+    if (!state.canUndo || !state.undo || state.busy || state.over || state.auto) return;
+    const u = state.undo;
+    state.occ = Uint8Array.from(u.occ);
+    state.color = Uint8Array.from(u.color);
+    state.tray = u.tray.map(p => p ? { shape: p.shape, color: p.color } : null);
+    state.score = u.score;
+    state.combo = u.combo;
+    state.misses = u.misses;
+    state.hint = null;
+    state.undo = null;
+    setUndo(false);
+    renderBoard();
+    renderTray();
+    renderHUD();
+    el.aiLine.textContent = "1手戻したよ";
+    SFX.ensure();
+    SFX.pickup();
+  }
+  async function shareScore() {
+    const text = "BLOCK BLAST\nスコア " + state.score + "（" + rankName(state.score) + "）\nBEST " + save.best + "\nhttps://whinaotona-debug.github.io/ienomics/blockblast.html";
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+    } catch (e) {}
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("結果をコピーしたよ");
+    } catch (e) {
+      toast("シェアできなかった");
+    }
   }
   function owned(kind, id) {
     return (save.owned[kind] || []).includes(id);
@@ -1442,6 +1768,7 @@
     toast(item.name + " をゲット！");
     SFX.ensure();
     SFX.deal();
+    checkAch();
   }
   function renderShop() {
     el.shopTabs.innerHTML = "";
@@ -1477,6 +1804,8 @@
     el.overlay.style.display = "none";
     el.howto.style.display = "none";
     el.shop.classList.remove("show");
+    if (el.missions) el.missions.classList.remove("show");
+    if (el.records) el.records.classList.remove("show");
     el.app.classList.remove("show");
     el.home.classList.add("show");
     el.drag.style.display = "none";
@@ -1516,7 +1845,9 @@
     muted: false,
     hint: null,
     drag: null,
-    usedAi: false
+    usedAi: false,
+    undo: null,
+    canUndo: false
   };
   el.best.textContent = state.best;
   document.getElementById("btnHome").innerHTML = UI_ICO.home;
@@ -1589,6 +1920,37 @@
     deal() {
       this.stopAll();
       [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06));
+    }
+  };
+
+  const BGM = {
+    timer: null,
+    i: 0,
+    start() {
+      this.stop();
+      if (state.muted) return;
+      SFX.ensure();
+      const notes = [392, 494, 523, 587, 523, 494, 440, 392];
+      const tick = () => {
+        if (state.muted || !SFX.ctx) return;
+        const f = notes[this.i++ % notes.length];
+        const t = SFX.ctx.currentTime;
+        const o = SFX.ctx.createOscillator();
+        const g = SFX.ctx.createGain();
+        o.type = "sine";
+        o.frequency.setValueAtTime(f, t);
+        g.gain.setValueAtTime(0.02, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+        o.connect(g).connect(SFX.ctx.destination);
+        o.start(t);
+        o.stop(t + 0.42);
+        this.timer = setTimeout(tick, 540);
+      };
+      this.timer = setTimeout(tick, 240);
+    },
+    stop() {
+      clearTimeout(this.timer);
+      this.timer = null;
     }
   };
 
@@ -2009,6 +2371,7 @@
     el.score.textContent = state.score;
     el.combo.textContent = state.combo;
     el.comboBox.classList.toggle("on", state.combo > 0);
+    el.comboBox.classList.toggle("hot", state.combo >= 5);
     el.best.textContent = state.best;
   }
 
@@ -2114,6 +2477,11 @@
     if (!piece || state.over) return false;
     if (!canPlace(state.occ, piece.shape.cells, r, c)) return false;
 
+    if (!state.auto && !state.busy) {
+      state.undo = snapshot();
+      setUndo(true);
+    } else setUndo(false);
+
     const res = applyPlace(state.occ, piece.shape.cells, r, c);
     const sc = scoreMove(piece.shape.n, res.lines, res.clearedN, res.empty, state.combo, state.misses);
     const placed = [];
@@ -2124,21 +2492,35 @@
     }
     state.occ = res.next;
     state.tray[slot] = null;
+    const wasBest = state.score <= state.best;
     state.score += sc.pts;
     state.combo = sc.combo;
     state.misses = sc.misses;
+    save.places += 1;
+    if (res.lines) save.lines += res.lines;
+    if (state.combo > save.bestCombo) save.bestCombo = state.combo;
     if (state.score > state.best) {
       state.best = state.score;
       save.best = state.best;
-      persist();
     }
+    persist();
     state.hint = null;
     SFX.place();
     if (navigator.vibrate) navigator.vibrate(res.lines ? 18 : 8);
 
+    if (!state.usedAi) {
+      bumpMission("places", 1, true);
+      bumpMission("combo", state.combo, false);
+      bumpMission("score", state.score, false);
+      if (res.lines) bumpMission("lines", res.lines, true);
+      if (res.lines >= 2) bumpMission("double", 1, true);
+      if (res.empty) bumpMission("perfect", 1, true);
+    }
+
     renderBoard();
     renderTray();
     renderHUD();
+    renderCoins();
     showPoints(sc.pts);
     if (animate) {
       for (const i of placed) {
@@ -2151,8 +2533,9 @@
       SFX.clear(res.lines, state.combo);
       if (state.combo >= 2) SFX.combo(state.combo);
       const names = ["", "NICE", "GREAT", "EXCELLENT", "AMAZING", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE", "UNBELIEVABLE"];
-      shout(res.empty ? "PERFECT" : (state.combo >= 2 ? "COMBO x" + state.combo : names[res.lines] || "NICE"),
-            res.empty ? "#ffd24a" : "#fff");
+      const newBest = wasBest && state.score === state.best && sc.pts;
+      shout(res.empty ? "PERFECT" : (newBest ? "NEW BEST" : (state.combo >= 2 ? "COMBO x" + state.combo : names[res.lines] || "NICE")),
+            res.empty || newBest ? "#ffd24a" : "#fff");
       if (res.empty) {
         SFX.allClear();
         save.perfects += 1;
@@ -2200,6 +2583,7 @@
 
   function markAi() {
     state.usedAi = true;
+    setUndo(false);
     el.coinWarn.textContent = "AI使用中 — このプレイはコインなし";
   }
 
@@ -2207,10 +2591,15 @@
     if (state.over) return;
     state.over = true;
     state.auto = false;
+    setUndo(false);
     document.getElementById("btnAuto").textContent = "おまかせ";
     SFX.over();
     el.endScore.textContent = state.score;
+    el.endRank.textContent = rankName(state.score);
     save.games += 1;
+    if (!state.usedAi && state.score > save.bestManual) save.bestManual = state.score;
+    save.recs.unshift({ score: state.score, combo: state.combo, ai: !!state.usedAi, date: todayStr() });
+    if (save.recs.length > 8) save.recs.length = 8;
     let got = 0;
     if (state.usedAi) {
       el.endCoins.textContent = "AI配置・おまかせを使ったのでコインなし";
@@ -2221,6 +2610,8 @@
       el.endCoins.textContent = got ? ("+" + got + " コイン") : "コインはスコア50点から";
       el.endCoins.className = "";
     }
+    const ach = checkAch();
+    if (el.endExtra) el.endExtra.textContent = ach ? ("称号ボーナス +" + ach) : "";
     persist();
     renderCoins();
     el.overlay.style.display = "flex";
@@ -2238,6 +2629,8 @@
     state.auto = false;
     state.hint = null;
     state.usedAi = false;
+    state.undo = null;
+    setUndo(false);
     document.getElementById("btnAuto").textContent = "おまかせ";
     el.overlay.style.display = "none";
     el.coinWarn.textContent = "";
@@ -2247,6 +2640,7 @@
     renderHUD();
     renderCoins();
     el.aiLine.textContent = "3つのブロックを盤面に置いて、行と列を消そう";
+    BGM.start();
   }
 
   function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -2418,10 +2812,12 @@
   document.getElementById("btnMute").onclick = () => {
     state.muted = !state.muted;
     paintMute();
+    if (state.muted) BGM.stop();
+    else BGM.start();
   };
   document.getElementById("btnRetry").onclick = () => { SFX.ensure(); newGame(); };
   document.getElementById("btnAgain").onclick = () => { SFX.ensure(); newGame(); };
-  document.getElementById("btnStart").onclick = () => { SFX.ensure(); goPlay(); };
+  document.getElementById("btnStart").onclick = () => { SFX.ensure(); BGM.start(); goPlay(); };
   document.getElementById("btnHome").onclick = () => {
     if (!state.over && state.score > 0 && !confirm("ホームに戻る？ このプレイのスコアは消えるよ")) return;
     showHome();
@@ -2434,6 +2830,12 @@
   document.getElementById("btnShopClose").onclick = () => el.shop.classList.remove("show");
   document.getElementById("btnHow").onclick = () => { el.howto.style.display = "flex"; };
   document.getElementById("btnHowClose").onclick = () => { el.howto.style.display = "none"; };
+  document.getElementById("btnUndo").onclick = () => undoMove();
+  document.getElementById("btnShare").onclick = () => shareScore();
+  document.getElementById("btnMissions").onclick = () => { el.missions.classList.add("show"); renderMissions(); };
+  document.getElementById("btnMissionsClose").onclick = () => el.missions.classList.remove("show");
+  document.getElementById("btnRecords").onclick = () => { el.records.classList.add("show"); renderRecords(); };
+  document.getElementById("btnRecordsClose").onclick = () => el.records.classList.remove("show");
 })();
 </script>
 </body>
