@@ -1,10 +1,10 @@
-import { state } from './state.js?v=153';
-import { render } from './ui.js?v=153';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=153';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=153';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=153';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=153';
-import { db, auth } from './firebase.js?v=153';
+import { state } from './state.js?v=154';
+import { render } from './ui.js?v=154';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=154';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=154';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=154';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=154';
+import { db, auth } from './firebase.js?v=154';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1236,8 +1236,7 @@ window.sellCustom = async (id) => {
   const cur = getCurrentMarketRates();
   const r = cur[inv.name];
   if (!(r > 0)) return showAlert('いまの相場が取れませんでした');
-  const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / r);
-  const value = Math.max(0, Math.round(shares * r));
+  const value = Math.max(0, Math.round(getHoldingValue(inv, r)));
   const ok = await showConfirm(
     `今の価値は ${value}pt です。売ってポイントに戻します。`,
     { title: '売却しますか？', okLabel: '売却する' }
@@ -1303,10 +1302,25 @@ window.investCustom = async (n) => {
 
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
     const ex = state.investments.find(i => i.name === dbName); 
-    if (ex) { 
-      await updateDoc(doc(db, "investments", ex.id), { investedPoints: increment(a), shares: increment(a / r) }); 
-    } else { 
-      await addDoc(collection(db, "investments"), { familyCode: state.familyCode, name: dbName, investedPoints: a, shares: a / r, createdAt: Date.now() }); 
+    if (ex) {
+      const oldInvested = Number(ex.investedPoints) || 0;
+      const oldShares = getHoldingShares(ex, r);
+      const newInvested = oldInvested + a;
+      const newShares = oldShares + a / r;
+      await updateDoc(doc(db, "investments", ex.id), {
+        investedPoints: newInvested,
+        shares: newShares,
+        buyRate: newShares > 0 ? newInvested / newShares : r
+      });
+    } else {
+      await addDoc(collection(db, "investments"), {
+        familyCode: state.familyCode,
+        name: dbName,
+        investedPoints: a,
+        shares: a / r,
+        buyRate: r,
+        createdAt: Date.now()
+      });
     } 
     setView('invest'); 
     showToast(`${meta.label}を ${a}pt 買いました`);

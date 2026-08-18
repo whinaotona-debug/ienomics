@@ -1,4 +1,4 @@
-import { state } from './state.js?v=153';
+import { state } from './state.js?v=154';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -567,15 +567,31 @@ export function rateForMarket(rates, name) {
   return Number.isFinite(r) && r > 0 ? r : 1;
 }
 
-/** 基準がずれた古い持ち株は、購入額から実変動だけ乗せる */
+/** 買ったときの価格。古い持ち株は購入日の表から復元する */
+export function getBuyRate(inv, currentRate) {
+  const stored = Number(inv?.buyRate);
+  if (stored > 0) return stored;
+
+  const invested = Number(inv?.investedPoints) || 0;
+  const shares = Number(inv?.shares);
+  const implied = invested > 0 && shares > 0 ? invested / shares : null;
+  const cur = Number(currentRate);
+  if (implied > 0 && cur > 0 && implied >= cur / 8 && implied <= cur * 8) return implied;
+
+  const hist = Number(inv?.createdAt) > 0 ? sheetRateAt(inv.name, inv.createdAt) : null;
+  if (hist > 0) return hist;
+  return cur > 0 ? cur : 1;
+}
+
+/** 口数。今の価値は getHoldingShares(inv, rate) * rate */
 export function getHoldingShares(inv, rate) {
   const invested = Number(inv.investedPoints) || 0;
-  const shares = Number(inv.shares) || (rate > 0 ? invested / rate : 0);
-  if (!(invested > 0) || !(rate > 0)) return shares;
-  const value = shares * rate;
-  // 旧バージョンの倍率バグで極端値になっている持ち株だけ補正する
-  if (value > invested * 8 || value < invested * 0.125) return invested / rate;
-  return shares;
+  const buy = getBuyRate(inv, rate);
+  return invested > 0 && buy > 0 ? invested / buy : 0;
+}
+
+export function getHoldingValue(inv, rate) {
+  return getHoldingShares(inv, rate) * (Number(rate) || 0);
 }
 
 /** 株全体の現在価値。stockCap を超えた値上がり分は反映しない。 */

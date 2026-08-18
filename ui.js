@@ -1,7 +1,7 @@
-import { state } from './state.js?v=153';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares, getMarketSheetInfo } from './utils.js?v=153';
-import { refreshTutorial } from './tutorial.js?v=153';
-import { auth } from './firebase.js?v=153';
+import { state } from './state.js?v=154';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares, getMarketSheetInfo } from './utils.js?v=154';
+import { refreshTutorial } from './tutorial.js?v=154';
+import { auth } from './firebase.js?v=154';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -781,6 +781,13 @@ function renderModal(content) {
   `;
 }
 
+function formatQuote(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v) || v <= 0) return '-';
+  if (v >= 1000) return Math.round(v).toLocaleString();
+  return v.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+}
+
 // ★ 投資画面：引数エラーを解消
 function renderInvest() {
   const curRates = getCurrentMarketRates();
@@ -815,7 +822,18 @@ function renderInvest() {
       ${rangeBtn('week', '1週間')}
       ${rangeBtn('month', '1か月')}
     </div>
-    <div class="w-full h-[180px] mb-6 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
+    <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
+    ${state.marketSheetStatus === 'ok' && tradeable.length ? `
+      <div class="grid grid-cols-4 gap-1 mb-3">
+        ${tradeable.map(name => {
+          const p = curRates[name];
+          return `<div class="text-center px-1 py-2 rounded-xl bg-[#f4f9f7] border border-[#eaf1ee]">
+            <p class="text-[9px] font-bold text-[#7a8f88]">${esc(MARKET_META[name]?.short || name)}</p>
+            <p class="text-[11px] font-black text-[#1c2b27] tabular-nums">${formatQuote(p)}</p>
+          </div>`;
+        }).join('')}
+      </div>
+    ` : ''}
     <p class="text-[9px] font-bold text-center mb-4 ${sheetInfo?.isStale ? 'text-amber-700' : (state.marketSheetStatus === 'ok' ? 'text-emerald-600' : 'text-[#7a8f88]')}">
       ${state.marketSheetStatus === 'ok'
         ? (sheetInfo?.isStale
@@ -849,9 +867,13 @@ function renderInvest() {
       ${state.investments.length > 0 ? state.investments.map(inv => {
         const meta = MARKET_META[inv.name] || { label: inv.name };
         const val = investmentValues[inv.id] || 0;
-        const diff = val - inv.investedPoints;
+        const invested = Number(inv.investedPoints) || 0;
+        const diff = val - invested;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
-        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
+        const price = rateForMarket(curRates, inv.name);
+        const pct = invested > 0 ? (100 * val / invested) - 100 : 0;
+        const pctText = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}（${pctText}）</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>購入額: ${inv.investedPoints} pt / いまの価格 ${formatQuote(price)}</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">現在、運用中の資産はありません</p>`}
     </div>
   `;
