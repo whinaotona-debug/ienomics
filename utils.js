@@ -1,4 +1,4 @@
-import { state } from './state.js?v=155';
+import { state } from './state.js?v=156';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -657,29 +657,30 @@ export function getMarketRates(range = 'month') {
 }
 
 /**
- * その日までに入れたptと、その日の終値で持っていたpt。
- * 最終点の「持っていた」は、カード／売却額と同じ計算（上限があれば切る）。
+ * 指定した銘柄の、その日の元本と運用資産。
+ * name が無いときは先頭の保有だけ（合計は出さない）。
  */
-export function getPortfolioHistory(investments, range = 'week', stockCap) {
+export function getPortfolioHistory(investments, range = 'week', name = null) {
   const rates = getMarketRates(range);
-  const cap = Number(stockCap);
-  const useCap = Number.isFinite(cap) && cap > 0;
-  const putIn = [];
-  const held = [];
+  const principal = [];
+  const assets = [];
+  const list = investments || [];
+  const targetName = name || list[0]?.name || null;
+  const selected = targetName ? list.filter(inv => inv.name === targetName) : [];
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
-    const owned = (investments || []).filter(inv => {
+    const owned = selected.filter(inv => {
       const created = Number(inv.createdAt) || 0;
       if (!created) return true;
       return japanDayStartMs(new Date(created)) <= japanDayStartMs(new Date(ms));
     });
     const dayRates = {};
-    for (const name of MARKET_ORDER) dayRates[name] = sheetRateAt(name, ms) ?? 1;
-    putIn.push(owned.reduce((sum, inv) => sum + (Number(inv.investedPoints) || 0), 0));
-    held.push(getInvestmentPortfolioValue(owned, dayRates, useCap ? cap : null));
+    for (const market of MARKET_ORDER) dayRates[market] = sheetRateAt(market, ms) ?? 1;
+    principal.push(owned.reduce((sum, inv) => sum + (Number(inv.investedPoints) || 0), 0));
+    assets.push(getInvestmentPortfolioValue(owned, dayRates, null));
   }
-  return { labels: rates.labels, putIn, held };
+  return { labels: rates.labels, principal, assets, name: targetName };
 }
 
 /** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */

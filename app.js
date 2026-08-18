@@ -1,10 +1,10 @@
-import { state } from './state.js?v=155';
-import { render } from './ui.js?v=155';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=155';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=155';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=155';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=155';
-import { db, auth } from './firebase.js?v=155';
+import { state } from './state.js?v=156';
+import { render } from './ui.js?v=156';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=156';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=156';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=156';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=156';
+import { db, auth } from './firebase.js?v=156';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -863,6 +863,11 @@ window.setView = (viewName) => {
 window.setInvestRange = (range) => {
   if (!['day', 'week', 'month'].includes(range)) return;
   state.investRange = range;
+  render();
+};
+
+window.setInvestChartName = (name) => {
+  state.investChartName = String(name || '') || null;
   render();
 };
 

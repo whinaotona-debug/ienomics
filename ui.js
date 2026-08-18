@@ -1,7 +1,7 @@
-import { state } from './state.js?v=155';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory } from './utils.js?v=155';
-import { refreshTutorial } from './tutorial.js?v=155';
-import { auth } from './firebase.js?v=155';
+import { state } from './state.js?v=156';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory } from './utils.js?v=156';
+import { refreshTutorial } from './tutorial.js?v=156';
+import { auth } from './firebase.js?v=156';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -797,6 +797,17 @@ function renderInvest() {
   };
   const tradeable = state.marketSheetStatus === 'ok' ? getTradeableMarkets() : [];
   const sheetInfo = state.marketSheetStatus === 'ok' ? getMarketSheetInfo() : null;
+  const heldNames = MARKET_ORDER.filter(name =>
+    (state.investments || []).some(inv => inv.name === name)
+  );
+  const chartName = heldNames.includes(state.investChartName)
+    ? state.investChartName
+    : (heldNames[0] || null);
+  const marketChip = (name) => {
+    const on = chartName === name;
+    const short = MARKET_META[name]?.short || name;
+    return `<button type="button" onclick="setInvestChartName('${name}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${esc(short)}</button>`;
+  };
   const buyButtons = tradeable.map(name => {
     const m = MARKET_META[name];
     return `<button type="button" onclick="investCustom('${m.id}')" class="solid-btn py-3 bg-white hover:bg-slate-50 font-bold text-[11px] shadow-sm border border-slate-200">${esc(m.buyLabel)}</button>`;
@@ -815,11 +826,16 @@ function renderInvest() {
       ${rangeBtn('week', '1週間')}
       ${rangeBtn('month', '1か月')}
     </div>
+    ${heldNames.length ? `
+      <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
+        ${heldNames.map(marketChip).join('')}
+      </div>
+    ` : ''}
     <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
     <p class="text-[9px] font-bold text-center mb-4 text-[#7a8f88]">
       ${(state.investments || []).length
-        ? 'その日に入れた額と、持っていた額（pt）'
-        : '株を買うと、入れた額と持っていた額のグラフが出ます'}
+        ? `${esc(MARKET_META[chartName]?.short || '')}の運用資産と元本（pt）`
+        : '株を買うと、運用資産と元本のグラフが出ます'}
     </p>
     ${stockCap != null ? `
       <div class="mb-4 px-4 py-3 rounded-xl border ${capReached ? 'bg-amber-50 border-amber-200' : 'bg-[#f4f9f7] border-[#eaf1ee]'}">
@@ -840,7 +856,7 @@ function renderInvest() {
         <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full min-w-0 max-w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
         <div class="grid grid-cols-2 gap-2">${buyButtons || `<p class="text-[10px] font-bold text-slate-400 col-span-2 text-center">表に日本・アメリカなどの列がありません</p>`}</div>
       </div>`)
-    ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">期間を切り替えて、入れた額と持っていた額を確認できます</p>`}
+    ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">銘柄を選んで、運用資産と元本を確認できます</p>`}
     <div class="space-y-3">
       ${state.investments.length > 0 ? state.investments.map(inv => {
         const meta = MARKET_META[inv.name] || { label: inv.name };
@@ -848,7 +864,8 @@ function renderInvest() {
         const invested = Number(inv.investedPoints) || 0;
         const diff = val - invested;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
-        return `<div class="p-4 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-2"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right flex items-baseline gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>入れた額: ${invested.toLocaleString()} pt</span>${state.role === 'child' ? `<button onclick="sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
+        const selected = chartName === inv.name;
+        return `<div class="p-4 rounded-xl border flex flex-col gap-2 ${selected ? 'bg-[#f4f9f7] border-[#2f8f82]/30' : 'bg-slate-50 border-slate-100'}" onclick="setInvestChartName('${inv.name}')"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right"><p class="text-[9px] font-bold text-slate-400">運用資産</p><div class="flex items-baseline justify-end gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>元本: ${invested.toLocaleString()} pt</span>${state.role === 'child' ? `<button onclick="event.stopPropagation(); sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">現在、運用中の資産はありません</p>`}
     </div>
   `;
@@ -1290,11 +1307,15 @@ export function drawInvestChart() {
 
   const isDetail = state.view === 'invest';
   const range = isDetail ? (state.investRange || 'week') : 'week';
-  const history = getPortfolioHistory(
-    state.investments,
-    range,
-    Number(state.stockCap) > 0 ? Number(state.stockCap) : null
+  const names = MARKET_ORDER.filter(name =>
+    (state.investments || []).some(inv => inv.name === name)
   );
+  const chartName = isDetail
+    ? (names.includes(state.investChartName) ? state.investChartName : names[0] || null)
+    : (names[0] || null);
+  const history = getPortfolioHistory(state.investments, range, chartName);
+  const meta = MARKET_META[chartName];
+  const color = meta?.color || '#2f8f82';
   const ctx = canvas.getContext('2d');
 
   if (investChartInstance) investChartInstance.destroy();
@@ -1306,18 +1327,18 @@ export function drawInvestChart() {
       labels: history.labels,
       datasets: [
         {
-          label: '持っていた',
-          data: history.held,
-          borderColor: '#2f8f82',
-          backgroundColor: '#2f8f8214',
+          label: '運用資産',
+          data: history.assets,
+          borderColor: color,
+          backgroundColor: color + '14',
           borderWidth: 1.5,
           tension: 0.2,
           pointRadius: isDetail ? 2 : 0,
           fill: isDetail
         },
         {
-          label: '入れた',
-          data: history.putIn,
+          label: '元本',
+          data: history.principal,
           borderColor: '#94a3b8',
           backgroundColor: 'transparent',
           borderWidth: 1.5,

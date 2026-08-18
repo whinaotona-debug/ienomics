@@ -18,6 +18,7 @@ export const state = {
   editingTemplateId: null,
   editingPaymentId: null,
   investRange: 'week', // 'day' | 'week' | 'month'
+  investChartName: null, // グラフで見る銘柄。null なら先頭の保有
   // 月間予定カレンダー（日本時間の年月。selectedDay は 1〜31 か null）
   calendarYear: null,
   calendarMonth: null, // 1〜12
