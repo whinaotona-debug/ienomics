@@ -1,4 +1,4 @@
-import { state } from './state.js?v=148';
+import { state } from './state.js?v=149';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -463,10 +463,63 @@ function parseSheetDate(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+const MARKET_BASE_KEY = 'ienomics_market_bases_v1';
+/** 1日でこれ以上動いた点は表のズレ・欠測とみなして捨てる（原油でも一晩5倍はあり得ない） */
+const MAX_DAY_MOVE = 0.25;
+
+function loadMarketBases() {
+  try {
+    const raw = localStorage.getItem(MARKET_BASE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveMarketBases(bases) {
+  try {
+    localStorage.setItem(MARKET_BASE_KEY, JSON.stringify(bases));
+  } catch {}
+}
+
+function medianPrice(prices) {
+  const s = prices.filter(n => n > 0).sort((a, b) => a - b);
+  if (!s.length) return 0;
+  return s[Math.floor(s.length / 2)];
+}
+
+/** 前後の終値から大きく飛んだ日は、列ズレや欠測なので使わない */
+function scrubPricePoints(points) {
+  if (points.length < 3) return points;
+  const med = medianPrice(points.map(p => p.price));
+  const cleaned = [];
+  for (const p of points) {
+    if (med > 0 && (p.price > med * 2 || p.price < med * 0.5)) continue;
+    const prev = cleaned[cleaned.length - 1];
+    if (prev && (p.price > prev.price * (1 + MAX_DAY_MOVE) || p.price < prev.price * (1 - MAX_DAY_MOVE))) {
+      continue;
+    }
+    cleaned.push(p);
+  }
+  return cleaned.length >= 2 ? cleaned : points;
+}
+
+function stableBaseFor(name, prices) {
+  const bases = loadMarketBases();
+  const existing = Number(bases[name]);
+  if (existing > 0) return existing;
+  const base = medianPrice(prices);
+  if (base > 0) {
+    bases[name] = base;
+    saveMarketBases(bases);
+  }
+  return base || 1;
+}
+
 /**
  * CSVの本文から、市場ごとの値動きを取り出す。
- * 値は「いちばん古い行を1.0」とした倍率にする。
- * 生の株価をそのまま倍率にすると、持ち株の評価額が桁違いに変わってしまうため。
+ * 倍率は「端末に一度決めた基準値＝1.0」で、表の先頭行が毎日ずれても変わらない。
  */
 export function parseMarketSheetCsv(text) {
   const rows = parseCsv(String(text || ''));
@@ -492,10 +545,11 @@ export function parseMarketSheetCsv(text) {
       const ms = dateIndex >= 0 ? parseSheetDate(rows[r][dateIndex]) : r;
       points.push({ ms: ms ?? r, price });
     }
-    if (points.length < 2) continue;
     points.sort((a, b) => a.ms - b.ms);
-    const base = points[0].price;
-    series[name] = points.map(p => ({ ms: p.ms, rate: p.price / base, price: p.price }));
+    const cleaned = scrubPricePoints(points);
+    if (cleaned.length < 2) continue;
+    const base = stableBaseFor(name, cleaned.map(p => p.price));
+    series[name] = cleaned.map(p => ({ ms: p.ms, rate: p.price / base, price: p.price }));
   }
   if (!Object.keys(series).length) throw new Error('数字の入った行が見つかりません');
   return series;
@@ -532,12 +586,21 @@ export function rateForMarket(rates, name) {
   return Number.isFinite(r) && r > 0 ? r : 1;
 }
 
+/** 基準がずれた古い持ち株は、購入額から実変動だけ乗せる */
+export function getHoldingShares(inv, rate) {
+  const invested = Number(inv.investedPoints) || 0;
+  const shares = Number(inv.shares) || (rate > 0 ? invested / rate : 0);
+  if (!(invested > 0) || !(rate > 0)) return shares;
+  const value = shares * rate;
+  if (value > invested * 1.8 || value < invested * 0.55) return invested / rate;
+  return shares;
+}
+
 /** 株全体の現在価値。stockCap を超えた値上がり分は反映しない。 */
 export function getInvestmentPortfolioValue(investments, rates, stockCap) {
   const raw = (investments || []).reduce((sum, inv) => {
     const rate = rateForMarket(rates, inv.name);
-    const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / rate);
-    return sum + shares * rate;
+    return sum + getHoldingShares(inv, rate) * rate;
   }, 0);
   const cap = Number(stockCap);
   return Math.round(Number.isFinite(cap) && cap > 0 ? Math.min(raw, cap) : raw);
@@ -547,8 +610,7 @@ export function getInvestmentPortfolioValue(investments, rates, stockCap) {
 export function getInvestmentValues(investments, rates, stockCap) {
   const rows = (investments || []).map(inv => {
     const rate = rateForMarket(rates, inv.name);
-    const shares = Number(inv.shares) || ((Number(inv.investedPoints) || 0) / rate);
-    return { id: inv.id, raw: shares * rate };
+    return { id: inv.id, raw: getHoldingShares(inv, rate) * rate };
   });
   const rawTotal = rows.reduce((sum, row) => sum + row.raw, 0);
   const cap = Number(stockCap);

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=148';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets } from './utils.js?v=148';
-import { refreshTutorial } from './tutorial.js?v=148';
-import { auth } from './firebase.js?v=148';
+import { state } from './state.js?v=149';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getMarketRates, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, rateForMarket, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getHoldingShares } from './utils.js?v=149';
+import { refreshTutorial } from './tutorial.js?v=149';
+import { auth } from './firebase.js?v=149';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1289,7 +1289,7 @@ export function drawInvestChart() {
   for (const name of MARKET_ORDER) {
     const inv = (state.investments || []).find(i => i.name === name);
     holdings[name] = inv
-      ? (inv.shares || (inv.investedPoints / rateForMarket(cur, name)))
+      ? getHoldingShares(inv, rateForMarket(cur, name))
       : 0;
   }
   const hasAny = MARKET_ORDER.some(name => holdings[name] > 0);
@@ -1311,7 +1311,10 @@ export function drawInvestChart() {
       datasets: chartMarkets.map(name => {
         const meta = MARKET_META[name];
         const series = showIndex
-          ? rates[name].map(r => Math.round(100 * r))
+          ? rates[name].map(r => {
+              const start = rates[name].find(v => v > 0) || 1;
+              return Math.round(100 * r / start);
+            })
           : rates[name].map((r, index) => {
               const rawTotal = MARKET_ORDER.reduce(
                 (sum, market) => sum + holdings[market] * rates[market][index],
