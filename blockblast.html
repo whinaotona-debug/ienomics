@@ -467,12 +467,6 @@
     }
     .home-grid .play { margin-top: 0; font-size: 15px; padding: 12px 8px; }
     .streak { color: #ffd24a; font-size: 13px; margin-top: 10px; }
-    .mid-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: center;
-      gap: 6px;
-    }
     #ai-line { margin: 6px 2px 4px; }
     .sheet {
       position: absolute; inset: 0;
@@ -925,10 +919,7 @@
       </div>
     </div>
 
-    <div class="mid-row">
-      <div id="ai-line">3つのブロックを盤面に置いて、行と列を消そう</div>
-      <button class="icon" id="btnUndo" title="ひとつ戻す" disabled>↩</button>
-    </div>
+    <div id="ai-line">3つのブロックを盤面に置いて、行と列を消そう</div>
     <div class="tray" id="tray"></div>
     <div class="controls">
       <button class="ai" id="btnAi">AI配置</button>
@@ -983,7 +974,7 @@
   <div id="howto">
     <div class="modal">
       <div class="logo" style="font-size:28px">あそびかた</div>
-      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。ひとつ戻すは、配られた3つのうち最後の1手だけ。<br><br>ショップの見た目は点数に影響しないよ。</p>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。<br><br>ショップの見た目は点数に影響しないよ。</p>
       <button class="play" id="btnHowClose">とじる</button>
     </div>
   </div>
@@ -1228,8 +1219,6 @@
     while (bestShapes.length < 3) bestShapes.push(ranked[0].shape);
 
     state.tray = bestShapes.map((shape, i) => ({ shape, color: colors[i] }));
-    state.undo = null;
-    setUndo(false);
     SFX.deal();
   }
 
@@ -1269,8 +1258,7 @@
     shopTabs: document.getElementById("shopTabs"),
     shopGrid: document.getElementById("shopGrid"),
     missionList: document.getElementById("missionList"),
-    recordList: document.getElementById("recordList"),
-    btnUndo: document.getElementById("btnUndo")
+    recordList: document.getElementById("recordList")
   };
 
   const CATALOG = {
@@ -1692,39 +1680,6 @@
       });
     }
   }
-  function snapshot() {
-    return {
-      occ: Uint8Array.from(state.occ),
-      color: Uint8Array.from(state.color),
-      tray: state.tray.map(p => p ? { shape: p.shape, color: p.color } : null),
-      score: state.score,
-      combo: state.combo,
-      misses: state.misses
-    };
-  }
-  function setUndo(on) {
-    state.canUndo = !!on;
-    if (el.btnUndo) el.btnUndo.disabled = !on;
-  }
-  function undoMove() {
-    if (!state.canUndo || !state.undo || state.busy || state.over || state.auto) return;
-    const u = state.undo;
-    state.occ = Uint8Array.from(u.occ);
-    state.color = Uint8Array.from(u.color);
-    state.tray = u.tray.map(p => p ? { shape: p.shape, color: p.color } : null);
-    state.score = u.score;
-    state.combo = u.combo;
-    state.misses = u.misses;
-    state.hint = null;
-    state.undo = null;
-    setUndo(false);
-    renderBoard();
-    renderTray();
-    renderHUD();
-    el.aiLine.textContent = "1手戻したよ";
-    SFX.ensure();
-    SFX.pickup();
-  }
   async function shareScore() {
     const text = "BLOCK BLAST\nスコア " + state.score + "（" + rankName(state.score) + "）\nBEST " + save.best + "\nhttps://whinaotona-debug.github.io/ienomics/blockblast.html";
     try {
@@ -1845,9 +1800,7 @@
     muted: false,
     hint: null,
     drag: null,
-    usedAi: false,
-    undo: null,
-    canUndo: false
+    usedAi: false
   };
   el.best.textContent = state.best;
   document.getElementById("btnHome").innerHTML = UI_ICO.home;
@@ -2477,11 +2430,6 @@
     if (!piece || state.over) return false;
     if (!canPlace(state.occ, piece.shape.cells, r, c)) return false;
 
-    if (!state.auto && !state.busy) {
-      state.undo = snapshot();
-      setUndo(true);
-    } else setUndo(false);
-
     const res = applyPlace(state.occ, piece.shape.cells, r, c);
     const sc = scoreMove(piece.shape.n, res.lines, res.clearedN, res.empty, state.combo, state.misses);
     const placed = [];
@@ -2583,7 +2531,6 @@
 
   function markAi() {
     state.usedAi = true;
-    setUndo(false);
     el.coinWarn.textContent = "AI使用中 — このプレイはコインなし";
   }
 
@@ -2591,7 +2538,6 @@
     if (state.over) return;
     state.over = true;
     state.auto = false;
-    setUndo(false);
     document.getElementById("btnAuto").textContent = "おまかせ";
     SFX.over();
     el.endScore.textContent = state.score;
@@ -2629,8 +2575,6 @@
     state.auto = false;
     state.hint = null;
     state.usedAi = false;
-    state.undo = null;
-    setUndo(false);
     document.getElementById("btnAuto").textContent = "おまかせ";
     el.overlay.style.display = "none";
     el.coinWarn.textContent = "";
@@ -2830,7 +2774,6 @@
   document.getElementById("btnShopClose").onclick = () => el.shop.classList.remove("show");
   document.getElementById("btnHow").onclick = () => { el.howto.style.display = "flex"; };
   document.getElementById("btnHowClose").onclick = () => { el.howto.style.display = "none"; };
-  document.getElementById("btnUndo").onclick = () => undoMove();
   document.getElementById("btnShare").onclick = () => shareScore();
   document.getElementById("btnMissions").onclick = () => { el.missions.classList.add("show"); renderMissions(); };
   document.getElementById("btnMissionsClose").onclick = () => el.missions.classList.remove("show");
