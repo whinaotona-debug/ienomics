@@ -1,4 +1,4 @@
-import { state } from './state.js?v=164';
+import { state } from './state.js?v=165';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -736,6 +736,30 @@ export function getInvestmentValues(investments, rates, stockCap) {
   return Object.fromEntries(rows.map(row => [row.id, Math.round(row.raw * scale)]));
 }
 
+/** 長い時系列を、先頭・末尾を残して最大 maxN 点に間引く */
+function thinSeries(points, maxN = 56) {
+  if (!Array.isArray(points) || points.length === 0) return [];
+  if (points.length <= maxN) return points.slice();
+  const out = [];
+  const last = points.length - 1;
+  let prevIdx = -1;
+  for (let i = 0; i < maxN; i++) {
+    const idx = Math.round((i * last) / (maxN - 1));
+    if (idx === prevIdx) continue;
+    out.push(points[idx]);
+    prevIdx = idx;
+  }
+  return out;
+}
+
+/** 期間の長さに合わせて軸ラベルを変える（1日〜数年でも読めるように） */
+function chartDateLabel(ms, spanDays) {
+  const j = japanParts(new Date(ms));
+  if (spanDays >= 365) return `${j.year}/${j.month}`;
+  if (spanDays >= 90) return `${j.month}/${j.day}`;
+  return `${j.month}/${j.day}`;
+}
+
 export function getMarketRates(range = 'month') {
   const now = new Date();
   const rates = { labels: [], ms: [] };
@@ -750,13 +774,26 @@ export function getMarketRates(range = 'month') {
   if (range === 'week') steps = 7;
   else if (range === 'month') steps = 30;
   else if (range === 'all') steps = reference ? reference.length : 120;
-  else steps = 7; // 未知の指定は1週間
+  else steps = 7;
 
   if (reference) {
-    const points = range === 'all' ? reference : reference.slice(-steps);
+    let points = range === 'all' ? reference.slice() : reference.slice(-steps);
+    // 全期間: 点が多すぎると潰れるので自動で間引く。少なすぎる（1日だけ等）は2点にして線が見えるようにする
+    if (range === 'all') {
+      points = thinSeries(points, 56);
+    }
+    if (points.length === 1) {
+      const only = points[0];
+      points = [
+        { ...only, ms: only.ms - 86400000 },
+        only
+      ];
+    }
+    const spanDays = points.length >= 2
+      ? Math.max(1, Math.round((points[points.length - 1].ms - points[0].ms) / 86400000))
+      : 1;
     for (const p of points) {
-      const j = japanParts(new Date(p.ms));
-      rates.labels.push(`${j.month}/${j.day}`);
+      rates.labels.push(chartDateLabel(p.ms, spanDays));
       rates.ms.push(p.ms);
       for (const name of MARKET_ORDER) {
         const fallback = sheetLatestRate(name) ?? 1;

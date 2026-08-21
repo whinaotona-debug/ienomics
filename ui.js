@@ -1,7 +1,7 @@
-import { state } from './state.js?v=164';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=164';
-import { refreshTutorial } from './tutorial.js?v=164';
-import { auth } from './firebase.js?v=164';
+import { state } from './state.js?v=165';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=165';
+import { refreshTutorial } from './tutorial.js?v=165';
+import { auth } from './firebase.js?v=165';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1300,7 +1300,11 @@ export function drawInvestChart() {
 
   if (investChartInstance) investChartInstance.destroy();
 
-  const maxTicks = range === 'all' ? 8 : (range === 'month' ? 6 : 7);
+  const maxTicks = range === 'all'
+    ? Math.min(8, Math.max(3, history.labels.length))
+    : (range === 'month' ? 6 : 7);
+  const fewPoints = history.labels.length <= 3;
+  const pointRadius = isDetail ? (fewPoints ? 4 : (history.labels.length > 40 ? 0 : 2)) : 0;
   investChartInstance = new Chart(ctx, {
     type: 'line',
     data: {
@@ -1312,8 +1316,8 @@ export function drawInvestChart() {
           borderColor: color,
           backgroundColor: color + '14',
           borderWidth: 1.5,
-          tension: 0.2,
-          pointRadius: isDetail ? 2 : 0,
+          tension: fewPoints ? 0 : 0.2,
+          pointRadius,
           fill: isDetail
         },
         {
@@ -1324,7 +1328,7 @@ export function drawInvestChart() {
           borderWidth: 1.5,
           borderDash: [5, 4],
           tension: 0,
-          pointRadius: isDetail ? 2 : 0,
+          pointRadius,
           fill: false
         }
       ]
@@ -1357,7 +1361,8 @@ export function drawInvestChart() {
             font: { size: 9 },
             color: '#94a3b8',
             maxTicksLimit: maxTicks,
-            autoSkip: true
+            autoSkip: true,
+            maxRotation: range === 'all' ? 0 : 0
           }
         },
         y: {
@@ -1380,7 +1385,7 @@ function renderBalloonSend() {
     <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
       <div class="w-4 h-4 text-[#2f8f82]">${getIcon('gift')}</div>${rb('ギフト送信','ぎふとそうしん')}
     </h2>
-    <input type="number" id="balloon-points" placeholder="プレゼントするポイント" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
+    <input type="number" id="balloon-points" placeholder="プレゼントする金額（円）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
     <textarea id="balloon-message" placeholder="メッセージを入力" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm h-24 resize-none focus:outline-none focus:border-slate-400"></textarea>
     <button onclick="sendBalloon()" class="solid-btn primary-btn w-full py-4 font-bold">送る</button>
   `;
