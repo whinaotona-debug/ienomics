@@ -1,4 +1,4 @@
-import { state } from './state.js?v=165';
+import { state } from './state.js?v=166';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -752,15 +752,37 @@ function thinSeries(points, maxN = 56) {
   return out;
 }
 
-/** 期間の長さに合わせて軸ラベルを変える（1日〜数年でも読めるように） */
-function chartDateLabel(ms, spanDays) {
+/** 軸ラベルは常に 月/日（〇/〇） */
+function chartDayLabel(ms) {
   const j = japanParts(new Date(ms));
-  if (spanDays >= 365) return `${j.year}/${j.month}`;
-  if (spanDays >= 90) return `${j.month}/${j.day}`;
   return `${j.month}/${j.day}`;
 }
 
-export function getMarketRates(range = 'month') {
+/** その銘柄（または全体）で最初に運用を始めた時刻 */
+function firstInvestMs(investments, logs, name = null) {
+  let min = null;
+  const consider = (t) => {
+    const n = Number(t) || 0;
+    if (!n) return;
+    if (min == null || n < min) min = n;
+  };
+  for (const inv of investments || []) {
+    if (name && inv.name !== name) continue;
+    consider(inv.createdAt);
+  }
+  for (const log of logs || []) {
+    if (name && log.name !== name) continue;
+    consider(log.at);
+  }
+  return min;
+}
+
+/**
+ * 市場レートの時系列。
+ * range: 'week' | 'month' | 'all'
+ * opts.fromMs: 全期間の開始（運用開始日）。未指定なら表の先頭から。
+ */
+export function getMarketRates(range = 'month', opts = {}) {
   const now = new Date();
   const rates = { labels: [], ms: [] };
   for (const name of MARKET_ORDER) rates[name] = [];
@@ -770,30 +792,14 @@ export function getMarketRates(range = 'month') {
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)[0];
 
-  let steps = 30;
-  if (range === 'week') steps = 7;
-  else if (range === 'month') steps = 30;
-  else if (range === 'all') steps = reference ? reference.length : 120;
-  else steps = 7;
-
-  if (reference) {
-    let points = range === 'all' ? reference.slice() : reference.slice(-steps);
-    // 全期間: 点が多すぎると潰れるので自動で間引く。少なすぎる（1日だけ等）は2点にして線が見えるようにする
-    if (range === 'all') {
-      points = thinSeries(points, 56);
+  const fillRates = (points) => {
+    let pts = points;
+    if (pts.length === 1) {
+      const only = pts[0];
+      pts = [{ ms: only.ms - 86400000 }, only];
     }
-    if (points.length === 1) {
-      const only = points[0];
-      points = [
-        { ...only, ms: only.ms - 86400000 },
-        only
-      ];
-    }
-    const spanDays = points.length >= 2
-      ? Math.max(1, Math.round((points[points.length - 1].ms - points[0].ms) / 86400000))
-      : 1;
-    for (const p of points) {
-      rates.labels.push(chartDateLabel(p.ms, spanDays));
+    for (const p of pts) {
+      rates.labels.push(chartDayLabel(p.ms));
       rates.ms.push(p.ms);
       for (const name of MARKET_ORDER) {
         const fallback = sheetLatestRate(name) ?? 1;
@@ -801,16 +807,58 @@ export function getMarketRates(range = 'month') {
       }
     }
     return rates;
+  };
+
+  if (range === 'all') {
+    const end = japanDayStartMs(now);
+    let start = opts.fromMs != null
+      ? japanDayStartMs(new Date(opts.fromMs))
+      : (reference?.[0]?.ms ?? end);
+    if (start > end) start = end;
+
+    // 始めた日〜今日のカレンダーを作り、見やすい点数に間引く（5年でも〇/〇で読める）
+    const dayPoints = [];
+    for (let ms = start; ms <= end; ms += 86400000) {
+      dayPoints.push({ ms });
+    }
+    // 相場表にある日があれば優先して密度を保つが、開始日より前は切る
+    let points = dayPoints;
+    if (reference?.length) {
+      const fromSheet = reference.filter(p => p.ms >= start && p.ms <= end + 86399999);
+      // 表が開始日以降を十分カバーしているときだけ表を使う
+      if (fromSheet.length >= 2) {
+        const sheetStart = fromSheet[0].ms;
+        // 開始日が表より前なら、開始日〜表の直前を日次で足す
+        if (sheetStart > start) {
+          const head = [];
+          for (let ms = start; ms < sheetStart; ms += 86400000) head.push({ ms });
+          points = thinSeries(head.concat(fromSheet), 56);
+        } else {
+          points = thinSeries(fromSheet, 56);
+        }
+      } else {
+        points = thinSeries(dayPoints, 56);
+      }
+    } else {
+      points = thinSeries(dayPoints, 56);
+    }
+    return fillRates(points);
   }
 
-  for (let i = steps - 1; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86400000);
-    const j = japanParts(d);
-    rates.labels.push(`${j.month}/${j.day}`);
-    rates.ms.push(japanDayStartMs(d));
-    for (const name of MARKET_ORDER) rates[name].push(sheetLatestRate(name) ?? 1);
+  let steps = 30;
+  if (range === 'week') steps = 7;
+  else if (range === 'month') steps = 30;
+  else steps = 7;
+
+  if (reference) {
+    return fillRates(reference.slice(-steps));
   }
-  return rates;
+
+  const fallbackPts = [];
+  for (let i = steps - 1; i >= 0; i--) {
+    fallbackPts.push({ ms: japanDayStartMs(new Date(now.getTime() - i * 86400000)) });
+  }
+  return fillRates(fallbackPts);
 }
 
 /** いま運用中の株だけ（売却済みは除く） */
@@ -879,13 +927,14 @@ function positionFromInvestments(investments, name, dayMs) {
  * 売却済みの保有も含めて再現する（売って消さない前提）。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
-  const rates = getMarketRates(range);
-  const principal = [];
-  const assets = [];
   const list = investments || [];
   const logList = logs || [];
   const names = getChartMarketNames(list, logList);
   const targetName = (name && names.includes(name)) ? name : (names[0] || null);
+  const fromMs = range === 'all' ? firstInvestMs(list, logList, targetName) : null;
+  const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
+  const principal = [];
+  const assets = [];
   const hasLogs = targetName
     ? logList.some(l => l.name === targetName)
     : false;
@@ -899,7 +948,7 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
     principal.push(Math.round(pos.principal));
     assets.push(Math.round(pos.shares * price));
   }
-  return { labels: rates.labels, principal, assets, name: targetName };
+  return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName };
 }
 
 /** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */

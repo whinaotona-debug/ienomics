@@ -1,0 +1,14 @@
+---
+description: 変更後は言われなくても GitHub に公開する
+alwaysApply: true
+---
+
+# 公開（ienomics）
+
+アプリの修正・改善を入れたら、ユーザーに「公開して」と言われなくても次を行う。
+
+1. キャッシュバスティングのバージョンを上げる（`sw.js` の `VERSION` と各 `?v=`）
+2. 関係ファイルを commit する
+3. `git push origin HEAD` で GitHub Pages に反映する
+
+コミットメッセージはリポジトリの文体に合わせ、日本語で短く「なぜ」を書く。

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=165';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=165';
-import { refreshTutorial } from './tutorial.js?v=165';
-import { auth } from './firebase.js?v=165';
+import { state } from './state.js?v=166';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=166';
+import { refreshTutorial } from './tutorial.js?v=166';
+import { auth } from './firebase.js?v=166';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1349,6 +1349,13 @@ export function drawInvestChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
+            title: (items) => {
+              const i = items?.[0]?.dataIndex;
+              const ms = history.ms?.[i];
+              if (!ms) return items?.[0]?.label || '';
+              const j = japanParts(new Date(ms));
+              return `${j.year}/${j.month}/${j.day}`;
+            },
             label: (item) => `${item.dataset.label}: ${Number(item.parsed.y).toLocaleString()} 円`
           }
         }
