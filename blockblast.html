@@ -2669,9 +2669,9 @@
     geminiExplain(plan).then(text => {
       if (tok !== hintTok) return;
       if (text) paintHint(text, "");
-    }).catch(() => {
+    }).catch((e) => {
       if (tok !== hintTok) return;
-      paintHint(local, "Geminiに繋がらなかった");
+      paintHint(local, (e && e.message) ? String(e.message).slice(0, 90) : "Geminiに繋がらなかった");
     });
   }
 
@@ -2680,12 +2680,22 @@
   function gemDefault() {
     return ["AQ.Ab8RN6IN", "hITjCWRZwy3B", "vfDCL2b5k9OD", "rtdKXdShfQtS", "min7kg"].join("");
   }
-  function getGeminiKey() {
+  function gemFallback() {
+    return ["AIzaSyA57yX", "g46NjGVue3WUK", "-jbZ68hwQwdLA-g"].join("");
+  }
+  function geminiKeys() {
+    const out = [];
     try {
       const saved = (localStorage.getItem(GEM_LS) || "").trim();
-      if (saved) return saved;
+      if (saved) out.push(saved);
     } catch (e) {}
-    return gemDefault();
+    const d = gemDefault(), f = gemFallback();
+    if (out.indexOf(d) < 0) out.push(d);
+    if (out.indexOf(f) < 0) out.push(f);
+    return out;
+  }
+  function getGeminiKey() {
+    return geminiKeys()[0] || "";
   }
   function setGeminiKey(k) {
     try { localStorage.setItem(GEM_LS, String(k || "").trim()); }
@@ -2735,9 +2745,76 @@
     const h = c < 3 ? "左" : c > 4 ? "右" : "中央";
     return v + "の" + h + "（行" + (r + 1) + "・列" + (c + 1) + "、左上原点）";
   }
+  function geminiText(json) {
+    const parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
+    const a = parts.map(p => p.text || "").join("").trim();
+    if (a) return a;
+    let t = "";
+    const steps = json.steps || json.outputs || [];
+    for (const s of steps) {
+      if (!s) continue;
+      if (s.type === "model_output" || s.type === "text") {
+        const c = s.content != null ? s.content : s.text;
+        if (typeof c === "string") t += c;
+        else if (Array.isArray(c)) t += c.map(x => (x && x.text) || "").join("");
+      }
+    }
+    return t.trim();
+  }
+  function gemErr(msg, status) {
+    const m = String(msg || "");
+    if (status === 401 || /UNAUTHENTICATED|ACCESS_TOKEN/i.test(m)) return "キーが新しい形式で弾かれた。ホームでAIzaから始まるキーに変えて";
+    if (status === 429) return "回数制限。少し待って";
+    if (status === 404 || /not found|no longer available/i.test(m)) return "モデルが見つからない";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "通信できなかった。ネットとLINEの更新を確認して";
+    return (m || "Geminiに繋がらなかった").slice(0, 80);
+  }
+  async function geminiOnce(key, prompt) {
+    const models = ["gemini-3.5-flash"];
+    let last = { status: 0, msg: "" };
+    for (const model of models) {
+      try {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key, "Api-Revision": "2026-05-20" },
+          body: JSON.stringify({ model, input: prompt })
+        });
+        const json = await res.json().catch(() => ({}));
+        last = { status: res.status, msg: (json.error && json.error.message) || "" };
+        if (res.ok) {
+          const text = geminiText(json);
+          if (text) return text;
+        }
+        if (res.status === 401 || res.status === 403) break;
+      } catch (e) {
+        last = { status: 0, msg: e.message || "fetch" };
+      }
+    }
+    for (const model of models) {
+      try {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 320 }
+          })
+        });
+        const json = await res.json().catch(() => ({}));
+        last = { status: res.status, msg: (json.error && json.error.message) || "" };
+        if (res.ok) {
+          const text = geminiText(json);
+          if (text) return text;
+        }
+        if (res.status === 401 || res.status === 403) break;
+        if (res.status !== 404) continue;
+      } catch (e) {
+        last = { status: 0, msg: e.message || "fetch" };
+      }
+    }
+    throw new Error(gemErr(last.msg, last.status));
+  }
   async function geminiExplain(plan) {
-    const key = getGeminiKey();
-    if (!key) return "";
     const slots = ["左", "まんなか", "右"];
     const pieces = state.tray.map((p, i) => p
       ? (slots[i] + ": " + namePieceHint(p.shape) + " cells=" + JSON.stringify(p.shape.cells))
@@ -2760,30 +2837,13 @@
       "短い理由: " + local,
       "日本語で3〜6文。1手目はどこに何を置くか、2手目3手目の順、なぜその順か、コンボの危険、穴や次に気をつけることを具体的に。絵文字なし。採用手と違う場所を言わない。"
     ].join("\n");
-    const body = JSON.stringify({
-      systemInstruction: { parts: [{ text: "あなたはBlock Blastのコーチ。与えられた採用手の座標を変えない。日本語のみ。" }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3, maxOutputTokens: 320 }
-    });
-    const models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
     let lastErr = "";
-    for (const model of models) {
-      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-        body
-      });
-      if (res.status === 404) continue;
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        lastErr = (json.error && json.error.message) || String(res.status);
-        continue;
-      }
-      const parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
-      const text = parts.map(part => part.text || "").join("").trim();
-      if (text) return text;
+    const keys = geminiKeys();
+    for (const key of keys) {
+      try { return await geminiOnce(key, prompt); }
+      catch (e) { lastErr = e.message || lastErr; }
     }
-    throw new Error(lastErr || "no text");
+    throw new Error(lastErr || "Geminiに繋がらなかった");
   }
   function openGemini() {
     el.gemini.style.display = "flex";
