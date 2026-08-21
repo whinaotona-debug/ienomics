@@ -155,7 +155,7 @@ exports.onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
     await notify(
       t.familyCode, 'child',
       '新しいお仕事！',
-      `「${t.title}」（${points}pt）が発注されました`,
+      `「${t.title}」（${points}円）が発注されました`,
       'task-open'
     );
   } else if (t.status === 'accepted' && (t.autoAccepted || t.generatedKey)) {
@@ -163,7 +163,7 @@ exports.onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
     await notify(
       t.familyCode, 'child',
       '今日の定期のお仕事',
-      `「${t.title}」（${points}pt）が始まりました。終わったら完了を押してね`,
+      `「${t.title}」（${points}円）が始まりました。終わったら完了を押してね`,
       'task-repeat'
     );
   } else if (t.status === 'proposed') {
@@ -171,7 +171,7 @@ exports.onTaskCreated = onDocumentCreated('tasks/{taskId}', async (event) => {
     await notify(
       t.familyCode, 'parent',
       '見積りが届きました',
-      `${name}さんから「${t.title}」（希望 ${points}pt）`,
+      `${name}さんから「${t.title}」（希望 ${points}円）`,
       'task-proposed'
     );
   }
@@ -207,7 +207,7 @@ exports.onTaskUpdated = onDocumentUpdated('tasks/{taskId}', async (event) => {
   }
   // 親が承認してポイントを付与した
   if (before.status === 'completed' && after.status === 'approved') {
-    return notify(code, 'child', 'お仕事が承認されました！', `「${title}」で ${points}pt ゲット！`, 'task-paid');
+    return notify(code, 'child', 'お仕事が承認されました！', `「${title}」で ${points}円 ゲット！`, 'task-paid');
   }
   // 子供が受注した
   if (before.status === 'open' && after.status === 'accepted') {
@@ -226,7 +226,7 @@ exports.onGiftCreated = onDocumentCreated('balloons/{giftId}', async (event) => 
   const g = event.data?.data();
   if (!g || !g.familyCode) return;
   const points = Number(g.points) || 0;
-  const body = g.message ? `「${g.message}」 +${points}pt` : `ボーナス ${points}pt が届きました`;
+  const body = g.message ? `「${g.message}」 +${points}円` : `ボーナス ${points}円 が届きました`;
   await notify(g.familyCode, 'child', 'ギフトが届きました', body, 'gift');
 });
 
@@ -265,8 +265,8 @@ exports.onPaymentCharged = onDocumentCreated('paymentLogs/{logId}', async (event
   const amount = Number(l.amount) || 0;
   const title = l.wentNegative ? '支払い引落（残高不足）' : '支払いが引き落とされました';
   const body = l.wentNegative
-    ? `「${l.title}」 −${amount}pt。口座がマイナスになりました`
-    : `「${l.title}」 −${amount}pt`;
+    ? `「${l.title}」 −${amount}円。口座がマイナスになりました`
+    : `「${l.title}」 −${amount}円`;
   await notify(l.familyCode, 'all', title, body, 'payment');
 });
 
@@ -378,18 +378,20 @@ exports.generateRepeatedTasksCatchup = onSchedule(
 
 /**
  * 期限が近いお仕事を知らせる。10分ごとに動く。
- * アプリを閉じていても動くので、これまでの端末側タイマーより確実。
+ * 「あと1時間」のタイミングだけ通知する（残り52分などで途中通知しない）。
  */
 exports.remindDeadlines = onSchedule(
   { schedule: 'every 10 minutes', timeZone: 'Asia/Tokyo' },
   async () => {
     const now = Date.now();
-    const limit = now + 60 * 60 * 1000; // 1時間先まで
+    const hour = 60 * 60 * 1000;
+    const window = 10 * 60 * 1000; // スケジューラ間隔±余裕
+    const from = now + hour - window; // 残り約70分〜
+    const to = now + hour + window;   // 残り約50分まで
 
-    // deadline の範囲だけで絞る（複合インデックスが不要な形）
     const snap = await db.collection('tasks')
-      .where('deadline', '>=', now)
-      .where('deadline', '<=', limit)
+      .where('deadline', '>=', from)
+      .where('deadline', '<=', to)
       .get();
 
     if (snap.empty) return;
@@ -397,11 +399,7 @@ exports.remindDeadlines = onSchedule(
     for (const d of snap.docs) {
       const t = d.data();
       if (!['open', 'accepted'].includes(t.status)) continue;
-      // 同じ期限について二重に知らせない
       if (t.deadlineNotifiedFor === t.deadline) continue;
-
-      const mins = Math.max(1, Math.ceil((t.deadline - now) / 60000));
-      const timeTxt = mins >= 60 ? 'あと1時間' : `あと約${mins}分`;
 
       await d.ref.update({
         deadlineNotifiedFor: t.deadline,
@@ -411,7 +409,7 @@ exports.remindDeadlines = onSchedule(
       await notify(
         t.familyCode, 'all',
         '期限が近づいています',
-        `「${t.title}」の期限は${timeTxt}です`,
+        `「${t.title}」の期限はあと1時間です`,
         `deadline-${d.id}`
       );
     }

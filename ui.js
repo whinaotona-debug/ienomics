@@ -1,7 +1,7 @@
-import { state } from './state.js?v=158';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=158';
-import { refreshTutorial } from './tutorial.js?v=158';
-import { auth } from './firebase.js?v=158';
+import { state } from './state.js?v=163';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=163';
+import { refreshTutorial } from './tutorial.js?v=163';
+import { auth } from './firebase.js?v=163';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -340,7 +340,7 @@ function renderChildManageList() {
       ? 'いま表示中'
       : (c.childLinked === false
         ? 'まだ端末とつながっていません'
-        : `${(c.points || 0).toLocaleString()}pt${Number(c.stockCap) > 0 ? ` / 株上限${Number(c.stockCap).toLocaleString()}` : ''}`);
+        : `${(c.points || 0).toLocaleString()}円${Number(c.stockCap) > 0 ? ` / 運用上限${Number(c.stockCap).toLocaleString()}` : ''}`);
     return `
       <div class="ie-child-row ${active ? 'on' : ''}">
         <button type="button" onclick="switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
@@ -366,8 +366,8 @@ function renderChildManageList() {
 function renderHeader() {
   const childTabs = state.role === 'parent' ? renderChildTabs('hero') : '';
   const nameLabel = state.role === 'parent'
-    ? `${esc(state.childName)} の${rb('口座','こうざ')}`
-    : `${esc(state.childName)} の${rb('資産','しさん')}`;
+    ? `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('口座','こうざ')}</span>`
+    : `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('資産','しさん')}</span>`;
 
   const nextPay = getNextPaymentInfo(state.scheduledPayments);
   let payHint = '';
@@ -382,7 +382,7 @@ function renderHeader() {
     : '';
 
   return `
-    <div class="flex-none px-3 pt-3 pb-0">
+    <div class="flex-none px-3 円-3 pb-0">
       <div class="ie-topbar" data-tour="topbar">
         <div class="ie-topbar-brand">
           <div class="ie-topbar-logo">
@@ -403,7 +403,7 @@ function renderHeader() {
           <div class="ie-hero-label" data-tour="nametag"><p>${nameLabel}</p></div>
           <div class="ie-hero-balance flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
             <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
-            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">pt</span>
+            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">円</span>
           </div>
           ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
           ${payHint}
@@ -411,7 +411,7 @@ function renderHeader() {
         </div>
         <div class="ie-hero-divider" aria-hidden="true"></div>
         <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
-          <div class="ie-hero-label ie-hero-label-right"><p>${rb('同期','どうき')}ID</p></div>
+          <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
           <p class="ie-hero-code">${esc(state.familyCode)}</p>
           <p class="ie-hero-copyhint">タップでコピー</p>
         </button>
@@ -438,7 +438,7 @@ function buildInboxItems() {
         id: `prop-${t.id}`,
         tone: 'accent',
         title: '見積りが届きました',
-        body: `「${t.title}」希望 ${Number(t.points) || 0}pt`,
+        body: `「${t.title}」希望 ${Number(t.points) || 0}円`,
         action: `setView('home')`
       });
     });
@@ -457,7 +457,7 @@ function buildInboxItems() {
         id: `gift-${b.id}`,
         tone: 'gift',
         title: 'ギフトが届きました',
-        body: b.message ? `「${b.message}」 +${b.points}pt` : `ボーナス ${b.points}pt`,
+        body: b.message ? `「${b.message}」 +${b.points}円` : `ボーナス ${b.points}円`,
         // メッセージ本文は openBalloon 側で state から読む（属性に文字列を埋め込まない）
         action: `openBalloon('${esc(b.id)}')`
       });
@@ -467,7 +467,7 @@ function buildInboxItems() {
         id: `open-${t.id}`,
         tone: 'accent',
         title: '新しいお仕事',
-        body: `「${t.title}」 ${t.points}pt`,
+        body: `「${t.title}」 ${t.points}円`,
         action: null
       });
     });
@@ -527,7 +527,15 @@ function renderInboxPanel() {
 }
 
 function renderHome() {
-  const activeTasks = state.tasks.filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status));
+  const activeTasks = state.tasks
+    .filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status))
+    .slice()
+    .sort((a, b) => {
+      const da = a.deadline || Number.POSITIVE_INFINITY;
+      const db = b.deadline || Number.POSITIVE_INFINITY;
+      if (da !== db) return da - db;
+      return String(a.title || '').localeCompare(String(b.title || ''), 'ja');
+    });
   const tJob = state.role === 'child' ? { id: 'propose', title: rb('見積り','みつもり') } : { id: 'taskCreate', title: rb('仕事の発注','しごとはっちゅう') };
   const tEx = state.role === 'child' ? rb('換金申請','かんきんしんせい') : rb('換金承認','かんきんしょうにん');
 
@@ -544,10 +552,10 @@ function renderHome() {
   );
   const showAssetAmt = state.role === 'parent';
   const bankAmtHtml = showAssetAmt
-    ? `<span class="text-[8px] font-black text-[#2f8f82] leading-none mt-0.5">${bankTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
+    ? `<span class="text-[8px] font-black text-[#2f8f82] leading-none mt-0.5">${bankTotal.toLocaleString()}<span class="font-bold opacity-70">円</span></span>`
     : '';
   const investAmtHtml = showAssetAmt
-    ? `<span class="text-[8px] font-black text-[#5b8def] leading-none mt-0.5">${investTotal.toLocaleString()}<span class="font-bold opacity-70">pt</span></span>`
+    ? `<span class="text-[8px] font-black text-[#5b8def] leading-none mt-0.5">${investTotal.toLocaleString()}<span class="font-bold opacity-70">円</span></span>`
     : '';
 
   const canSwipeDelete = (t) => {
@@ -652,7 +660,7 @@ function renderHome() {
             ${statusChip(t)}
             <span class="text-[9px] font-bold ${timeTxt.includes('切れ')?'text-[#d9655b]':'text-[#7a8f88]'} shrink-0">${timeTxt === '期限切れ' ? rb('期限切れ','きげんぎれ') : timeTxt}</span>
           </div>
-          <span class="text-xs font-black text-[#1c2b27] shrink-0">${t.points} <span class="text-[9px] font-bold text-[#7a8f88]">pt</span></span>
+          <span class="text-xs font-black text-[#1c2b27] shrink-0">${t.points} <span class="text-[9px] font-bold text-[#7a8f88]">円</span></span>
         </div>
         <div class="flex justify-end items-center mt-0.5">
           ${btn}
@@ -681,9 +689,7 @@ function renderHome() {
         : `<p class="text-[9px] font-bold text-[#a0b2ab] mt-1">親からの発注を待ちましょう</p>`}
     </div>`;
 
-  const swipeHint = state.role === 'parent' && activeTasks.some(t => canSwipeDelete(t))
-    ? `<span class="text-[8px] font-bold text-[#a0b2ab]">${rb('左','ひだり')}にスワイプで${rb('削除','さくじょ')}</span>`
-    : '';
+  const swipeHint = '';
 
   const repeatBadge = todayRepeatCount > 0
     ? `<span class="text-[8px] font-black text-[#3767bd] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">定期 ${todayRepeatCount}</span>`
@@ -750,7 +756,7 @@ function renderHome() {
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
             <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
-              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div>${rb('お仕事','おしごと')}リスト</h2>
+              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div><span class="ie-ruby-pair">${rb('お仕事','おしごと')}リスト</span></h2>
               <div class="flex items-center gap-2">
                 ${repeatBadge}
                 ${swipeHint}
@@ -826,23 +832,25 @@ function renderInvest() {
       ${rangeBtn('month', '1か月')}
     </div>
     ${heldNames.length ? `
-      <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
-        ${heldNames.map(marketChip).join('')}
+      <div class="flex flex-col gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
+        <div class="grid grid-cols-2 gap-1.5">
+          ${heldNames.map(marketChip).join('')}
+        </div>
       </div>
     ` : ''}
     <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
     <p class="text-[9px] font-bold text-center mb-4 text-[#7a8f88]">
       ${(activeInvs || []).length
-        ? `${esc(MARKET_META[chartName]?.short || '')}の運用資産と元本（pt）`
+        ? `${esc(MARKET_META[chartName]?.short || '')}の運用資産と元本（円）`
         : '株を買うと、運用資産と元本のグラフが出ます'}
     </p>
     ${stockCap != null ? `
       <div class="mb-4 px-4 py-3 rounded-xl border ${capReached ? 'bg-amber-50 border-amber-200' : 'bg-[#f4f9f7] border-[#eaf1ee]'}">
         <div class="flex justify-between gap-2 text-xs font-bold">
-          <span class="${capReached ? 'text-amber-700' : 'text-[#5f7970]'}">${rb('株上限','かぶじょうげん')}</span>
-          <span class="${capReached ? 'text-amber-700' : 'text-[#1c2b27]'}">${stockValue.toLocaleString()} / ${stockCap.toLocaleString()} pt</span>
+          <span class="${capReached ? 'text-amber-700' : 'text-[#5f7970]'}">${rb('運用上限','うんようじょうげん')}</span>
+          <span class="${capReached ? 'text-amber-700' : 'text-[#1c2b27]'}">${stockValue.toLocaleString()} / ${stockCap.toLocaleString()} 円</span>
         </div>
-        <p class="text-[10px] font-bold mt-1 ${capReached ? 'text-amber-600' : 'text-[#7a8f88]'}">${capReached ? '上限に達したため、株の価値はこれ以上増えません' : `あと ${(stockCap - stockValue).toLocaleString()}pt まで増えます`}</p>
+        <p class="text-[10px] font-bold mt-1 ${capReached ? 'text-amber-600' : 'text-[#7a8f88]'}">${capReached ? '上限に達したため、運用資産はこれ以上増えません' : `あと ${(stockCap - stockValue).toLocaleString()}円 まで増えます`}</p>
       </div>
     ` : ''}
     ${state.role === 'child' ? (
@@ -851,7 +859,7 @@ function renderInvest() {
         : (state.marketSheetStatus !== 'ok'
           ? `<div class="mb-6 p-4 bg-slate-50 border border-slate-100 rounded-xl text-center"><p class="text-xs font-bold text-slate-500">株を買うには、親が設定でスプレッドシートをつないでください</p></div>`
           : `<div class="flex flex-col gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-        <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} pt）</p>
+        <p class="text-[10px] font-bold text-slate-500">投資する金額（所持: ${state.points.toLocaleString()} 円）</p>
         <input type="number" id="invest-amount" placeholder="ptを入力" class="w-full min-w-0 max-w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
         <div class="grid grid-cols-2 gap-2">${buyButtons || `<p class="text-[10px] font-bold text-slate-400 col-span-2 text-center">表に日本・アメリカなどの列がありません</p>`}</div>
       </div>`)
@@ -864,7 +872,7 @@ function renderInvest() {
         const diff = val - invested;
         const color = diff >= 0 ? 'text-emerald-500' : 'text-rose-500';
         const selected = chartName === inv.name;
-        return `<div class="p-4 rounded-xl border flex flex-col gap-2 ${selected ? 'bg-[#f4f9f7] border-[#2f8f82]/30' : 'bg-slate-50 border-slate-100'}" onclick="setInvestChartName('${inv.name}')"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right"><p class="text-[9px] font-bold text-slate-400">運用資産</p><div class="flex items-baseline justify-end gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">pt</span></span></div></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>元本: ${invested.toLocaleString()} pt</span>${state.role === 'child' ? `<button onclick="event.stopPropagation(); sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
+        return `<div class="p-4 rounded-xl border flex flex-col gap-2 ${selected ? 'bg-[#f4f9f7] border-[#2f8f82]/30' : 'bg-slate-50 border-slate-100'}" onclick="setInvestChartName('${inv.name}')"><div class="flex justify-between items-center"><span class="font-bold text-sm text-slate-700">${esc(meta.label)}</span><div class="text-right"><p class="text-[9px] font-bold text-slate-400">運用資産</p><div class="flex items-baseline justify-end gap-2"><span class="text-[10px] font-bold ${color}">${diff >= 0 ? '+' : ''}${diff}</span><span class="text-lg font-black text-slate-800">${val.toLocaleString()} <span class="text-[10px] font-bold text-slate-500">円</span></span></div></div></div><div class="flex justify-between items-center text-[10px] font-bold text-slate-400"><span>元本: ${invested.toLocaleString()} 円</span>${state.role === 'child' ? `<button onclick="event.stopPropagation(); sellCustom('${inv.id}')" class="text-slate-500 hover:text-slate-800 bg-white px-3 py-1.5 rounded border border-slate-200">売却する</button>` : ''}</div></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">現在、運用中の資産はありません</p>`}
     </div>
   `;
@@ -879,40 +887,43 @@ function renderTaskCreate() {
       <label>${rb('報酬','ほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="task-points" inputmode="numeric" placeholder="報酬金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">pt</span>
+        <span class="ie-unit">円</span>
       </div>
     </div>
     
     <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-      <label class="flex items-center gap-2 font-bold text-xs text-slate-600 cursor-pointer">
-        <input type="checkbox" id="task-repeat-toggle" onchange="toggleRepeatUI()" class="rounded border-slate-300"> 🔁 ${rb('定期的','ていきてき')}に${rb('繰','く')}り返して${rb('発注','はっちゅう')}する
+      <label class="ie-repeat-toggle flex items-start gap-2 font-bold text-xs text-slate-600 cursor-pointer">
+        <input type="checkbox" id="task-repeat-toggle" onchange="toggleRepeatUI()" class="rounded border-slate-300 mt-0.5 shrink-0">
+        <span>🔁 定期的に繰り返して発注する</span>
       </label>
       <div id="repeat-ui" class="hidden mt-4 space-y-4">
         <div class="flex gap-2">
-          <button type="button" onclick="setRepeatType('weekly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-weekly">${rb('曜日指定','ようびしてい')}</button>
-          <button type="button" onclick="setRepeatType('monthly')" class="solid-btn flex-1 py-2 font-bold text-[10px]" id="btn-rep-monthly">${rb('毎月指定','まいつきしてい')}</button>
+          <button type="button" onclick="setRepeatType('weekly')" class="ie-rep-type-btn flex-1 py-2.5 font-bold text-[10px]" id="btn-rep-weekly">曜日指定</button>
+          <button type="button" onclick="setRepeatType('monthly')" class="ie-rep-type-btn flex-1 py-2.5 font-bold text-[10px]" id="btn-rep-monthly">毎月指定</button>
         </div>
         <div id="weekly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">${rb('発注','はっちゅう')}する${rb('曜日','ようび')}を${rb('選択','せんたく')}（当日0:00に${rb('自動追加','じどうついか')}・${rb('受注不要','じゅちゅうふよう')}）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する曜日を選択（決めた時間に自動追加・受注不要）</p>
           <div class="flex gap-2 flex-wrap">
             ${['日','月','火','水','木','金','土'].map((w,i)=>`<label class="flex items-center gap-1 text-[10px] font-bold text-slate-600"><input type="checkbox" name="repeat-weeks" value="${i}"> ${w}</label>`).join('')}
           </div>
         </div>
         <div id="monthly-select" class="hidden">
-          <p class="text-[9px] font-bold text-slate-400 mb-2">${rb('発注','はっちゅう')}する${rb('日付','ひづけ')}を${rb('選択','せんたく')}（当日0:00に${rb('自動追加','じどうついか')}・${rb('受注不要','じゅちゅうふよう')}）</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">発注する日付を選択（決めた時間に自動追加・受注不要）</p>
           <select id="repeat-day-select" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
             ${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}
           </select>
         </div>
         <div>
-          <p class="text-[9px] font-bold text-slate-400 mb-2">その${rb('日','ひ')}の${rb('期限','きげん')}（${rb('締切時間','しめきりじかん')}）を${rb('設定','せってい')}</p>
+          <p class="text-[9px] font-bold text-slate-400 mb-2">仕事の時間（この時間順に並び、通知が届きます）</p>
           <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="19:00">
         </div>
       </div>
     </div>
 
-    <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">${rb('期限','きげん')}を${rb('設定','せってい')}（${rb('単発発注','たんぱつはっちゅう')}の場合）</p>
-    <input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none" />
+    <div id="normal-deadline-wrap">
+      <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">仕事の時間（この時間順に並び、通知が届きます）</p>
+      <input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none" />
+    </div>
     <button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('発注','はっちゅう')}する</button>
   `; 
 }
@@ -943,7 +954,7 @@ function renderTemplatesList() {
                 <p class="text-[10px] font-bold text-[#5f7970] mt-1.5">${esc(sched)}</p>
               </div>
               <div class="flex flex-col items-end gap-1 shrink-0">
-                <span class="text-xs font-black text-[#1c2b27]">${Number(temp.points) || 0} <span class="text-[10px] font-bold text-[#5f7970]">pt</span></span>
+                <span class="text-xs font-black text-[#1c2b27]">${Number(temp.points) || 0} <span class="text-[10px] font-bold text-[#5f7970]">円</span></span>
                 ${chevron}
               </div>
             </div>
@@ -997,7 +1008,7 @@ function renderTemplateEdit() {
       <label>${rb('報酬','ほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="tmpl-points" inputmode="numeric" value="${temp.points || ''}" placeholder="報酬金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">pt</span>
+        <span class="ie-unit">円</span>
       </div>
     </div>
     <div class="mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
@@ -1028,22 +1039,21 @@ function renderTemplateEdit() {
 }
 
 window.toggleRepeatUI = () => {
-  const isRepeat = document.getElementById('task-repeat-toggle').checked;
-  document.getElementById('repeat-ui').classList.toggle('hidden', !isRepeat);
-  document.getElementById('task-deadline').classList.toggle('hidden', isRepeat);
-  document.getElementById('normal-deadline-title').classList.toggle('hidden', isRepeat);
-  if (isRepeat) setRepeatType('weekly'); 
+  const isRepeat = document.getElementById('task-repeat-toggle')?.checked;
+  document.getElementById('repeat-ui')?.classList.toggle('hidden', !isRepeat);
+  document.getElementById('normal-deadline-wrap')?.classList.toggle('hidden', !!isRepeat);
+  if (isRepeat) setRepeatType(window.repeatType || 'weekly');
 };
 window.setRepeatType = (type) => {
   window.repeatType = type;
   const isWeekly = type === 'weekly';
-  document.getElementById('weekly-select').classList.toggle('hidden', !isWeekly);
-  document.getElementById('monthly-select').classList.toggle('hidden', isWeekly);
-  document.getElementById('btn-rep-weekly').classList.toggle('primary-btn', isWeekly);
-  document.getElementById('btn-rep-monthly').classList.toggle('primary-btn', !isWeekly);
+  document.getElementById('weekly-select')?.classList.toggle('hidden', !isWeekly);
+  document.getElementById('monthly-select')?.classList.toggle('hidden', isWeekly);
+  document.getElementById('btn-rep-weekly')?.classList.toggle('on', isWeekly);
+  document.getElementById('btn-rep-monthly')?.classList.toggle('on', !isWeekly);
 };
 
-function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.001 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-widest">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">pt</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}pt (月0.1%)</p></div>${state.role === 'child' ? `<div class="ie-field-row mb-4"><input type="number" id="bank-amount" inputmode="numeric" placeholder="金額を入力" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-5 font-bold text-sm shrink-0">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
+function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.001 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-wide">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">円</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}円 (月0.1%)</p></div>${state.role === 'child' ? `<div class="ie-field-row mb-4"><input type="number" id="bank-amount" inputmode="numeric" placeholder="金額を入力" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-5 font-bold text-sm shrink-0">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
 
 function renderPayments() {
   const active = (state.scheduledPayments || []).filter(p => p.status === 'active');
@@ -1062,7 +1072,7 @@ function renderPayments() {
       <div class="p-4 bg-white border border-slate-100 rounded-xl">
         <div class="flex justify-between items-start gap-2 mb-1">
           <p class="font-bold text-sm text-slate-800 ie-wrap-text min-w-0 flex-1">${esc(p.title)}</p>
-          <span class="text-sm font-black text-indigo-600 shrink-0">−${Number(p.amount) || 0}pt</span>
+          <span class="text-sm font-black text-indigo-600 shrink-0">−${Number(p.amount) || 0}円</span>
         </div>
         <p class="text-[10px] font-bold text-slate-500 mb-2">${esc(sched)}</p>
         <div class="flex gap-3 justify-end">${editBtn}${delBtn}</div>
@@ -1090,7 +1100,7 @@ function renderPayments() {
     <div class="space-y-1">
       ${logs.length ? logs.map(l => {
         const d = new Date(l.chargedAt || l.createdAt);
-        return `<div class="py-2 border-b border-slate-50 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-slate-600 ie-wrap-text min-w-0 flex-1">${esc(l.title)}</span><span class="text-slate-800 shrink-0">−${Number(l.amount) || 0}pt <span class="text-[10px] text-slate-500 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
+        return `<div class="py-2 border-b border-slate-50 flex justify-between items-start gap-2 text-xs font-bold"><span class="text-slate-600 ie-wrap-text min-w-0 flex-1">${esc(l.title)}</span><span class="text-slate-800 shrink-0">−${Number(l.amount) || 0}円 <span class="text-[10px] text-slate-500 font-medium ml-1">${d.getMonth()+1}/${d.getDate()}</span></span></div>`;
       }).join('') : `<p class="text-[10px] font-bold text-slate-400 text-center py-4">まだ引落履歴はありません</p>`}
     </div>
   `;
@@ -1107,7 +1117,7 @@ function renderPaymentCreate() {
       <label>金額</label>
       <div class="ie-field-row">
         <input type="number" id="pay-amount" inputmode="numeric" placeholder="金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">pt</span>
+        <span class="ie-unit">円</span>
       </div>
     </div>
 
@@ -1172,7 +1182,7 @@ function renderPaymentEdit() {
       <label>金額</label>
       <div class="ie-field-row">
         <input type="number" id="pay-edit-amount" inputmode="numeric" value="${p.amount || ''}" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">pt</span>
+        <span class="ie-unit">円</span>
       </div>
     </div>
     <button onclick="updateScheduledPayment()" class="solid-btn primary-btn w-full py-4 font-bold mb-3">変更を保存</button>
@@ -1202,63 +1212,28 @@ function renderSettings() {
     </button>
   `;
 
-  const sheetMarkets = (state.marketSheetMarkets || []).join('・');
-  const sheetUpdated = state.marketSheetUpdatedAt
-    ? formatJapanClock(new Date(state.marketSheetUpdatedAt))
-    : '';
-  let sheetStatusText = 'まだつないでいません。つないだあとだけ実際の値動きになります。';
-  let sheetStatusTone = 'text-slate-400';
-  if (state.marketSheetStatus === 'loading') {
-    sheetStatusText = '読み込んでいます...';
-  } else if (state.marketSheetStatus === 'ok') {
-    const info = getMarketSheetInfo();
-    const last = info ? ` / 最終データ ${info.lastLabel}` : '';
-    const lag = info?.isStale ? `（${info.staleDays}日前）` : '';
-    sheetStatusText = `つながっています（${sheetMarkets}）${last}${lag}${sheetUpdated ? ` / ${sheetUpdated} 読込` : ''}`;
-    sheetStatusTone = info?.isStale ? 'text-amber-700' : 'text-emerald-600';
-  } else if (state.marketSheetStatus === 'error') {
-    sheetStatusText = `読めませんでした: ${esc(state.marketSheetError || '')}`;
-    sheetStatusTone = 'text-rose-500';
-  }
-
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-slate-500">${getIcon('settings')}</div>${rb('各種設定','かくしゅせってい')}
     </h2>
 
     <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100">
-      <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-widest">${rb('同期','どうき')}ID</p>
+      <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-wide">${rbPair('同期','どうき','ID')}</p>
       <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
     </div>
 
     ${isChild ? '' : `
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
-        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${esc(state.childName || 'こども')}の${rb('株上限','かぶじょうげん')}</p>
-        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">株全体がこの金額に達したら、値上がりしてもこれ以上増えません。空欄または 0 で制限なし。</p>
+        <p class="text-[10px] font-bold text-slate-500 tracking-wide mb-1"><span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName || 'こども')}の</span>${rb('運用上限','うんようじょうげん')}</span></p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">運用全体がこの金額に達したら、値上がりしてもこれ以上増えません。空欄または 0 で制限なし。</p>
         <div class="flex gap-2 items-center">
           <input type="number" id="stock-cap-input" inputmode="numeric" min="0" step="1"
                  value="${Number(state.stockCap) > 0 ? Number(state.stockCap) : ''}"
-                 placeholder="例: 3000"
+                 placeholder="例: 10000"
                  class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-          <span class="text-xs font-bold text-slate-400 shrink-0">pt</span>
+          <span class="text-xs font-bold text-slate-400 shrink-0">円</span>
           <button type="button" onclick="saveStockCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>
         </div>
-      </div>
-
-      <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
-        <p class="text-[10px] font-bold text-slate-500 tracking-wider mb-1">${rb('相場','そうば')}の表</p>
-        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">
-          普段は空欄のままで大丈夫です。アプリが日経・S&P500・原油・金の終値を読みます。自分の表を使うときだけURLを入れてください。
-        </p>
-        <input type="url" id="market-sheet-input" inputmode="url"
-               value="${esc((state.marketSheetUrl || '').includes('market.csv') ? '' : (state.marketSheetUrl || ''))}"
-               placeholder="https://docs.google.com/spreadsheets/..."
-               class="w-full min-w-0 p-3 mb-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs focus:outline-none" />
-        <div class="flex gap-2">
-          <button type="button" onclick="saveMarketSheetUrl()" class="solid-btn primary-btn flex-1 py-3 text-xs font-bold">保存してつなぐ</button>
-          <button type="button" onclick="reloadMarketSheet()" class="solid-btn px-4 py-3 text-xs font-bold text-slate-500 border border-slate-200">再読込</button>
-        </div>
-        <p class="text-[10px] font-bold mt-2 ${sheetStatusTone}">${sheetStatusText}</p>
       </div>
     `}
 
@@ -1287,6 +1262,7 @@ function renderSettings() {
       <span class="ie-guide-arrow" aria-hidden="true">›</span>
     </button>
 
+    ${isChild ? `
     <button type="button" class="w-full p-4 bg-white rounded-xl mb-4 flex justify-between items-center cursor-pointer border border-slate-100"
             onclick="toggleFurigana()" role="switch" aria-checked="${state.furigana ? 'true' : 'false'}">
       <span class="font-bold text-sm text-slate-700">${rb('フリガナ表示','ふりがなひょうじ')}</span>
@@ -1294,12 +1270,14 @@ function renderSettings() {
         <span class="w-4 h-4 bg-white rounded-full shadow-sm"></span>
       </span>
     </button>
+    ` : ''}
 
     <div class="text-center mb-2">
-      <button type="button" onclick="unlinkAccount()" class="ie-unlink-btn">${rb('連携','れんけい')}を${rb('解除','かいじょ')}する</button>
+      <button type="button" onclick="unlinkAccount()" class="ie-unlink-btn">${rb('連携を解除する','れんけいをかいじょする')}</button>
     </div>
   `;
 }
+
 export function drawInvestChart() {
   const canvas = document.getElementById('investChart');
   if (!canvas) return;
@@ -1367,7 +1345,7 @@ export function drawInvestChart() {
           padding: 10,
           cornerRadius: 8,
           callbacks: {
-            label: (item) => `${item.dataset.label}: ${Number(item.parsed.y).toLocaleString()} pt`
+            label: (item) => `${item.dataset.label}: ${Number(item.parsed.y).toLocaleString()} 円`
           }
         }
       },
@@ -1410,18 +1388,18 @@ function renderBalloonSend() {
 function renderPropose() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('見積り','みつもり')}</h2>
-    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">${rb('仕事','しごと')}の${rb('内容','ないよう')}と${rb('希望','きぼう')}の${rb('報酬','ほうしゅう')}を${rb('親','おや')}に${rb('送','おく')}ります。</p>
+    <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">${rb('仕事の内容と希望の報酬を親に送ります','しごとのないようときぼうのほうしゅうをおやにおくります')}</p>
     <input type="text" id="prop-title" placeholder="仕事の内容" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-2 font-bold text-sm focus:outline-none focus:border-slate-400" />
     <input type="text" id="prop-title-kana" placeholder="読み方・フリガナ（任意）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none focus:border-slate-400" />
     <div class="ie-field-stack mb-4">
       <label>${rb('希望報酬','きぼうほうしゅう')}</label>
       <div class="ie-field-row">
         <input type="number" id="prop-points" inputmode="numeric" placeholder="希望金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400" />
-        <span class="ie-unit">pt</span>
+        <span class="ie-unit">円</span>
       </div>
     </div>
     <input type="datetime-local" id="prop-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none focus:border-slate-400" />
-    <button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('見積り','みつもり')}を${rb('送信','そうしん')}</button>
+    <button onclick="proposeTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('見積りを送信','みつもりをそうしん')}</button>
   `;
 }
 function renderExchange() {
@@ -1454,8 +1432,8 @@ function renderTickets() {
       <input id="t-title" placeholder="例: ゲーム1時間" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
       <label>ポイント</label>
       <div class="ie-field-row">
-        <input id="t-pts" type="number" inputmode="numeric" placeholder="必要なpt" class="p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
-        <span class="ie-unit">pt</span>
+        <input id="t-pts" type="number" inputmode="numeric" placeholder="必要な円" class="p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
+        <span class="ie-unit">円</span>
       </div>
       <button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mt-1">追加する</button>
     </div>
@@ -1477,7 +1455,7 @@ function renderTickets() {
       <div class="p-4 rounded-xl border ${t.status === 'bought' ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
         <div class="min-w-0 flex-1">
           <p class="font-bold text-sm text-slate-700 ie-wrap-text">${esc(t.title)}</p>
-          <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-500' : 'text-rose-600'}">${price} pt</p>
+          <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-500' : 'text-rose-600'}">${price} 円</p>
         </div>
         ${b}
       </div>
@@ -1534,7 +1512,7 @@ function renderHistory() {
               <p class="text-[9px] font-bold text-[#7a8f88]">${kindLabel}</p>
               <p class="text-[#2c3d38] ie-wrap-text text-xs font-bold">${title}</p>
             </div>
-            <span class="${color} text-xs font-black shrink-0">${sign}${pts.toLocaleString()} pt</span>
+            <span class="${color} text-xs font-black shrink-0">${sign}${pts.toLocaleString()} 円</span>
           </div>
         `;
       }).join('');
@@ -1544,7 +1522,7 @@ function renderHistory() {
         <div class="mb-4 rounded-2xl border border-[#eaf1ee] bg-white overflow-hidden">
           <div class="flex justify-between items-center gap-2 px-4 py-3 bg-[#f4f9f7] border-b border-[#eaf1ee]">
             <p class="text-sm font-black text-[#1c2b27]">${label}</p>
-            <p class="text-sm font-black ${netColor} shrink-0">${net >= 0 ? '+' : ''}${net.toLocaleString()} <span class="text-[10px] font-bold">pt</span></p>
+            <p class="text-sm font-black ${netColor} shrink-0">${net >= 0 ? '+' : ''}${net.toLocaleString()} <span class="text-[10px] font-bold">円</span></p>
           </div>
           <div class="px-4 py-2 flex flex-wrap gap-3 text-[10px] font-bold text-[#7a8f88] border-b border-[#eaf1ee]">
             <span>獲得 +${g.earned.toLocaleString()}</span>
@@ -1564,11 +1542,11 @@ function renderHistory() {
     <div class="grid grid-cols-2 gap-2 mb-5">
       <div class="p-4 bg-[#f4f9f7] rounded-2xl text-center border border-[#eaf1ee]">
         <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">獲得・ギフト</p>
-        <p class="text-xl font-black text-[#1c2b27] tracking-tight">+${earnedTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
+        <p class="text-xl font-black text-[#1c2b27] tracking-tight">+${earnedTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">円</span></p>
       </div>
       <div class="p-4 bg-[#fff7f5] rounded-2xl text-center border border-[#f3e0da]">
         <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">使った分</p>
-        <p class="text-xl font-black text-rose-500 tracking-tight">−${spentTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
+        <p class="text-xl font-black text-rose-500 tracking-tight">−${spentTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">円</span></p>
       </div>
     </div>
 
@@ -1607,10 +1585,11 @@ function buildCalendarDayMap(year, month) {
     map[day].push(item);
   };
 
-  const active = (state.tasks || []).filter(t =>
-    t.deadline && t.status !== 'deleted' && t.status !== 'approved'
+  // 承認済み・削除済みも含め、過去の仕事がカレンダーから消えないようにする
+  const listed = (state.tasks || []).filter(t =>
+    t.deadline && !['proposed', 'proposal_rejected'].includes(t.status)
   );
-  for (const t of active) {
+  for (const t of listed) {
     const j = japanParts(new Date(t.deadline));
     if (j.year !== year || j.month !== month) continue;
     add(j.day, {
@@ -1622,22 +1601,20 @@ function buildCalendarDayMap(year, month) {
       deadline: t.deadline,
       kind: 'task',
       repeat: Boolean(getTemplateIdFromTask(t)),
-      templateId: getTemplateIdFromTask(t)
+      templateId: getTemplateIdFromTask(t),
+      time: `${String(j.hour).padStart(2, '0')}:${String(j.minute).padStart(2, '0')}`
     });
   }
 
-  // まだ生成されていない未来の定期も、カレンダー上では予定として見せる
-  const today = japanParts();
+  // 定期テンプレの発生日（過去も含む）。既にタスクがある日は二重に出さない
   for (const temp of (state.taskTemplates || [])) {
     const days = Array.isArray(temp.days) ? temp.days.map(Number) : [];
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
-    for (let day = 1; day <= daysInMonth; day++) {
-      const isPast =
-        year < today.year ||
-        (year === today.year && month < today.month) ||
-        (year === today.year && month === today.month && day < today.day);
-      if (isPast) continue;
+    const timeParts = String(temp.time || '19:00').split(':');
+    const hours = Number(timeParts[0]) || 19;
+    const minutes = Number(timeParts[1]) || 0;
 
+    for (let day = 1; day <= daysInMonth; day++) {
       let due = false;
       if (temp.type === 'weekly') {
         const wd = new Date(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T12:00:00+09:00`);
@@ -1647,20 +1624,18 @@ function buildCalendarDayMap(year, month) {
       }
       if (!due) continue;
 
-      // 今日分ですでにタスクがある定期は二重に出さない
       const already = (map[day] || []).some(x => x.templateId === temp.id || (x.repeat && x.title === temp.title));
       if (already) continue;
 
-      // 今日は生成済みタスク側で出るので、未来だけ予定マーク
-      if (year === today.year && month === today.month && day === today.day) continue;
-
+      const dayDate = new Date(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T12:00:00+09:00`);
+      const deadline = japanDeadlineMs(hours, minutes, dayDate);
       add(day, {
         id: `plan-${temp.id}-${day}`,
         title: temp.title || 'お仕事',
         titleKana: temp.titleKana || '',
         points: Number(temp.points) || 0,
-        status: 'planned',
-        deadline: null,
+        status: deadline < Date.now() ? 'past_plan' : 'planned',
+        deadline,
         kind: 'planned',
         repeat: true,
         templateId: temp.id,
@@ -1732,13 +1707,21 @@ function renderCalendar() {
   }
 
   const statusLabel = (it) => {
-    if (it.kind === 'planned') return `予定 ${it.time || ''}`.trim();
-    if (it.status === 'completed') return '確認待ち';
-    if (it.status === 'accepted') return '進行中';
-    if (it.status === 'open') return '募集中';
+    const timeBit = it.deadline
+      ? `${String(japanParts(new Date(it.deadline)).hour).padStart(2,'0')}:${String(japanParts(new Date(it.deadline)).minute).padStart(2,'0')}`
+      : (it.time || '');
+    if (it.kind === 'planned') {
+      if (it.status === 'past_plan') return `予定だった ${timeBit}`.trim();
+      return `予定 ${timeBit}`.trim();
+    }
+    if (it.status === 'approved') return `完了 ${timeBit}`.trim();
+    if (it.status === 'deleted') return `終了 ${timeBit}`.trim();
+    if (it.status === 'completed') return `確認待ち ${timeBit}`.trim();
+    if (it.status === 'accepted') return `進行中 ${timeBit}`.trim();
+    if (it.status === 'open') return `募集中 ${timeBit}`.trim();
     if (it.status === 'proposed') return '見積り';
-    if (it.deadline && it.deadline < Date.now()) return '期限切れ';
-    return formatTimeLeft(it.deadline);
+    if (it.deadline && it.deadline < Date.now()) return `期限切れ ${timeBit}`.trim();
+    return `${formatTimeLeft(it.deadline)}${timeBit ? ` · ${timeBit}` : ''}`;
   };
 
   const list = selectedItems.length
@@ -1751,7 +1734,7 @@ function renderCalendar() {
             </div>
             <p class="text-[9px] font-bold text-[#7a8f88] mt-1">${esc(statusLabel(it))}</p>
           </div>
-          <span class="text-xs font-black text-[#1c2b27] shrink-0">${it.points}<span class="text-[9px] font-bold text-[#7a8f88] ml-0.5">pt</span></span>
+          <span class="text-xs font-black text-[#1c2b27] shrink-0">${it.points}<span class="text-[9px] font-bold text-[#7a8f88] ml-0.5">円</span></span>
         </div>
       `).join('')
     : `<div class="ie-cal-empty-day"><p class="text-[11px] font-bold text-[#7a8f88]">この日の仕事はありません</p></div>`;

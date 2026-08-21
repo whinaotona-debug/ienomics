@@ -1,6 +1,20 @@
-import { state } from './state.js?v=158';
+import { state } from './state.js?v=163';
 
-export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
+/**
+ * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
+ * ネイティブ <ruby> はブラウザ差で行が崩れるので使わない。
+ */
+export function rb(kanji, kana) {
+  const base = esc(kanji);
+  if (state.role !== 'child' || !state.furigana) return base;
+  return `<span class="ie-ruby"><span class="ie-ruby-rt" aria-hidden="true">${esc(kana)}</span><span class="ie-ruby-rb">${base}</span></span>`;
+}
+
+/** ルビの直後に続く文字を、漢字と同じ底辺に揃える */
+export function rbPair(kanji, kana, after = '') {
+  const tail = after ? `<span class="ie-ruby-after">${esc(after)}</span>` : '';
+  return `<span class="ie-ruby-pair">${rb(kanji, kana)}${tail}</span>`;
+}
 
 /**
  * ユーザーが入力した文字列をHTMLに埋め込む前に無害化する。
@@ -15,20 +29,17 @@ export function esc(value) {
     .replace(/'/g, '&#39;');
 }
 
-/** 仕事名＋任意の読み方。フリガナONのときだけルビが出る */
+/** 仕事名＋任意の読み方。子供かつフリガナONのときだけルビが出る */
 export function jobTitleHtml(title, kana) {
   const t = esc(title || '無題');
   const k = String(kana || '').trim();
-  if (!k) return t;
-  return `<span class="ie-job-ruby"><span class="ie-job-ruby-reading">${esc(k)}</span><span class="ie-job-ruby-base">${t}</span></span>`;
+  if (!k || state.role !== 'child' || !state.furigana) return t;
+  return `<span class="ie-ruby ie-ruby-wrap"><span class="ie-ruby-rt">${esc(k)}</span><span class="ie-ruby-rb">${t}</span></span>`;
 }
 
 export function applyFuriganaState() {
-  if (state.furigana) {
-    document.body.classList.add('furigana-on');
-  } else {
-    document.body.classList.remove('furigana-on');
-  }
+  const on = state.role === 'child' && !!state.furigana;
+  document.body.classList.toggle('furigana-on', on);
 }
 
 export function requestPushPermission() {
@@ -470,8 +481,8 @@ export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs
 export const MARKET_ORDER = ['日本', 'アメリカ', '原油', '金'];
 
 export const MARKET_META = {
-  日本: { id: 'japan', label: '🇯🇵 日本株', short: '日本', buyLabel: '日本株を買う', color: '#334155', dash: [] },
-  アメリカ: { id: 'us', label: '🇺🇸 米国株', short: '米国', buyLabel: '米国株を買う', color: '#94a3b8', dash: [4, 4] },
+  日本: { id: 'japan', label: '日本株（日経平均）', short: '日本株（日経平均）', buyLabel: '日本株（日経平均）を買う', color: '#334155', dash: [] },
+  アメリカ: { id: 'us', label: '米国株（S&P 500）', short: '米国株（S&P 500）', buyLabel: '米国株（S&P 500）を買う', color: '#94a3b8', dash: [4, 4] },
   原油: { id: 'oil', label: '原油', short: '原油', buyLabel: '原油を買う', color: '#b45309', dash: [2, 2] },
   金: { id: 'gold', label: '金', short: '金', buyLabel: '金を買う', color: '#ca8a04', dash: [6, 3] }
 };

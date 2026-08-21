@@ -183,17 +183,22 @@ html, body {
   line-height: 1.15;
   display: inline-flex;
   align-items: flex-end;
+  justify-content: center;
   min-height: 1.15em;
 }
 body.furigana-on .nav-tab span {
-  min-height: 1.85em;
+  min-height: 2.1em;
+  align-items: flex-end;
 }
-.nav-tab span ruby {
+.nav-tab span .ie-ruby {
   align-items: center;
 }
-.nav-tab span rt {
+.nav-tab span .ie-ruby-rt {
   font-weight: 500;
   font-size: 0.55em;
+  letter-spacing: 0;
+  color: inherit;
+  opacity: 0.85;
 }
 .nav-tab svg {
   width: 22px;
@@ -371,6 +376,7 @@ body.furigana-on .nav-tab span {
   line-height: 1.2;
   overflow: visible;
 }
+/* ヒーロー名・同期ラベル：ルビがあっても「ひなた の」と漢字を同じ底辺に */
 .ie-hero-label > p {
   margin: 0;
   font: inherit;
@@ -378,9 +384,12 @@ body.furigana-on .nav-tab span {
   letter-spacing: inherit;
   line-height: inherit;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   max-width: 100%;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0;
 }
 .ie-hero-label-right {
   justify-content: flex-end;
@@ -388,13 +397,17 @@ body.furigana-on .nav-tab span {
   color: rgba(255,255,255,0.7);
 }
 body.furigana-on .ie-hero-label {
-  height: 2em;
+  height: auto;
+  min-height: 2em;
   margin-bottom: 4px;
+  align-items: flex-end;
+  letter-spacing: 0.04em;
+  overflow: visible;
 }
-body.furigana-on .ie-hero-label rt {
+body.furigana-on .ie-hero-label .ie-ruby-rt {
   color: rgba(255,255,255,0.65);
   font-weight: 600;
-  margin-bottom: 1px;
+  letter-spacing: 0;
 }
 .ie-hero-balance {
   min-height: 2.5rem;
@@ -513,54 +526,38 @@ body.furigana-on .ie-hero-label rt {
   align-items: center;
   max-height: 1.7em;
 }
-.ie-status-chip ruby {
+.ie-status-chip .ie-ruby {
   font-weight: 700;
   align-items: center;
   line-height: 1.15;
 }
-.ie-status-chip rt {
+.ie-status-chip .ie-ruby-rt {
   font-weight: 500;
   font-size: 0.55em;
-  margin-bottom: 0;
   letter-spacing: 0;
+  color: inherit;
+  opacity: 0.9;
 }
 body.furigana-on .ie-status-chip {
   white-space: nowrap;
-  line-height: 1.1;
-  padding-top: 3px;
+  line-height: 1.15;
+  padding-top: 2px;
   padding-bottom: 2px;
   max-height: none;
+  align-items: flex-end;
 }
-.ie-job-ruby {
-  display: inline-block;
+/* 仕事名の長い読みは折り返し可 */
+.ie-ruby-wrap {
+  display: inline-flex;
   max-width: 100%;
-  writing-mode: horizontal-tb !important;
-  text-orientation: mixed !important;
-  direction: ltr;
-  line-height: 1.35;
+  align-items: stretch;
 }
-.ie-job-ruby-reading {
-  display: none;
-  color: var(--ie-muted);
-  font-size: 0.58em;
-  font-weight: 500;
-  line-height: 1.15;
-  white-space: normal;
-  overflow-wrap: break-word;
-}
-body.furigana-on .ie-job-ruby-reading {
-  display: block;
-}
-.ie-job-ruby-base {
-  display: block;
+.ie-ruby-wrap .ie-ruby-rt,
+.ie-ruby-wrap .ie-ruby-rb {
   width: 100%;
+  text-align: start;
   white-space: normal;
   overflow-wrap: break-word;
-  word-break: normal;
-  writing-mode: horizontal-tb !important;
-}
-.ie-job-title .ie-job-ruby-reading {
-  color: var(--ie-muted);
 }
 .ie-chip-open { background: #eef7f5; color: #246f65; border-color: #cfe8e2; }
 .ie-chip-accepted { background: #eef3fb; color: #3767bd; border-color: #d5e1f6; }
@@ -731,23 +728,114 @@ body.furigana-on .ie-job-ruby-reading {
   50% { transform: translateY(-10px) rotate(2deg); }
 }
 
-ruby {
+/* —— フリガナ（自前ルビ。ネイティブ ruby は使わない） —— */
+.ie-ruby {
   display: inline-flex;
-  flex-direction: column-reverse;
-  vertical-align: baseline;
+  flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
+  /* bottom にしないと、後ろの「ID」「の表」などがルビの真ん中に浮いて見える */
+  vertical-align: bottom;
   line-height: 1.15;
-  margin: 0 0.02em;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  letter-spacing: normal;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+}
+.ie-ruby-rt {
+  display: none;
+  order: -1;
+  font-size: 0.5em;
+  line-height: 1.05;
+  font-weight: 500;
+  color: var(--ie-muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+  margin: 0 0 1px;
+  padding: 0;
+  border: 0;
+  text-decoration: none !important;
+  box-shadow: none;
+  max-width: none;
+}
+.ie-ruby-rb {
+  display: block;
+  line-height: 1.2;
+  letter-spacing: inherit;
+  text-decoration: none;
+}
+body.furigana-on .ie-ruby-rt {
+  display: block;
+}
+
+/* ルビ＋前後の文字を同じ底辺に揃える */
+.ie-ruby-pair {
+  display: inline-flex;
+  align-items: flex-end;
+  flex-wrap: nowrap;
+  gap: 0;
+  max-width: 100%;
+  line-height: 1.2;
+  vertical-align: bottom;
+}
+.ie-ruby-after,
+.ie-ruby-plain {
+  display: inline-block;
+  line-height: 1.2;
+  vertical-align: bottom;
+  align-self: flex-end;
+}
+
+/* leading-none / tracking がルビを潰したり隙間線に見えるのを防ぐ */
+body.furigana-on .leading-none:has(.ie-ruby),
+body.furigana-on .leading-none:has(.ie-ruby-rt) {
+  line-height: 1.45 !important;
+}
+body.furigana-on .tracking-widest:has(.ie-ruby),
+body.furigana-on .tracking-wider:has(.ie-ruby),
+body.furigana-on .tracking-wide:has(.ie-ruby) {
+  letter-spacing: 0.03em !important;
+}
+body.furigana-on h2:has(.ie-ruby),
+body.furigana-on .ie-guide-title:has(.ie-ruby) {
+  line-height: 1.45;
+  overflow: visible;
+}
+/* 下線付き見出しでルビが線に食い込まないようにする */
+body.furigana-on h2.border-b:has(.ie-ruby) {
+  padding-top: 0.45rem;
+  align-items: flex-end;
+}
+body.furigana-on .solid-btn {
+  overflow: visible;
+}
+body.furigana-on .solid-btn .ie-ruby {
+  align-items: center;
+}
+body.furigana-on .solid-btn .ie-ruby-rt {
+  color: inherit;
+  opacity: 0.8;
+}
+body.furigana-on .solid-btn .leading-none {
+  line-height: 1.45 !important;
+  padding-top: 0.15rem;
+}
+
+/* 万一残っているネイティブ ruby も同じ見た目に */
+ruby {
+  ruby-position: over;
 }
 rt {
   display: none;
+}
+body.furigana-on rt {
+  display: ruby-text;
   font-size: 0.55em;
-  line-height: 1.1;
   font-weight: 500;
   color: var(--ie-muted);
-  margin-bottom: 1px;
 }
-body.furigana-on rt { display: block; }
 
 .ie-unlink-btn {
   appearance: none;
@@ -757,11 +845,31 @@ body.furigana-on rt { display: block; }
   font-size: 11px;
   font-weight: 700;
   color: #d9655b;
-  text-decoration: underline;
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
   text-underline-offset: 2px;
   cursor: pointer;
 }
+.ie-unlink-btn .ie-ruby-rt {
+  text-decoration: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
 .ie-unlink-btn:active { opacity: 0.7; }
+
+.ie-rep-type-btn {
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--ie-line);
+  border-radius: var(--ie-radius-sm);
+  color: var(--ie-ink-soft);
+  cursor: pointer;
+}
+.ie-rep-type-btn.on {
+  background: linear-gradient(180deg, #3aa294 0%, var(--ie-accent) 100%);
+  border-color: transparent;
+  color: #fff;
+}
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-thumb {

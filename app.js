@@ -1,10 +1,10 @@
-import { state } from './state.js?v=158';
-import { render } from './ui.js?v=158';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=158';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=158';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=158';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=158';
-import { db, auth } from './firebase.js?v=158';
+import { state } from './state.js?v=163';
+import { render } from './ui.js?v=163';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=163';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=163';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=163';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=163';
+import { db, auth } from './firebase.js?v=163';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -137,6 +137,8 @@ let deadlineTimer = null;
 let midnightTimer = null;
 let watchedDayKey = null;
 const DEADLINE_REMIND_MS = 60 * 60 * 1000; // 1時間前
+/** 10分間隔のチェックでも拾えるよう、1時間前±10分の窓 */
+const DEADLINE_REMIND_WINDOW_MS = 10 * 60 * 1000;
 const DEADLINE_CHECK_MS = 30 * 1000;
 
 function getDeadlineNotifiedMap() {
@@ -167,20 +169,19 @@ function checkDeadlineReminders() {
     if (!['open', 'accepted'].includes(t.status)) continue;
 
     const remaining = t.deadline - now;
-    // 期限切れは対象外。残り1時間以内になったら通知
-    if (remaining <= 0 || remaining > DEADLINE_REMIND_MS) continue;
+    // 「あと1時間」のタイミングだけ（±10分）。52分など途中では出さない
+    const skew = remaining - DEADLINE_REMIND_MS;
+    if (Math.abs(skew) > DEADLINE_REMIND_WINDOW_MS) continue;
     // 同じ期限に対して二重通知しない
     if (notified[t.id] === t.deadline) continue;
 
     notified[t.id] = t.deadline;
     changed = true;
 
-    const mins = Math.max(1, Math.ceil(remaining / 60000));
-    const timeTxt = mins >= 60 ? 'あと1時間' : `あと約${mins}分`;
     if (state.role === 'child') {
-      localNotify("期限が近づいています！", `「${t.title}」の期限が${timeTxt}です。急ぎましょう！`);
+      localNotify("期限が近づいています！", `「${t.title}」の期限があと1時間です。急ぎましょう！`);
     } else {
-      localNotify("期限アラーム", `「${t.title}」の期限が${timeTxt}です`);
+      localNotify("期限アラーム", `「${t.title}」の期限があと1時間です`);
     }
   }
 
@@ -298,7 +299,11 @@ async function cleanupExpiredDeadlineTasks() {
             autoDeleted: true
           });
         } else {
-          await deleteDoc(doc(db, "tasks", t.id));
+          await updateDoc(doc(db, "tasks", t.id), {
+            status: 'deleted',
+            deletedAt: Date.now(),
+            autoDeleted: true
+          });
         }
       } catch (err) {
         console.error("期限切れタスク削除エラー:", err);
@@ -399,12 +404,12 @@ async function processScheduledPayments() {
           if (wentNegative) {
             localNotify(
               "支払い引落（残高不足）",
-              `「${p.title}」 −${amount}pt。口座がマイナスになりました`
+              `「${p.title}」 −${amount}円。口座がマイナスになりました`
             );
           } else {
             localNotify(
               "支払いが引き落とされました",
-              `「${p.title}」 −${amount}pt`
+              `「${p.title}」 −${amount}円`
             );
           }
         }
@@ -467,6 +472,7 @@ window.onload = async () => {
       } else {
         localStorage.setItem('ienomics_role', 'parent');
         state.role = 'parent'; state.view = 'home';
+        applyFuriganaState();
         window.history.replaceState(null, null, window.location.pathname);
         await runMigrationAndLoadChildren(uid);
       }
@@ -765,14 +771,14 @@ function setupListeners() {
             if (state.role === 'child' && t.status === 'open') {
               localNotify(
                 "新しいお仕事！",
-                `「${t.title}」（${t.points}pt）が発注されました！`
+                `「${t.title}」（${t.points}円）が発注されました！`
               );
             }
             // 定期は受注なしで始まる → 子供へ
             if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey)) {
               localNotify(
                 "今日の定期のお仕事",
-                `「${t.title}」（${t.points}pt）が始まりました！`
+                `「${t.title}」（${t.points}円）が始まりました！`
               );
             }
             // 子供が見積り → 親へ
@@ -780,7 +786,7 @@ function setupListeners() {
               const name = state.childName || 'こども';
               localNotify(
                 "見積りが届きました",
-                `${name}ちゃんから「${t.title}」（希望 ${t.points}pt）`
+                `${name}ちゃんから「${t.title}」（希望 ${t.points}円）`
               );
             }
           }
@@ -818,7 +824,7 @@ function setupListeners() {
             if (state.role === 'child' && t.status === 'approved' && prev?.status === 'completed') {
               localNotify(
                 "お仕事が承認されました！",
-                `「${t.title}」で ${t.points}pt ゲット！`
+                `「${t.title}」で ${t.points}円 ゲット！`
               );
             }
           }
@@ -1021,7 +1027,13 @@ window.switchActiveChild = (code) => {
   if (isPushActive()) initPush({ familyCode: code, role: state.role }).catch(() => {});
 };
 
-window.toggleFurigana = () => { state.furigana = !state.furigana; localStorage.setItem('ienomics_furigana', state.furigana); applyFuriganaState(); render(); };
+window.toggleFurigana = () => {
+  if (state.role !== 'child') return;
+  state.furigana = !state.furigana;
+  localStorage.setItem('ienomics_furigana', state.furigana);
+  applyFuriganaState();
+  render();
+};
 
 window.addTask = async () => { 
   const t = document.getElementById('task-title').value.trim();
@@ -1030,7 +1042,7 @@ window.addTask = async () => {
   const isRepeat = document.getElementById('task-repeat-toggle').checked;
 
   if (!t) return showAlert("仕事の内容を入力してください");
-  if (!p || p <= 0) return showAlert("報酬は1pt以上で入力してください");
+  if (!p || p <= 0) return showAlert("報酬は1円以上で入力してください");
 
   const repeatType = window.repeatType || 'weekly';
   let days = [];
@@ -1053,9 +1065,10 @@ window.addTask = async () => {
       setView('home');
       showToast("定期発注として保存しました");
     } else {
-      const d = document.getElementById('task-deadline').value; 
+      const d = document.getElementById('task-deadline').value;
+      if (!d) return showAlert("仕事の時間を設定してください");
       await addDoc(collection(db, "tasks"), { 
-        familyCode: state.familyCode, title: t, titleKana, points: p, deadline: d ? new Date(d).getTime() : null, status: 'open', createdAt: Date.now() 
+        familyCode: state.familyCode, title: t, titleKana, points: p, deadline: new Date(d).getTime(), status: 'open', createdAt: Date.now() 
       }); 
       setView('home');
       showToast("お仕事を発注しました");
@@ -1101,7 +1114,7 @@ window.approveTask = async (id, p) => {
       if (granted > 0) tx.update(famRef, { points: pts + granted });
     });
 
-    showToast(granted > 0 ? `${granted}pt を付与しました` : '承認しました');
+    showToast(granted > 0 ? `${granted}円 を付与しました` : '承認しました');
   }, { busyLabel: '付与しています...' });
 };
 
@@ -1141,6 +1154,7 @@ window.saveNewPassword = async () => {
       childUids: [],
       childName: childName,
       points: 0,
+      stockCap: 10000,
       childLinked: false,
       createdAt: Date.now()
     });
@@ -1149,6 +1163,7 @@ window.saveNewPassword = async () => {
     state.setupLoadingMessage = '';
     state.role = 'parent';
     state.view = 'home';
+    applyFuriganaState();
     await showAlert(`同期IDは【 ${code} 】です。\nお子様の端末でこのIDを入力すると連携できます。`, { title: '設定が完了しました' });
     runMigrationAndLoadChildren(user.uid);
   } catch (error) {
@@ -1213,8 +1228,8 @@ window.addTicket2 = async () => {
 
 window.buyTicket = async (id, p) => {
   const price = Number(p) || 0;
-  if (state.points < price) return showAlert(`ポイントが足りません（所持: ${state.points}pt / 必要: ${price}pt）`);
-  const ok = await showConfirm(`${price}pt を使って購入します。`, { title: 'このチケットを買いますか？', okLabel: '購入する' });
+  if (state.points < price) return showAlert(`ポイントが足りません（所持: ${state.points}円 / 必要: ${price}円）`);
+  const ok = await showConfirm(`${price}円 を使って購入します。`, { title: 'このチケットを買いますか？', okLabel: '購入する' });
   if (!ok) return;
 
   await guard(`buyTicket:${id}`, async () => {
@@ -1301,7 +1316,7 @@ window.sellCustom = async (id) => {
   const values = getInvestmentValues(getActiveInvestments(state.investments), cur, state.stockCap);
   const value = Math.max(0, values[id] ?? Math.round(getHoldingValue(inv, r)));
   const ok = await showConfirm(
-    `今の価値は ${value}pt です。売ってポイントに戻します。`,
+    `今の価値は ${value}円 です。売ってポイントに戻します。`,
     { title: '売却しますか？', okLabel: '売却する' }
   );
   if (!ok) return;
@@ -1341,17 +1356,17 @@ window.sellCustom = async (id) => {
       console.warn('[investmentLogs]', e);
     }
     setView('invest');
-    showToast(`${value}pt になりました`);
+    showToast(`${value}円 になりました`);
   }, { busyLabel: '売却しています...' });
 };
 
 window.investCustom = async (n) => { 
   if (state.points < 0) return showAlert("残高がマイナスのため、株の購入はできません。お手伝いでポイントを取り戻しましょう！");
   const valStr = document.getElementById('invest-amount').value;
-  if (!valStr) return showAlert("投資する金額(pt)を入力してください");
+  if (!valStr) return showAlert("投資する金額(円)を入力してください");
   const a = parseInt(valStr); 
   if (isNaN(a) || a <= 0) return showAlert("正しい金額を入力してください");
-  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`); 
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}円）`); 
 
   const dbName = marketNameFromId(n);
   if (!dbName) return showAlert("この市場は選べません");
@@ -1370,14 +1385,14 @@ window.investCustom = async (n) => {
   const stockCap = Number(state.stockCap) || 0;
   if (stockCap > 0 && currentStockValue >= stockCap) {
     return showAlert(
-      `株は上限の ${stockCap.toLocaleString()}pt に達しています。これ以上は買えません。`,
-      { title: '株の上限に達しています' }
+      `運用は上限の ${stockCap.toLocaleString()}円 に達しています。これ以上は買えません。`,
+      { title: '運用上限に達しています' }
     );
   }
   if (stockCap > 0 && currentStockValue + a > stockCap) {
     return showAlert(
-      `株はあと ${(stockCap - currentStockValue).toLocaleString()}pt まで買えます。金額を減らしてください。`,
-      { title: '株の上限を超えます' }
+      `運用はあと ${(stockCap - currentStockValue).toLocaleString()}円 まで買えます。金額を減らしてください。`,
+      { title: '運用上限を超えます' }
     );
   }
 
@@ -1420,7 +1435,7 @@ window.investCustom = async (n) => {
       at
     }).catch(e => console.warn('[investmentLogs]', e));
     setView('invest');
-    showToast(`${meta.label}を ${a}pt 買いました`);
+    showToast(`${meta.label}を ${a}円 買いました`);
   }, { busyLabel: '購入しています...' });
 };
 
@@ -1428,7 +1443,7 @@ window.requestExchange = async () => {
   if (state.points < 0) return showAlert("残高がマイナスのため、換金申請はできません。お手伝いでポイントを取り戻しましょう！");
   const a = parseInt(document.getElementById('exchange-amount').value);
   if (!a || a <= 0) return showAlert("換金したいポイントを入力してください");
-  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`);
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}円）`);
   await guard('requestExchange', async () => {
     await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() });
     setView('home');
@@ -1438,8 +1453,8 @@ window.requestExchange = async () => {
 
 window.approveExchange = async (id, p) => {
   const amount = Number(p) || 0;
-  if (state.points < amount) return showAlert(`ポイントが足りません（残高: ${state.points}pt）`);
-  const ok = await showConfirm(`${amount}pt を引いて、${amount}円をお子さまに渡します。`, { title: 'この換金を承認しますか？', okLabel: '承認する' });
+  if (state.points < amount) return showAlert(`ポイントが足りません（残高: ${state.points}円）`);
+  const ok = await showConfirm(`${amount}円を口座から引き、現金 ${amount}円をお子さまに渡します。`, { title: 'この換金を承認しますか？', okLabel: '承認する' });
   if (!ok) return;
 
   await guard(`approveExchange:${id}`, async () => {
@@ -1467,12 +1482,12 @@ window.rejectExchange = async (id) => {
 window.depositBank = async () => {
   const a = parseInt(document.getElementById('bank-amount').value);
   if (!a || a <= 0) return showAlert("預ける金額を入力してください");
-  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}pt）`);
+  if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}円）`);
   await guard('depositBank', async () => {
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) });
     await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() });
     setView('bank');
-    showToast(`${a}pt を預けました`);
+    showToast(`${a}円 を預けました`);
   }, { busyLabel: '預けています...' });
 };
 
@@ -1499,7 +1514,7 @@ window.withdrawBank = async () => {
       for (const b of deposits) tx.delete(doc(db, "banks", b.id));
     });
     setView('home');
-    showToast(`${total}pt 引き出しました`);
+    showToast(`${total}円 引き出しました`);
   }, { busyLabel: '引き出しています...' });
 };
 
@@ -1589,7 +1604,7 @@ window.saveMarketSheetUrl = async () => {
   }, { busyLabel: '保存しています...' });
 };
 
-/** いま表示中の子の株評価額上限を保存。空欄または 0 は制限なし */
+/** いま表示中の子の運用上限を保存。空欄または 0 は制限なし */
 window.saveStockCap = async () => {
   if (state.role !== 'parent' || !state.familyCode) return;
   const el = document.getElementById('stock-cap-input');
@@ -1608,8 +1623,8 @@ window.saveStockCap = async () => {
   );
   if (cap != null && currentValue > cap) {
     const ok = await showConfirm(
-      `いまの株価値は ${currentValue.toLocaleString()}pt です。表示と売却額は ${cap.toLocaleString()}pt までになり、これ以上は増えません。`,
-      { title: '上限を設定しますか？', okLabel: '設定する' }
+      `いまの運用資産は ${currentValue.toLocaleString()}円 です。表示と売却額は ${cap.toLocaleString()}円 までになり、これ以上は増えません。`,
+      { title: '運用上限を設定しますか？', okLabel: '設定する' }
     );
     if (!ok) return;
   }
@@ -1619,7 +1634,7 @@ window.saveStockCap = async () => {
       pointsCap: deleteField()
     });
     state.stockCap = cap;
-    showToast(cap == null ? '株の上限を解除しました' : `株の上限を ${cap.toLocaleString()}pt にしました`);
+    showToast(cap == null ? '運用上限を解除しました' : `運用上限を ${cap.toLocaleString()}円 にしました`);
     render();
   }, { busyLabel: '保存しています...' });
 };
@@ -1668,8 +1683,8 @@ window.openBalloon = async (id) => {
   if (received == null) return;
   if (received > 0) {
     const body = gift.message
-      ? `「${gift.message}」\n\nボーナス ${received}pt を受け取りました！`
-      : `ボーナス ${received}pt を受け取りました！`;
+      ? `「${gift.message}」\n\nボーナス ${received}円 を受け取りました！`
+      : `ボーナス ${received}円 を受け取りました！`;
     await showAlert(body, { title: 'ギフトが届きました', tone: 'gift' });
   }
 };
@@ -1689,6 +1704,7 @@ window.addNewChild = async () => {
       childUids: [],
       childName: name,
       points: 0,
+      stockCap: 10000,
       childLinked: false,
       createdAt: Date.now()
     });
@@ -1935,6 +1951,7 @@ window.joinFamily = async () => {
     state.role = 'child';
     localStorage.setItem('ienomics_familyCode', code);
     localStorage.setItem('ienomics_role', 'child');
+    applyFuriganaState();
     await claimChildMembership(code);
     setupListeners();
     render();
@@ -2028,6 +2045,7 @@ window.loginParent = async () => {
     const result = await signInWithEmailAndPassword(auth, email, pass);
     state.role = 'parent';
     localStorage.setItem('ienomics_role', 'parent');
+    applyFuriganaState();
     await runMigrationAndLoadChildren(result.user.uid);
     if (!hasSeenTutorial()) setTimeout(() => startTutorial('parent'), 900);
   } catch (error) {
