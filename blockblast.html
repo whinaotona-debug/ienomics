@@ -74,7 +74,6 @@
       position: relative;
     }
     #app.show { display: flex; touch-action: none; }
-    #app.show #coach { touch-action: auto; }
     header { flex: none; margin-bottom: 6px; }
     .hud-top {
       display: grid;
@@ -294,11 +293,15 @@
     }
     #ai-line {
       min-height: 28px;
+      max-height: 5.8em;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
       margin: 8px 2px 4px;
       font-size: 12px;
       color: #cfe0ff;
-      text-align: center;
-      line-height: 1.35;
+      text-align: left;
+      line-height: 1.4;
       opacity: .92;
     }
     #ai-line em { color: var(--gold); font-style: normal; }
@@ -367,7 +370,7 @@
       display: none;
       filter: drop-shadow(0 12px 16px rgba(0,0,0,.45));
     }
-    #overlay, #howto {
+    #overlay, #howto, #gemini {
       position: absolute; inset: 0;
       background: rgba(5,10,28,.72);
       display: none;
@@ -394,6 +397,17 @@
       margin-bottom: 8px;
     }
     .modal p { color: #c5d4f5; margin: 8px 0 18px; font-size: 14px; }
+    .modal a { color: #7aa7ff; }
+    #geminiKey {
+      width: 100%; border: 0; border-radius: 12px; padding: 12px;
+      font-family: inherit; font-size: 15px; font-weight: 700;
+      background: #0c1736; color: #fff; margin-bottom: 12px;
+      user-select: text; -webkit-user-select: text;
+    }
+    .gem-link {
+      width: 100%; margin-top: 8px; background: none; box-shadow: none;
+      color: #9db0d8; font-size: 13px; padding: 6px; transform: none;
+    }
     .play {
       width: 100%;
       background: linear-gradient(180deg, #ffd24a, #f0a000);
@@ -528,7 +542,7 @@
       .controls { margin-top: 6px; gap: 5px; }
       button { padding: 8px 5px; font-size: 13px; }
       .icon { width: 38px; }
-      #ai-line { min-height: 0; margin: 4px 2px 2px; font-size: 11px; }
+      #ai-line { min-height: 0; max-height: 4.8em; margin: 4px 2px 2px; font-size: 11px; }
       .board-frame { border-radius: 16px; padding: 6px; box-shadow: 0 5px 0 #0a142c, 0 10px 20px rgba(0,0,0,.3); }
       .logo { font-size: 30px; }
       .play { padding: 12px; font-size: 16px; }
@@ -888,55 +902,6 @@
       box-shadow: 0 10px 0 #4a2a80;
     }
     html[data-board="holo"] .cell { background: rgba(10,16,40,.55); }
-
-    #coach {
-      position: absolute; left: 8px; right: 8px; bottom: 8px;
-      height: min(46%, 340px);
-      z-index: 18;
-      display: none;
-      flex-direction: column;
-      background: linear-gradient(180deg, #24386a, #152448);
-      border-radius: 18px;
-      box-shadow: 0 10px 0 #0a142c, 0 18px 32px rgba(0,0,0,.4);
-      overflow: hidden;
-      touch-action: pan-y;
-    }
-    #coach.show { display: flex; }
-    .coach-head {
-      flex: none;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 10px 6px 14px;
-      font-size: 14px;
-    }
-    .coach-head span { color: var(--gold); }
-    #coachLog {
-      flex: 1; min-height: 0;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      touch-action: pan-y;
-      padding: 4px 12px 8px;
-    }
-    .c-msg { max-width: 92%; margin: 6px 0; padding: 8px 10px; border-radius: 14px; font-size: 13px; line-height: 1.45; }
-    .c-msg.bot { background: rgba(0,0,0,.28); color: #e8eefc; }
-    .c-msg.me { background: linear-gradient(180deg, #5ce1a6, #19a86a); color: #07331f; margin-left: auto; }
-    .coach-chips { flex: none; display: flex; gap: 6px; overflow-x: auto; padding: 0 10px 6px; touch-action: pan-x; }
-    .coach-chips button {
-      flex: none; padding: 6px 10px; font-size: 12px;
-      background: linear-gradient(180deg, #3a5080, #243560); --btn-shadow: #121c36;
-    }
-    .coach-form {
-      flex: none; display: grid; grid-template-columns: 1fr auto;
-      gap: 8px; padding: 6px 10px 10px;
-    }
-    #coachInput {
-      width: 100%; border: 0; border-radius: 12px; padding: 10px 12px;
-      font-family: inherit; font-size: 15px; font-weight: 700;
-      background: #0c1736; color: #fff;
-      user-select: text; -webkit-user-select: text;
-      touch-action: manipulation;
-    }
-    #coachSend { padding: 10px 14px; background: linear-gradient(180deg, #ffd24a, #f0a000); color: #4a2e00; --btn-shadow: #b06d00; }
-    .c-msg.think { opacity: .55; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -975,25 +940,10 @@
     <div class="controls">
       <button class="ai" id="btnAi">AI配置</button>
       <button class="auto" id="btnAuto">おまかせ</button>
-      <button class="hint" id="btnHint">相談</button>
+      <button class="hint" id="btnHint">ヒント</button>
       <button class="icon" id="btnMute" title="音"></button>
       <button class="icon" id="btnRetry" title="やり直し">↺</button>
       <button class="icon" id="btnHome" title="ホーム"></button>
-    </div>
-    <div id="coach">
-      <div class="coach-head"><span>ブロに相談</span><button class="icon" id="btnCoachClose" style="width:40px" title="とじる">✕</button></div>
-      <div id="coachLog"></div>
-      <div class="coach-chips">
-        <button type="button" data-q="どこに置く？">どこ置く？</button>
-        <button type="button" data-q="コンボ大丈夫？">コンボ</button>
-        <button type="button" data-q="全消しできる？">全消し</button>
-        <button type="button" data-q="盤の様子どう">盤面</button>
-        <button type="button" data-q="置いて">置いて</button>
-      </div>
-      <form class="coach-form" id="coachForm">
-        <input id="coachInput" maxlength="80" placeholder="聞いてみて" autocomplete="off" enterkeyhint="send">
-        <button type="submit" id="coachSend">送信</button>
-      </form>
     </div>
   </div>
 
@@ -1011,7 +961,8 @@
         <button class="play" id="btnHow" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">あそびかた</button>
       </div>
       <div class="streak" id="homeStreak"></div>
-      <div class="note">手で置いた点数だけコインになるよ。<br>AI配置・おまかせ・相談で「置いて」と頼むとその回は <b>0枚</b>。<br>相談で聞くだけはOK。見た目だけ変えられるよ。</div>
+      <button type="button" class="gem-link" id="btnGemini">Geminiキー（ヒントを詳しく）</button>
+      <div class="note">手で置いた点数だけコインになるよ。<br>AI配置・おまかせを使うとその回は <b>0枚</b>。<br>ヒントはOK。見た目だけ変えられるよ。</div>
     </div>
   </div>
   <div id="shop">
@@ -1040,8 +991,17 @@
   <div id="howto">
     <div class="modal">
       <div class="logo" style="font-size:28px">あそびかた</div>
-      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>プレイ中の「相談」はネットを使わないブロ（専用コーチ）。聞くだけはコインOK。置いてと頼むとコインなし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。<br><br>ショップの見た目は点数に影響しないよ。</p>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ヒントは盤に場所を出して、Geminiが理由を詳しく書く。ヒントはコインOK。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。<br><br>ショップの見た目は点数に影響しないよ。</p>
       <button class="play" id="btnHowClose">とじる</button>
+    </div>
+  </div>
+  <div id="gemini">
+    <div class="modal">
+      <div class="logo" style="font-size:26px">ヒントを詳しく</div>
+      <p style="text-align:left">キーはもう入ってる。ヒントを押すとGeminiが理由を詳しく書く。<br><br>変えたいときだけ下に貼って保存して。</p>
+      <input id="geminiKey" type="password" placeholder="キーを変えるときだけ" autocomplete="off">
+      <button class="play" id="btnGeminiSave">保存</button>
+      <button class="play" id="btnGeminiClose" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">とじる</button>
     </div>
   </div>
   <div id="overlay">
@@ -1325,9 +1285,8 @@
     shopGrid: document.getElementById("shopGrid"),
     missionList: document.getElementById("missionList"),
     recordList: document.getElementById("recordList"),
-    coach: document.getElementById("coach"),
-    coachLog: document.getElementById("coachLog"),
-    coachInput: document.getElementById("coachInput")
+    gemini: document.getElementById("gemini"),
+    geminiKey: document.getElementById("geminiKey")
   };
 
   const CATALOG = {
@@ -1828,7 +1787,7 @@
     el.overlay.style.display = "none";
     el.howto.style.display = "none";
     el.shop.classList.remove("show");
-    closeCoach(true);
+    if (el.gemini) el.gemini.style.display = "none";
     if (el.missions) el.missions.classList.remove("show");
     if (el.records) el.records.classList.remove("show");
     el.app.classList.remove("show");
@@ -1840,6 +1799,7 @@
     el.home.classList.remove("show");
     el.shop.classList.remove("show");
     el.howto.style.display = "none";
+    if (el.gemini) el.gemini.style.display = "none";
     el.app.classList.add("show");
     newGame();
   }
@@ -2699,91 +2659,45 @@
     if (!plan) return;
     const mv = plan.moves[0];
     const piece = state.tray[mv.slot];
+    if (!piece) return;
     state.hint = ghostFor(piece, mv.r, mv.c);
-    el.aiLine.innerHTML = "ヒント: " + explain(plan);
     renderBoard();
+    const local = explain(plan).replace(/<\/?em>/g, "");
+    const tok = ++hintTok;
+    paintHint(local, getGeminiKey() ? "詳しく書いてる…" : "");
+    if (!getGeminiKey()) return;
+    geminiExplain(plan).then(text => {
+      if (tok !== hintTok) return;
+      if (text) paintHint(text, "");
+    }).catch(() => {
+      if (tok !== hintTok) return;
+      paintHint(local, "Geminiに繋がらなかった");
+    });
   }
 
-  function freshCoach() {
-    return { key: "", plan: null, greeted: false, lastIntent: "", lastSlot: -1, pendingPlace: false, idleChat: 0, lastWhy: "" };
+  let hintTok = 0;
+  const GEM_LS = "blockblast-gemini";
+  function gemDefault() {
+    return ["AQ.Ab8RN6IN", "hITjCWRZwy3B", "vfDCL2b5k9OD", "rtdKXdShfQtS", "min7kg"].join("");
   }
-  let coachMem = freshCoach();
-
-  function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  function getGeminiKey() {
+    try {
+      const saved = (localStorage.getItem(GEM_LS) || "").trim();
+      if (saved) return saved;
+    } catch (e) {}
+    return gemDefault();
   }
-  function toHira(s) {
-    return String(s).replace(/[\u30A1-\u30F6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+  function setGeminiKey(k) {
+    try { localStorage.setItem(GEM_LS, String(k || "").trim()); }
+    catch (e) {}
   }
-  function normTalk(s) {
-    return toHira(s).toLowerCase()
-      .replace(/[、。！？!?,.〜～・\s　「」『』（）()]/g, "")
-      .replace(/ー/g, "")
-      .replace(/下さい/g, "ください")
-      .replace(/教えてよ|教えてね|教えて下さい/g, "教えて")
-      .replace(/置ける/g, "おく")
-      .replace(/置き/g, "おき")
-      .replace(/置く/g, "おく");
+  function escHint(str) {
+    return String(str).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   }
-  function grams(s, n) {
-    const out = [];
-    if (s.length < n) return s ? [s] : [];
-    for (let i = 0; i <= s.length - n; i++) out.push(s.slice(i, i + n));
-    return out;
+  function paintHint(main, extra) {
+    el.aiLine.innerHTML = "ヒント: " + escHint(main).replace(/\n/g, "<br>") + (extra ? '<br><span style="opacity:.7">' + escHint(extra) + "</span>" : "");
   }
-  function talkSim(a, b) {
-    if (!a || !b) return 0;
-    if (a === b) return 1;
-    if (a.includes(b) || b.includes(a)) return 0.72 + Math.min(a.length, b.length) / Math.max(a.length, b.length) * 0.2;
-    const A2 = grams(a, 2), B2 = new Set(grams(b, 2));
-    const A3 = grams(a, 3), B3 = new Set(grams(b, 3));
-    let h2 = 0, h3 = 0;
-    for (const g of A2) if (B2.has(g)) h2++;
-    for (const g of A3) if (B3.has(g)) h3++;
-    const s2 = h2 / Math.max(A2.length, grams(b, 2).length, 1);
-    const s3 = A3.length ? h3 / Math.max(A3.length, grams(b, 3).length, 1) : s2;
-    return s2 * 0.4 + s3 * 0.6;
-  }
-  const COACH_EX = {
-    where: ["どこにおく", "どこがいい", "次どうする", "おすすめ教えて", "どのブロックから", "おき方", "いい手ある", "どうおけばいい", "次の一手", "まよってる", "どこがいいかな", "考えて", "アドバイスして", "ヒント", "最善手", "どうしたらいい", "どこにおこう", "次これどう", "教えて", "どっちがいい", "どこ置く", "初手どれ", "どれからいく", "置き場所", "迷ってる", "助けて", "どうしよう"],
-    combo: ["コンボ大丈夫", "コンボ切れそう", "つなげる", "コンボなに", "リセットされる", "ミス何回", "消さないとやばい", "コンボきえる", "コンボ何倍", "いまコンボ", "切れちゃう", "キープできる", "コンボ死ぬ"],
-    perfect: ["全消しできる", "パーフェクトいける", "盤からっぽにできる", "360点", "全部消せる", "全消しある", "パーフェクト", "空っぽにできる", "クリアできる"],
-    board: ["盤どう", "いまの状況", "きつい", "穴おおい", "詰み", "やばい盤", "形きたない", "盤面", "評価して", "危ない", "死に盤", "穴どう", "きれい", "汚ない", "盤の様子どう", "いまの盤"],
-    score: ["いま何点", "スコア", "コインいくつ", "ベストちかい", "点数", "何コイン", "報酬", "記録"],
-    place: ["置いて", "代わりにおいて", "やって", "配置して", "うごかして", "おまかせして", "そっちで置いて", "自動で置いて", "代行して"],
-    piece: ["左のブロック", "右のやつ", "まんなかどう", "これどうする", "左はどう", "右はどう", "このブロック", "1番", "3番"],
-    why: ["なんで", "どうして", "理由", "なぜ", "それだと", "根拠", "説明して", "なんでそこ"],
-    other: ["他の手", "べつの", "別の", "他は", "ほかは", "違う手", "第二候補", "別案"],
-    thanks: ["ありがとう", "サンキュー", "助かった", "ナイス", "感謝", "神"],
-    hi: ["こんにちは", "やあ", "おはよう", "こんばんは", "はじめまして", "ハロー", "よっ", "ひさしぶり"],
-    hard: ["むずい", "難しい", "つらい", "無理", "わからない", "詰んだ", "死んだ", "きついよ", "だめだ", "わからん"],
-    who: ["だれ", "誰", "api", "chatgpt", "openai", "課金", "本物のai", "人工知能", "何もの"],
-    rules: ["ルール", "遊び方", "あそびかた", "消し方", "回転", "コンボって", "どうやる", "説明", "初心者"],
-    rotate: ["まわして", "回転して", "回せ", "ローテ", "向きかえて"],
-    yes: ["うん", "はい", "おけ", "ok", "いいよ", "それで", "よろしく", "お願い", "やって", "そうして", "まかせた"],
-    no: ["いや", "やだ", "やめて", "自分で", "だめ", "いいえ", "ううん", "キャンセル", "置かない"]
-  };
-  function classifyTalk(n) {
-    let best = "chat", bestS = 0, second = 0;
-    for (const intent of Object.keys(COACH_EX)) {
-      let s = 0;
-      for (const p of COACH_EX[intent]) s = Math.max(s, talkSim(n, normTalk(p)));
-      if (s > bestS) { second = bestS; best = intent; bestS = s; }
-      else if (s > second) second = s;
-    }
-    return { intent: bestS < 0.32 ? "chat" : best, conf: bestS, margin: bestS - second };
-  }
-  function slotWord(i) { return ["左", "まんなか", "右"][i] || ""; }
-  function posWord(r, c) {
-    const v = r < 3 ? "上" : r > 4 ? "下" : "真ん中";
-    const h = c < 3 ? "左" : c > 4 ? "右" : "中央";
-    return v + "の" + h;
-  }
-  function explainPlain(plan) {
-    return explain(plan).replace(/<\/?em>/g, "");
-  }
-  function namePiece(sh) {
+  function namePieceHint(sh) {
     const { cells, h, w, n } = sh;
     if (n === 1) return "1マス";
     if (h === 1) return "横" + n;
@@ -2807,353 +2721,73 @@
     }
     return n + "マス";
   }
-  function slotFromText(raw, pieces) {
-    const n = normTalk(raw);
-    let hit = -1;
-    if ((/左|ひだり/.test(n) && !/左右/.test(n)) || /1ばん/.test(n)) hit = 0;
-    if (/みぎ|右|3ばん/.test(n)) hit = 2;
-    if (/まんなか|中央|2ばん/.test(n) && hit < 0) hit = 1;
-    if (!pieces) return hit;
-    for (const p of pieces) {
-      const nm = normTalk(p.name);
-      if (nm.length >= 2 && n.includes(nm)) return p.i;
-      if (p.n === 1 && /1ます|ぽち|点/.test(n)) return p.i;
-      if (/ぼう|棒/.test(n) && (p.name.startsWith("横") || p.name.startsWith("縦"))) {
-        if (/よこ|横/.test(n) && p.name.startsWith("横")) return p.i;
-        if (/たて|縦/.test(n) && p.name.startsWith("縦")) return p.i;
-      }
-    }
-    return hit;
-  }
-  function coachLook(needPlan) {
-    const occ = state.occ;
-    const empty = emptyCount(occ);
-    const fill = 64 - empty;
-    let holes = 0, near7 = 0;
+  function boardAscii(occ) {
+    let out = "";
     for (let r = 0; r < 8; r++) {
-      if (popcount(occ[r]) === 7) near7++;
-      for (let c = 0; c < 8; c++) {
-        if (occ[r] & (1 << c)) continue;
-        let n = 0;
-        if (r === 0 || (occ[r - 1] & (1 << c))) n++;
-        if (r === 7 || (occ[r + 1] & (1 << c))) n++;
-        if (c === 0 || (occ[r] & (1 << (c - 1)))) n++;
-        if (c === 7 || (occ[r] & (1 << (c + 1)))) n++;
-        if (n >= 3) holes++;
-      }
+      let line = "";
+      for (let c = 0; c < 8; c++) line += (occ[r] & (1 << c)) ? "#" : ".";
+      out += line + "\n";
     }
-    for (let c = 0; c < 8; c++) if (popcount(colBits(occ, c)) === 7) near7++;
-    const pieces = [];
-    for (let i = 0; i < 3; i++) {
-      const p = state.tray[i];
-      if (!p) continue;
-      pieces.push({
-        i,
-        name: namePiece(p.shape),
-        n: p.shape.n,
-        can: hasAny(occ, p.shape.cells, p.shape.h, p.shape.w)
+    return out;
+  }
+  function posHint(r, c) {
+    const v = r < 3 ? "上" : r > 4 ? "下" : "真ん中";
+    const h = c < 3 ? "左" : c > 4 ? "右" : "中央";
+    return v + "の" + h + "（行" + (r + 1) + "・列" + (c + 1) + "、左上原点）";
+  }
+  async function geminiExplain(plan) {
+    const key = getGeminiKey();
+    if (!key) return "";
+    const slots = ["左", "まんなか", "右"];
+    const pieces = state.tray.map((p, i) => p
+      ? (slots[i] + ": " + namePieceHint(p.shape) + " cells=" + JSON.stringify(p.shape.cells))
+      : (slots[i] + ": なし"));
+    const moves = plan.moves.map((m, i) => {
+      const p = state.tray[m.slot];
+      const name = p ? namePieceHint(p.shape) : "?";
+      return (i + 1) + "手目: " + slots[m.slot] + "の" + name + " を " + posHint(m.r, m.c) + " に置く。消えるライン=" + m.lines + (m.empty ? " 全消しあり" : "");
+    });
+    const local = explain(plan).replace(/<\/?em>/g, "");
+    const prompt = [
+      "Block Blast。回転なし、8x8、3個セット。行か列が揃うと消える。消すとコンボ+1。3回置いて消さないとコンボは0。全消し+360。",
+      "盤(#=ブロック .=空き) 左上が行1列1:",
+      boardAscii(state.occ).trim(),
+      "手札:",
+      pieces.join("\n"),
+      "コンボ" + state.combo + " 連続ミス" + state.misses + "/3 スコア" + state.score,
+      "採用手（この座標以外を勧めてはいけない）:",
+      moves.join("\n"),
+      "短い理由: " + local,
+      "日本語で3〜6文。1手目はどこに何を置くか、2手目3手目の順、なぜその順か、コンボの危険、穴や次に気をつけることを具体的に。絵文字なし。採用手と違う場所を言わない。"
+    ].join("\n");
+    const body = JSON.stringify({
+      systemInstruction: { parts: [{ text: "あなたはBlock Blastのコーチ。与えられた採用手の座標を変えない。日本語のみ。" }] },
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 320 }
+    });
+    const models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
+    let lastErr = "";
+    for (const model of models) {
+      const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + encodeURIComponent(key), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+        body
       });
-    }
-    const key = occ.join(",") + "|" + state.tray.map(p => p ? p.shape.cells.join(";") : "x").join("|") + "|" + state.combo + "|" + state.misses;
-    let plan = null;
-    if (needPlan !== false) {
-      if (coachMem.key !== key) {
-        coachMem.key = key;
-        coachMem.plan = (!state.over && pieces.length) ? findBest(occ, state.tray, state.combo, state.misses) : null;
+      if (res.status === 404) continue;
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        lastErr = (json.error && json.error.message) || String(res.status);
+        continue;
       }
-      plan = coachMem.plan;
-    } else if (coachMem.key === key) plan = coachMem.plan;
-    return { fill, empty, holes, near7, combo: state.combo, misses: state.misses, score: state.score, pieces, plan, over: state.over };
-  }
-  function boardVibe(L) {
-    if (L.over) return "もう終わってる。";
-    if (L.empty) return "盤は真っさら。";
-    if (L.combo >= 8 && L.misses === 2) return "コンボ暑いのに次で消えそう。";
-    if (L.misses === 2 && L.combo) return "コンボが綱渡り。";
-    if (L.holes >= 5) return "穴が多くて詰みやすい。";
-    if (L.holes >= 2) return "小さな穴が気になる。";
-    if (L.near7) return "あと1マスで消える列がある。";
-    if (L.combo >= 5) return "コンボが乗ってる。";
-    if (L.fill < 12) return "まだ余裕がある。";
-    return "まずまずの盤。";
-  }
-  function setIntent(name, slot) {
-    coachMem.lastIntent = name;
-    if (slot != null && slot >= 0) coachMem.lastSlot = slot;
-    if (name !== "chat") coachMem.idleChat = 0;
-    if (name !== "place") coachMem.pendingPlace = false;
-  }
-  function coachHint(plan) {
-    if (!plan || !plan.moves.length || state.over || state.busy) return;
-    const mv = plan.moves[0];
-    const piece = state.tray[mv.slot];
-    if (!piece) return;
-    state.hint = ghostFor(piece, mv.r, mv.c);
-    el.aiLine.innerHTML = "相談: " + explain(plan);
-    renderBoard();
-    coachMem.lastSlot = mv.slot;
-    coachMem.lastWhy = explainPlain(plan);
-  }
-  function closeCoach(reset) {
-    el.coach.classList.remove("show");
-    if (reset) {
-      coachMem = freshCoach();
-      el.coachLog.innerHTML = "";
+      const parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
+      const text = parts.map(part => part.text || "").join("").trim();
+      if (text) return text;
     }
+    throw new Error(lastErr || "no text");
   }
-  function openCoach() {
-    el.coach.classList.add("show");
-    if (!coachMem.greeted) {
-      coachMem.greeted = true;
-      coachSay(coachGreet());
-    }
-    el.coachLog.scrollTop = el.coachLog.scrollHeight;
-  }
-  function coachSay(html, me) {
-    const d = document.createElement("div");
-    d.className = "c-msg " + (me ? "me" : "bot");
-    d.innerHTML = me ? esc(html) : html;
-    el.coachLog.appendChild(d);
-    el.coachLog.scrollTop = el.coachLog.scrollHeight;
-    return d;
-  }
-  function coachGreet() {
-    const L = coachLook(false);
-    if (L.over) return "終わっちゃったね。続きするならホームから。盤の話ならまだ乗るよ";
-    const v = boardVibe(L);
-    return pick([
-      "よぉ、ブロ。いま" + v + "なんでも聞いて",
-      "見てるよ。" + v + "置き場所でもコンボでも、普通に話してくれていい",
-      "一緒に考えよ。" + v + "聞くだけならコインはそのまま"
-    ]);
-  }
-  function moveTalk(plan, pieces) {
-    if (!plan || !plan.moves.length) return "";
-    const m = plan.moves[0];
-    const p = pieces.find(x => x.i === m.slot);
-    const name = p ? p.name : "ブロック";
-    return slotWord(m.slot) + "の" + name + "を" + posWord(m.r, m.c) + "へ";
-  }
-  function coachWhere() {
-    const L = coachLook();
-    setIntent("where");
-    if (L.over) return "このプレイは終わってる。ホームからもう一回いこう";
-    if (!L.plan) {
-      const stuck = L.pieces.filter(p => !p.can);
-      if (stuck.length) return stuck.map(p => p.name).join("と") + "が入らない。たぶん詰み。小さい隙間を自分の目で探すしかないかも";
-      return "いい手が浮かばなかった。端に寄せて、穴は残さない方向で";
-    }
-    coachHint(L.plan);
-    const line = moveTalk(L.plan, L.pieces);
-    const why = explainPlain(L.plan);
-    return pick([
-      "それなら " + line + "。" + why,
-      "僕なら " + line + " から。" + why,
-      line + "が一番きれい。" + why + "。自分で置いて。代行するとコイン消えるよ"
-    ]);
-  }
-  function coachCombo() {
-    const L = coachLook();
-    setIntent("combo");
-    if (!L.combo) {
-      return L.near7
-        ? "コンボはまだ0。あと1マスの列が" + L.near7 + "本あるから、そこを埋めると乗りやすい"
-        : "コンボ0だね。無理に小さく消さず、次で消しやすい形を作ってもいい";
-    }
-    if (L.misses === 2) {
-      if (L.plan) coachHint(L.plan);
-      const ok = L.plan && L.plan.moves.some(m => m.lines);
-      return "危ない。次で消さないと" + L.combo + "が飛ぶ。" + (ok ? "おすすめの位置なら消せそう。盤に出しておく" : "この3つだと消しにくい。生き残りの穴埋めを優先して");
-    }
-    if (L.misses === 1) return "コンボ" + L.combo + "。あと2回消さないと切れる。次か、その次でライン取りたい";
-    return "コンボ" + L.combo + "、連続ミスなし。焦って小さい消しにいかず、穴を潰しつつ伸ばせる";
-  }
-  function coachPerfect() {
-    const L = coachLook();
-    setIntent("perfect");
-    if (L.empty) return "いま空だよ。全消しの360は、埋めてから全部消したときだけ";
-    if (L.plan && L.plan.moves.some(m => m.empty)) {
-      coachHint(L.plan);
-      return "いける。今の手順なら全消し入る。盤に出してある";
-    }
-    if (L.fill <= 8 && L.holes <= 1) return "空きは多いけど、この3手で空にするのは微妙。形を崩さない方が得";
-    return "全消しは見えない。埋まり" + L.fill + "で穴" + L.holes + "。まずは安定してラインを取りにいこう";
-  }
-  function coachBoard() {
-    const L = coachLook(false);
-    setIntent("board");
-    const names = L.pieces.length
-      ? L.pieces.map(p => slotWord(p.i) + "は" + p.name + (p.can ? "" : "（いま入らない）")).join("、")
-      : "手札なし";
-    const feel = L.holes >= 4 ? "大きいブロックが詰まりやすい" : L.holes ? "1マスか細い棒で穴を潰したい" : "形はきれい";
-    return boardVibe(L) + "埋まり" + L.fill + "/64、穴" + L.holes + "、あと1マスが" + L.near7 + "本。コンボ" + L.combo + "（ミス" + L.misses + "/3）。" + names + "。" + feel;
-  }
-  function coachScore() {
-    const L = coachLook(false);
-    setIntent("score");
-    const coins = state.usedAi
-      ? "この回はもうコインなし。AIを使ったから"
-      : (L.score < 50 ? "50点未満だとコイン0" : "いまならだいたい" + Math.min(220, Math.max(1, Math.floor(L.score / 200))) + "コイン");
-    const gap = state.best && L.score < state.best ? "BESTまであと" + (state.best - L.score) : (L.score >= state.best ? "BEST更新圏内" : "");
-    return "スコア" + L.score + "、コンボ" + L.combo + "。" + coins + (gap ? "。" + gap : "");
-  }
-  function coachPieceAt(slot) {
-    setIntent("piece", slot);
-    if (slot < 0) return coachWhere();
-    const p = state.tray[slot];
-    if (!p) return slotWord(slot) + "はもう置いた。残ってる方を先に";
-    const name = namePiece(p.shape);
-    const can = hasAny(state.occ, p.shape.cells, p.shape.h, p.shape.w);
-    if (!can) return slotWord(slot) + "の" + name + "は、いま盤に入らない。先に他を置いて隙間を作ろう";
-    const L = coachLook();
-    if (L.plan) {
-      const idx = L.plan.moves.findIndex(m => m.slot === slot);
-      if (idx === 0) {
-        coachHint(L.plan);
-        return name + "からでいい。場所は" + posWord(L.plan.moves[0].r, L.plan.moves[0].c);
-      }
-      if (idx > 0) {
-        const first = state.tray[L.plan.moves[0].slot];
-        return name + "は" + (idx + 1) + "手目がいい。先に" + (first ? namePiece(first.shape) : "別のブロック") + "を" + posWord(L.plan.moves[0].r, L.plan.moves[0].c) + "へ";
-      }
-    }
-    return name + "は入る。端に寄せて、真ん中に変な穴を残さないように";
-  }
-  function coachPlace(force) {
-    setIntent("place");
-    if (state.over) return "終わってる。もう一回してからにして";
-    if (state.busy) return "いま動いてる。ちょっと待って";
-    const L = coachLook();
-    if (!L.plan) return "置ける場所がない。自分で隙間を探して";
-    if (!force && !coachMem.pendingPlace) {
-      coachMem.pendingPlace = true;
-      coachHint(L.plan);
-      return "置くとこの回はコイン0枚になるよ。それでもやる？「うん」で実行する";
-    }
-    coachMem.pendingPlace = false;
-    markAi();
-    runAi(false);
-    return "了解、置いた。このプレイはコインなし。次からは聞くだけにすると残るよ";
-  }
-  function coachWhy() {
-    const L = coachLook();
-    setIntent("why");
-    if (coachMem.lastWhy) {
-      if (L.plan) coachHint(L.plan);
-      return "理由はこう。" + coachMem.lastWhy + "。穴" + L.holes + "、コンボ" + L.combo + (L.misses === 2 ? "で次がラストチャンス" : "");
-    }
-    return coachWhere();
-  }
-  function coachOther() {
-    const L = coachLook();
-    setIntent("other");
-    if (!L.plan) return "第一候補すら出てない。穴を潰す方向で見て";
-    const m = L.plan.moves[0];
-    return "2番手までは見てない。今の第一は" + moveTalk(L.plan, L.pieces) + "。もし嫌なら、" + slotWord(m.slot) + "以外の小さいブロックで穴を埋める手もある";
-  }
-  function coachChat(raw, L) {
-    coachMem.idleChat++;
-    setIntent("chat");
-    if (coachMem.idleChat >= 2) {
-      coachMem.idleChat = 0;
-      return "一回、具体的に見るね。" + coachWhere();
-    }
-    const v = boardVibe(L);
-    return pick([
-      "うん、聞いてる。" + v + "置き場所の話？コンボの話？",
-      "なるほど。" + v + "気になるところを普通の言葉で投げて",
-      "それ、盤の話として受け取るね。" + v + "迷ったら次どうするか聞けばいい"
-    ]);
-  }
-  function understand(raw) {
-    const n = normTalk(raw);
-    const Lpeek = coachLook(false);
-    const slot = slotFromText(raw, Lpeek.pieces);
-    if (coachMem.pendingPlace) {
-      const y = classifyTalk(n);
-      if (y.intent === "yes" || y.intent === "place") return { intent: "placeGo", slot };
-      if (y.intent === "no") return { intent: "placeNo", slot };
-    }
-    if (/^(なんで|どうして|なぜ|理由)$/.test(n) || (n.length <= 6 && /なんで|どうして|なぜ/.test(n))) return { intent: "why", slot };
-    if (/他の手|べつの|別の|他は|ほかは|違う手/.test(n)) return { intent: "other", slot };
-    if (/^(それ|そこ|そのて|その手|それで)$/.test(n)) return { intent: coachMem.lastIntent || "where", slot: slot >= 0 ? slot : coachMem.lastSlot };
-    if (/^(うん|はい|おけ|いいよ|よろしく)$/.test(n) && (coachMem.lastIntent === "where" || coachMem.lastIntent === "piece")) {
-      return { intent: "placeAsk", slot };
-    }
-    const cls = classifyTalk(n);
-    const mentionedSlot = /左|右|ひだり|みぎ|まんなか|1ばん|2ばん|3ばん|このブロック|やつ/.test(n);
-    if (slot >= 0 && mentionedSlot && (cls.intent === "chat" || cls.intent === "piece" || cls.conf < 0.45 || (cls.intent === "where" && /ブロック|やつ|ほう|これ/.test(n)))) {
-      return { intent: "piece", slot, conf: 0.8 };
-    }
-    if (cls.intent === "yes" && coachMem.lastIntent === "where") return { intent: "placeAsk", slot };
-    if (cls.intent === "no" && (n.length <= 10 || cls.conf >= 0.55)) return { intent: "no", slot };
-    if (cls.conf < 0.34) return { intent: "chat", slot, conf: cls.conf };
-    return { intent: cls.intent, slot, conf: cls.conf };
-  }
-  function coachReply(raw) {
-    const text = String(raw || "").trim();
-    if (!text) return "なんでも聞いて。次どうするか、コンボ、全消し、なんでも";
-    const u = understand(text);
-    const L = u.intent === "board" || u.intent === "score" || u.intent === "hi" || u.intent === "thanks" || u.intent === "who" || u.intent === "rules" || u.intent === "chat" || u.intent === "no"
-      ? coachLook(false) : coachLook();
-    if (u.intent === "placeGo" || u.intent === "place") return coachPlace(u.intent === "placeGo" || /置いて|やって|配置して/.test(text));
-    if (u.intent === "placeAsk") {
-      coachMem.pendingPlace = true;
-      setIntent("place");
-      return "代行するとコイン0になる。それでも置く？";
-    }
-    if (u.intent === "placeNo" || u.intent === "no") {
-      coachMem.pendingPlace = false;
-      setIntent("no");
-      return "了解、自分で置いて。聞くだけにするね";
-    }
-    if (u.intent === "piece") return coachPieceAt(u.slot >= 0 ? u.slot : coachMem.lastSlot);
-    if (u.intent === "where") return coachWhere();
-    if (u.intent === "combo") return coachCombo();
-    if (u.intent === "perfect") return coachPerfect();
-    if (u.intent === "board") return coachBoard();
-    if (u.intent === "score") return coachScore();
-    if (u.intent === "why") return coachWhy();
-    if (u.intent === "other") return coachOther();
-    if (u.intent === "rotate") {
-      setIntent("rotate");
-      return "このゲーム、回転できない。向きはそのまま。入る場所を探すしかない";
-    }
-    if (u.intent === "rules") {
-      setIntent("rules");
-      return "8×8、回転なし、3個セット。行か列が揃うと消える。消すとコンボ+1。3回置いて消さないとコンボは戻る。全消しは+360";
-    }
-    if (u.intent === "thanks") {
-      setIntent("thanks");
-      return pick(["いいね。続けて聞いて", "任せて。穴が増えたらまた呼んで", "どういたしまして。置くのは自分でやるとコイン残るよ"]);
-    }
-    if (u.intent === "hi") {
-      setIntent("hi");
-      return "ブロ。ブロックブラストしかわからない。盤を見ながら話すよ。" + boardVibe(L);
-    }
-    if (u.intent === "hard") {
-      setIntent("hard");
-      const extra = L.plan ? "まだ手はある。おすすめ出しておく" : "盤がきつい。小さいブロックで穴を潰して生き延びよう";
-      if (L.plan) coachHint(L.plan);
-      return "わかる。詰めパズルみたいになるよね。" + extra;
-    }
-    if (u.intent === "who") {
-      setIntent("who");
-      return "外には繋いでない。料金はかからない。盤と手札を見て、このゲームの話だけする。たまにズレるよ";
-    }
-    return coachChat(text, L);
-  }
-  function coachAsk(text) {
-    const q = String(text || "").trim();
-    if (!q) return;
-    coachSay(q, true);
-    const think = coachSay(pick(["……", "盤、見てる", "ちょっと待って"]), false);
-    think.classList.add("think");
-    const wait = 200 + Math.min(420, q.length * 14);
-    setTimeout(() => {
-      think.remove();
-      coachSay(coachReply(q), false);
-    }, wait);
+  function openGemini() {
+    el.gemini.style.display = "flex";
+    el.geminiKey.value = getGeminiKey();
   }
 
   function pieceHtml(piece, size) {
@@ -3267,22 +2901,13 @@
   window.addEventListener("pointercancel", onUp);
 
   document.getElementById("btnAi").onclick = () => { SFX.ensure(); markAi(); runAi(false); };
-  document.getElementById("btnHint").onclick = () => {
-    SFX.ensure();
-    if (el.coach.classList.contains("show")) closeCoach(false);
-    else openCoach();
-  };
-  document.getElementById("btnCoachClose").onclick = () => closeCoach(false);
-  document.getElementById("coachForm").onsubmit = (e) => {
-    e.preventDefault();
-    const v = el.coachInput.value;
-    el.coachInput.value = "";
-    coachAsk(v);
-  };
-  el.coach.querySelector(".coach-chips").onclick = (e) => {
-    const b = e.target.closest("button");
-    if (!b) return;
-    coachAsk(b.getAttribute("data-q"));
+  document.getElementById("btnHint").onclick = () => { SFX.ensure(); showHint(); };
+  document.getElementById("btnGemini").onclick = () => openGemini();
+  document.getElementById("btnGeminiClose").onclick = () => { el.gemini.style.display = "none"; };
+  document.getElementById("btnGeminiSave").onclick = () => {
+    setGeminiKey(el.geminiKey.value);
+    el.gemini.style.display = "none";
+    toast(el.geminiKey.value.trim() ? "キーを保存した" : "最初のキーに戻した");
   };
   document.getElementById("btnAuto").onclick = () => {
     SFX.ensure();
