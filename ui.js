@@ -1,7 +1,7 @@
-import { state } from './state.js?v=156';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupApprovedEarningsByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory } from './utils.js?v=156';
-import { refreshTutorial } from './tutorial.js?v=156';
-import { auth } from './firebase.js?v=156';
+import { state } from './state.js?v=157';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames } from './utils.js?v=157';
+import { refreshTutorial } from './tutorial.js?v=157';
+import { auth } from './firebase.js?v=157';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -452,7 +452,7 @@ function buildInboxItems() {
       });
     });
   } else {
-    (state.balloons || []).forEach(b => {
+    (state.balloons || []).filter(b => b.status !== 'received').forEach(b => {
       items.push({
         id: `gift-${b.id}`,
         tone: 'gift',
@@ -797,9 +797,7 @@ function renderInvest() {
   };
   const tradeable = state.marketSheetStatus === 'ok' ? getTradeableMarkets() : [];
   const sheetInfo = state.marketSheetStatus === 'ok' ? getMarketSheetInfo() : null;
-  const heldNames = MARKET_ORDER.filter(name =>
-    (state.investments || []).some(inv => inv.name === name)
-  );
+  const heldNames = getChartMarketNames(state.investments, state.investmentLogs);
   const chartName = heldNames.includes(state.investChartName)
     ? state.investChartName
     : (heldNames[0] || null);
@@ -1307,13 +1305,16 @@ export function drawInvestChart() {
 
   const isDetail = state.view === 'invest';
   const range = isDetail ? (state.investRange || 'week') : 'week';
-  const names = MARKET_ORDER.filter(name =>
-    (state.investments || []).some(inv => inv.name === name)
-  );
+  const names = getChartMarketNames(state.investments, state.investmentLogs);
   const chartName = isDetail
     ? (names.includes(state.investChartName) ? state.investChartName : names[0] || null)
     : (names[0] || null);
-  const history = getPortfolioHistory(state.investments, range, chartName);
+  const history = getPortfolioHistory(
+    state.investments,
+    range,
+    chartName,
+    state.investmentLogs
+  );
   const meta = MARKET_META[chartName];
   const color = meta?.color || '#2f8f82';
   const ctx = canvas.getContext('2d');
@@ -1492,8 +1493,16 @@ function renderTickets() {
   `;
 }
 function renderHistory() {
-  const app = state.tasks.filter(t => t.status === 'approved');
-  const total = app.reduce((s, t) => s + (Number(t.points) || 0), 0);
+  const byDay = groupPointActivityByDay({
+    tasks: state.tasks,
+    tickets: state.tickets,
+    exchanges: state.exchanges,
+    paymentLogs: state.paymentLogs,
+    banks: state.banks,
+    balloons: state.balloons
+  });
+  const earnedTotal = byDay.reduce((s, g) => s + g.earned + g.gifted, 0);
+  const spentTotal = byDay.reduce((s, g) => s + g.spent, 0);
   const { cardDays, stamped, streak, month } = getHelpStampData(state.tasks);
   const monthLabel = `${month + 1}月`;
   const stampCells = Array.from({ length: cardDays }, (_, i) => {
@@ -1503,35 +1512,63 @@ function renderHistory() {
   }).join('');
 
   const week = ['日', '月', '火', '水', '木', '金', '土'];
-  const byDay = groupApprovedEarningsByDay(state.tasks);
   const dayBlocks = byDay.length
     ? byDay.map(g => {
       const label = `${g.month}/${g.day}（${week[g.weekday]}）`;
-      const rows = g.items.map(t => `
-        <div class="flex justify-between items-start gap-2 py-2 border-b border-[#eaf1ee] last:border-0">
-          <span class="text-[#2c3d38] ie-wrap-text min-w-0 flex-1 text-xs font-bold">${jobTitleHtml(t.title, t.titleKana)}</span>
-          <span class="text-[#1c2b27] text-xs font-black shrink-0">+${Number(t.points) || 0} pt</span>
-        </div>
-      `).join('');
+      const rows = g.items.map(row => {
+        const pts = Number(row.points) || 0;
+        const sign = pts >= 0 ? '+' : '';
+        const color = row.kind === 'spend'
+          ? 'text-rose-500'
+          : (row.kind === 'gift' ? 'text-[#c45a8a]' : 'text-[#1c2b27]');
+        const kindLabel = row.kind === 'spend'
+          ? '使った'
+          : (row.kind === 'gift' ? 'ギフト' : '獲得');
+        const title = row.kind === 'earn'
+          ? jobTitleHtml(row.label, row.titleKana)
+          : esc(row.label);
+        return `
+          <div class="flex justify-between items-start gap-2 py-2 border-b border-[#eaf1ee] last:border-0">
+            <div class="min-w-0 flex-1">
+              <p class="text-[9px] font-bold text-[#7a8f88]">${kindLabel}</p>
+              <p class="text-[#2c3d38] ie-wrap-text text-xs font-bold">${title}</p>
+            </div>
+            <span class="${color} text-xs font-black shrink-0">${sign}${pts.toLocaleString()} pt</span>
+          </div>
+        `;
+      }).join('');
+      const net = g.earned + g.gifted - g.spent;
+      const netColor = net >= 0 ? 'text-[#2f8f82]' : 'text-rose-500';
       return `
         <div class="mb-4 rounded-2xl border border-[#eaf1ee] bg-white overflow-hidden">
           <div class="flex justify-between items-center gap-2 px-4 py-3 bg-[#f4f9f7] border-b border-[#eaf1ee]">
             <p class="text-sm font-black text-[#1c2b27]">${label}</p>
-            <p class="text-sm font-black text-[#2f8f82] shrink-0">+${g.total.toLocaleString()} <span class="text-[10px] font-bold">pt</span></p>
+            <p class="text-sm font-black ${netColor} shrink-0">${net >= 0 ? '+' : ''}${net.toLocaleString()} <span class="text-[10px] font-bold">pt</span></p>
+          </div>
+          <div class="px-4 py-2 flex flex-wrap gap-3 text-[10px] font-bold text-[#7a8f88] border-b border-[#eaf1ee]">
+            <span>獲得 +${g.earned.toLocaleString()}</span>
+            <span>ギフト +${g.gifted.toLocaleString()}</span>
+            <span>使った −${g.spent.toLocaleString()}</span>
           </div>
           <div class="px-4 py-1">${rows}</div>
         </div>
       `;
     }).join('')
-    : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ承認された仕事はありません</p>`;
+    : `<p class="text-[11px] font-bold text-[#5f7970] text-center py-6">まだ履歴はありません</p>`;
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-[#eaf1ee] pb-3 text-[#1c2b27] flex items-center gap-2">
       <div class="w-4 h-4 text-[#2f8f82]">${getIcon('history')}</div>${rb('資産履歴','しさんりれき')}
     </h2>
-    <div class="p-6 bg-[#f4f9f7] rounded-2xl text-center mb-5 border border-[#eaf1ee]">
-      <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">獲得累計</p>
-      <p class="text-3xl font-black text-[#1c2b27] tracking-tight">${total.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
+    <div class="grid grid-cols-2 gap-2 mb-5">
+      <div class="p-4 bg-[#f4f9f7] rounded-2xl text-center border border-[#eaf1ee]">
+        <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">獲得・ギフト</p>
+        <p class="text-xl font-black text-[#1c2b27] tracking-tight">+${earnedTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
+      </div>
+      <div class="p-4 bg-[#fff7f5] rounded-2xl text-center border border-[#f3e0da]">
+        <p class="text-[10px] font-bold text-[#7a8f88] mb-1 tracking-widest">使った分</p>
+        <p class="text-xl font-black text-rose-500 tracking-tight">−${spentTotal.toLocaleString()} <span class="text-[10px] font-bold text-[#7a8f88]">pt</span></p>
+      </div>
     </div>
 
     <div class="mb-6 p-4 ie-stamp-board">
@@ -1548,7 +1585,7 @@ function renderHistory() {
       <p class="text-[9px] font-bold text-[#7a8f88] mt-3 leading-relaxed">お手伝いが承認された日にスタンプが押されます（1〜${cardDays}日）</p>
     </div>
 
-    <p class="text-[10px] font-bold text-[#7a8f88] tracking-wider mb-2">日ごとの${rb('獲得','かくとく')}</p>
+    <p class="text-[10px] font-bold text-[#7a8f88] tracking-wider mb-2">日ごとの履歴</p>
     <div>${dayBlocks}</div>
   `;
 }

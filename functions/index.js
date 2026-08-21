@@ -280,7 +280,7 @@ exports.onFamilyDeleted = onDocumentDeleted('families/{code}', async (event) => 
   const code = event.params.code;
   const collections = [
     'pushTokens', 'tasks', 'taskTemplates', 'tickets', 'exchanges',
-    'investments', 'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
+    'investments', 'investmentLogs', 'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
   ];
 
   let total = 0;

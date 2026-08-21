@@ -121,6 +121,13 @@ service cloud.firestore {
       allow delete: if isMember(resource.data.familyCode);
     }
 
+    match /investmentLogs/{docId} {
+      allow read: if canReadDoc();
+      allow create: if canCreateDoc();
+      allow update: if canModifyDoc();
+      allow delete: if isMember(resource.data.familyCode);
+    }
+
     match /banks/{docId} {
       allow read: if canReadDoc();
       allow create: if canCreateDoc();

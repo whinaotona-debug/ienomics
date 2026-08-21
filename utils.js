@@ -1,4 +1,4 @@
-import { state } from './state.js?v=156';
+import { state } from './state.js?v=157';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -358,6 +358,114 @@ export function groupApprovedEarningsByDay(tasks) {
   return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
 
+/**
+ * 履歴用。獲得・使った・ギフトを日付ごとにまとめる（新しい日が先）。
+ * items: { kind, label, points, at }
+ */
+export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs, banks, balloons }) {
+  const rows = [];
+
+  for (const t of tasks || []) {
+    if (t.status !== 'approved') continue;
+    const at = t.approvedAt || t.completedAt || t.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'earn',
+      label: t.title || 'お仕事',
+      titleKana: t.titleKana || '',
+      points: Number(t.points) || 0,
+      at
+    });
+  }
+
+  for (const b of balloons || []) {
+    if (b.status !== 'received') continue;
+    const at = b.receivedAt || b.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'gift',
+      label: b.message ? `ギフト「${b.message}」` : 'ギフト',
+      points: Number(b.points) || 0,
+      at
+    });
+  }
+
+  for (const t of tickets || []) {
+    if (!['bought', 'used'].includes(t.status)) continue;
+    const at = t.boughtAt || t.usedAt || t.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'spend',
+      label: `チケット「${t.title || ''}」`,
+      points: -(Number(t.price) || 0),
+      at
+    });
+  }
+
+  for (const e of exchanges || []) {
+    if (e.status !== 'approved') continue;
+    const at = e.approvedAt || e.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'spend',
+      label: '換金',
+      points: -(Number(e.points) || 0),
+      at
+    });
+  }
+
+  for (const p of paymentLogs || []) {
+    const at = p.chargedAt || p.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'spend',
+      label: p.title ? `支払い「${p.title}」` : '支払い',
+      points: -(Number(p.points) || Number(p.amount) || 0),
+      at
+    });
+  }
+
+  for (const b of banks || []) {
+    const at = b.createdAt;
+    if (!at) continue;
+    rows.push({
+      kind: 'spend',
+      label: '銀行へ預ける',
+      points: -(Number(b.amount) || 0),
+      at
+    });
+  }
+
+  const map = new Map();
+  for (const row of rows) {
+    const j = japanParts(new Date(row.at));
+    const key = `${j.year}-${pad2(j.month)}-${pad2(j.day)}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        year: j.year,
+        month: j.month,
+        day: j.day,
+        weekday: j.weekday,
+        earned: 0,
+        spent: 0,
+        gifted: 0,
+        items: []
+      });
+    }
+    const g = map.get(key);
+    const pts = Number(row.points) || 0;
+    if (row.kind === 'earn') g.earned += pts;
+    else if (row.kind === 'gift') g.gifted += pts;
+    else g.spent += Math.abs(pts);
+    g.items.push(row);
+  }
+  for (const g of map.values()) {
+    g.items.sort((a, b) => (b.at || 0) - (a.at || 0));
+  }
+  return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
+}
+
 /** 市場レート（決定論的。range: 'day' | 'week' | 'month'） */
 export const MARKET_ORDER = ['日本', 'アメリカ', '原油', '金'];
 
@@ -656,25 +764,77 @@ export function getMarketRates(range = 'month') {
   return rates;
 }
 
+/** グラフに出せる銘柄（いま持っている + 売買ログにあるもの） */
+export function getChartMarketNames(investments, logs) {
+  const names = new Set();
+  for (const inv of investments || []) {
+    if (MARKET_ORDER.includes(inv.name)) names.add(inv.name);
+  }
+  for (const log of logs || []) {
+    if (MARKET_ORDER.includes(log.name)) names.add(log.name);
+  }
+  return MARKET_ORDER.filter(n => names.has(n));
+}
+
+/** ある銘柄について、ある日までの売買を再生して元本と口数を出す */
+function positionFromLogs(logs, name, dayMs) {
+  const dayStart = japanDayStartMs(new Date(dayMs));
+  let principal = 0;
+  let shares = 0;
+  const events = (logs || [])
+    .filter(l => l.name === name)
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+  for (const log of events) {
+    const at = Number(log.at) || 0;
+    if (!at || japanDayStartMs(new Date(at)) > dayStart) continue;
+    const pts = Number(log.investedPoints) || 0;
+    const sh = Number(log.shares) || 0;
+    if (log.type === 'buy') {
+      principal += pts;
+      shares += sh;
+    } else if (log.type === 'sell') {
+      principal = Math.max(0, principal - pts);
+      shares = Math.max(0, shares - sh);
+    }
+  }
+  return { principal, shares };
+}
+
 /**
  * 指定した銘柄の、その日の元本と運用資産。
- * name が無いときは先頭の保有だけ（合計は出さない）。
+ * 売買ログがあれば売り後も含めて再現する。無いときはいまの保有だけ。
  */
-export function getPortfolioHistory(investments, range = 'week', name = null) {
+export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
   const rates = getMarketRates(range);
   const principal = [];
   const assets = [];
   const list = investments || [];
-  const targetName = name || list[0]?.name || null;
-  const selected = targetName ? list.filter(inv => inv.name === targetName) : [];
+  const logList = logs || [];
+  const names = getChartMarketNames(list, logList);
+  const targetName = (name && names.includes(name)) ? name : (names[0] || null);
+  const hasLogs = targetName
+    ? logList.some(l => l.name === targetName)
+    : false;
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
-    const owned = selected.filter(inv => {
-      const created = Number(inv.createdAt) || 0;
-      if (!created) return true;
-      return japanDayStartMs(new Date(created)) <= japanDayStartMs(new Date(ms));
-    });
+    const price = targetName ? (sheetRateAt(targetName, ms) ?? 1) : 1;
+
+    if (hasLogs) {
+      const pos = positionFromLogs(logList, targetName, ms);
+      principal.push(Math.round(pos.principal));
+      assets.push(Math.round(pos.shares * price));
+      continue;
+    }
+
+    const owned = targetName
+      ? list.filter(inv => {
+          if (inv.name !== targetName) return false;
+          const created = Number(inv.createdAt) || 0;
+          if (!created) return true;
+          return japanDayStartMs(new Date(created)) <= japanDayStartMs(new Date(ms));
+        })
+      : [];
     const dayRates = {};
     for (const market of MARKET_ORDER) dayRates[market] = sheetRateAt(market, ms) ?? 1;
     principal.push(owned.reduce((sum, inv) => sum + (Number(inv.investedPoints) || 0), 0));

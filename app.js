@@ -1,10 +1,10 @@
-import { state } from './state.js?v=156';
-import { render } from './ui.js?v=156';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=156';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=156';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=156';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=156';
-import { db, auth } from './firebase.js?v=156';
+import { state } from './state.js?v=157';
+import { render } from './ui.js?v=157';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=157';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=157';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=157';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=157';
+import { db, auth } from './firebase.js?v=157';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -751,7 +751,7 @@ function setupListeners() {
   const w = (c, k) => { 
     const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { 
       const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); 
-      a.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); 
+      a.sort((a, b) => (b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.at || a.createdAt || a.boughtAt || a.approvedAt || 0)); 
       
       if (!state.isInitialLoad) {
         s.docChanges().forEach(change => {
@@ -839,11 +839,14 @@ function setupListeners() {
       if (k === "scheduledPayments") {
         processScheduledPayments();
       }
+      if (k === "investments" || k === "investmentLogs") {
+        backfillInvestmentBuyLogs();
+      }
       render(); 
     });
     unsubscribes.push(unsub);
   };
-  w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
+  w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("investmentLogs", "investmentLogs"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
 }
 
 window.setView = (viewName) => {
@@ -1235,6 +1238,60 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
   showToast("使用済みにしました");
 });
 
+/** いま持っている株に売買ログが無いとき、買った日のログを1件作る（グラフ用） */
+let investmentLogBackfillBusy = false;
+async function backfillInvestmentBuyLogs() {
+  if (!state.familyCode || investmentLogBackfillBusy) return;
+  const invs = state.investments || [];
+  const logs = state.investmentLogs || [];
+  if (!invs.length) return;
+
+  const missing = [];
+  for (const inv of invs) {
+    const name = inv.name;
+    if (!name) continue;
+    const net = logs
+      .filter(l => l.name === name)
+      .reduce((sum, l) => {
+        const pts = Number(l.investedPoints) || 0;
+        return sum + (l.type === 'sell' ? -pts : pts);
+      }, 0);
+    const held = Number(inv.investedPoints) || 0;
+    if (held > 0 && net + 0.5 < held) {
+      const gap = held - Math.max(0, net);
+      const rate = Number(inv.buyRate) || getCurrentMarketRates()[name] || 1;
+      missing.push({
+        name,
+        investedPoints: gap,
+        shares: rate > 0 ? gap / rate : 0,
+        rate,
+        at: Number(inv.createdAt) || Date.now()
+      });
+    }
+  }
+  if (!missing.length) return;
+
+  investmentLogBackfillBusy = true;
+  try {
+    await Promise.all(missing.map(row =>
+      addDoc(collection(db, "investmentLogs"), {
+        familyCode: state.familyCode,
+        name: row.name,
+        type: 'buy',
+        investedPoints: row.investedPoints,
+        shares: row.shares,
+        rate: row.rate,
+        at: row.at,
+        backfilled: true
+      })
+    ));
+  } catch (e) {
+    console.error('[investmentLogs backfill]', e);
+  } finally {
+    investmentLogBackfillBusy = false;
+  }
+}
+
 window.sellCustom = async (id) => {
   const inv = state.investments.find(i => i.id === id);
   if (!inv) return showAlert('この投資は見つかりませんでした');
@@ -1251,6 +1308,10 @@ window.sellCustom = async (id) => {
   await guard(`sellCustom:${id}`, async () => {
     const famRef = doc(db, "families", state.familyCode);
     const invRef = doc(db, "investments", id);
+    const logRef = doc(collection(db, "investmentLogs"));
+    const sellShares = getHoldingShares(inv, r);
+    const sellPrincipal = Number(inv.investedPoints) || 0;
+    const at = Date.now();
     await runTransaction(db, async (tx) => {
       const invSnap = await tx.get(invRef);
       if (!invSnap.exists()) throw new Error('この投資は見つかりませんでした');
@@ -1258,6 +1319,16 @@ window.sellCustom = async (id) => {
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
       const pts = famSnap.data().points || 0;
       if (value > 0) tx.update(famRef, { points: pts + value });
+      tx.set(logRef, {
+        familyCode: state.familyCode,
+        name: inv.name,
+        type: 'sell',
+        investedPoints: sellPrincipal,
+        shares: sellShares,
+        value,
+        rate: r,
+        at
+      });
       tx.delete(invRef);
     });
     setView('invest');
@@ -1305,14 +1376,16 @@ window.investCustom = async (n) => {
     const cur = getCurrentMarketRates();
     const r = cur[dbName];
     if (!(r > 0)) throw new Error('いまの相場が取れませんでした');
+    const at = Date.now();
+    const buyShares = a / r;
 
-    await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) }); 
-    const ex = state.investments.find(i => i.name === dbName); 
+    await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) });
+    const ex = state.investments.find(i => i.name === dbName);
     if (ex) {
       const oldInvested = Number(ex.investedPoints) || 0;
       const oldShares = getHoldingShares(ex, r);
       const newInvested = oldInvested + a;
-      const newShares = oldShares + a / r;
+      const newShares = oldShares + buyShares;
       await updateDoc(doc(db, "investments", ex.id), {
         investedPoints: newInvested,
         shares: newShares,
@@ -1323,12 +1396,21 @@ window.investCustom = async (n) => {
         familyCode: state.familyCode,
         name: dbName,
         investedPoints: a,
-        shares: a / r,
+        shares: buyShares,
         buyRate: r,
-        createdAt: Date.now()
+        createdAt: at
       });
-    } 
-    setView('invest'); 
+    }
+    await addDoc(collection(db, "investmentLogs"), {
+      familyCode: state.familyCode,
+      name: dbName,
+      type: 'buy',
+      investedPoints: a,
+      shares: buyShares,
+      rate: r,
+      at
+    });
+    setView('invest');
     showToast(`${meta.label}を ${a}pt 買いました`);
   }, { busyLabel: '購入しています...' });
 };
@@ -1552,7 +1634,7 @@ window.sendBalloon = async () => {
 
 /** ギフトを受け取る。メッセージは state から読むので、属性に本文を埋め込まなくてよい。 */
 window.openBalloon = async (id) => {
-  const gift = (state.balloons || []).find(b => b.id === id);
+  const gift = (state.balloons || []).find(b => b.id === id && b.status !== 'received');
   if (!gift) return showAlert("このギフトはもう受け取り済みです");
   const amount = Number(gift.points) || 0;
 
@@ -1562,12 +1644,14 @@ window.openBalloon = async (id) => {
     let granted = null;
     await runTransaction(db, async (tx) => {
       const gSnap = await tx.get(giftRef);
-      if (!gSnap.exists()) return; // ほかの端末で受け取り済み
+      if (!gSnap.exists()) return;
+      const data = gSnap.data() || {};
+      if (data.status === 'received') return;
       const famSnap = await tx.get(famRef);
       const pts = famSnap.data().points || 0;
       granted = amount;
       if (granted > 0) tx.update(famRef, { points: pts + granted });
-      tx.delete(giftRef);
+      tx.update(giftRef, { status: 'received', receivedAt: Date.now() });
     });
     return granted;
   }, { busyLabel: '受け取っています...' });
@@ -1610,7 +1694,7 @@ window.addNewChild = async () => {
 // 同期IDにひもづくデータの置き場所。お子さまを削除するときはここを全部さらう。
 // pushTokens は一覧で引けない決まりにしてあるので、Cloud Functions 側で掃除する。
 const FAMILY_DATA_COLLECTIONS = [
-  'tasks', 'taskTemplates', 'tickets', 'exchanges', 'investments',
+  'tasks', 'taskTemplates', 'tickets', 'exchanges', 'investments', 'investmentLogs',
   'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
 ];
 
