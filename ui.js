@@ -1,7 +1,7 @@
-import { state } from './state.js?v=163';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=163';
-import { refreshTutorial } from './tutorial.js?v=163';
-import { auth } from './firebase.js?v=163';
+import { state } from './state.js?v=164';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=164';
+import { refreshTutorial } from './tutorial.js?v=164';
+import { auth } from './firebase.js?v=164';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -827,9 +827,9 @@ function renderInvest() {
       </div>
     ` : ''}
     <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
-      ${rangeBtn('day', '1日')}
       ${rangeBtn('week', '1週間')}
       ${rangeBtn('month', '1か月')}
+      ${rangeBtn('all', '全期間')}
     </div>
     ${heldNames.length ? `
       <div class="flex flex-col gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
@@ -1300,7 +1300,7 @@ export function drawInvestChart() {
 
   if (investChartInstance) investChartInstance.destroy();
 
-  const maxTicks = range === 'month' ? 6 : 7;
+  const maxTicks = range === 'all' ? 8 : (range === 'month' ? 6 : 7);
   investChartInstance = new Chart(ctx, {
     type: 'line',
     data: {

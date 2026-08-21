@@ -1,4 +1,4 @@
-import { state } from './state.js?v=163';
+import { state } from './state.js?v=164';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -477,7 +477,7 @@ export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs
   return [...map.values()].sort((a, b) => (a.key < b.key ? 1 : -1));
 }
 
-/** 市場レート（決定論的。range: 'day' | 'week' | 'month'） */
+/** 市場レート（決定論的。range: 'week' | 'month' | 'all'） */
 export const MARKET_ORDER = ['日本', 'アメリカ', '原油', '金'];
 
 export const MARKET_META = {
@@ -740,19 +740,20 @@ export function getMarketRates(range = 'month') {
   const now = new Date();
   const rates = { labels: [], ms: [] };
   for (const name of MARKET_ORDER) rates[name] = [];
-  let steps = 30;
-
-  if (range === 'day') steps = 5;
-  else if (range === 'week') steps = 7;
-  else steps = 22;
 
   const reference = MARKET_ORDER
     .map(name => sheetSeries?.[name])
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)[0];
 
+  let steps = 30;
+  if (range === 'week') steps = 7;
+  else if (range === 'month') steps = 30;
+  else if (range === 'all') steps = reference ? reference.length : 120;
+  else steps = 7; // 未知の指定は1週間
+
   if (reference) {
-    const points = reference.slice(-steps);
+    const points = range === 'all' ? reference : reference.slice(-steps);
     for (const p of points) {
       const j = japanParts(new Date(p.ms));
       rates.labels.push(`${j.month}/${j.day}`);
