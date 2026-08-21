@@ -2763,11 +2763,43 @@
   }
   function gemErr(msg, status) {
     const m = String(msg || "");
-    if (status === 401 || /UNAUTHENTICATED|ACCESS_TOKEN/i.test(m)) return "キーが新しい形式で弾かれた。ホームでAIzaから始まるキーに変えて";
+    if (/are blocked|API_KEY_SERVICE_BLOCKED|generativelanguage\.googleapis/i.test(m)) {
+      return "このキーではGemini APIが許可されていない";
+    }
+    if (status === 401 || /UNAUTHENTICATED|ACCESS_TOKEN/i.test(m)) return "キーが新しい形式で弾かれた";
     if (status === 429) return "回数制限。少し待って";
     if (status === 404 || /not found|no longer available/i.test(m)) return "モデルが見つからない";
     if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "通信できなかった。ネットとLINEの更新を確認して";
-    return (m || "Geminiに繋がらなかった").slice(0, 80);
+    return "Geminiに繋がらなかった";
+  }
+  async function geminiViaFirebase(prompt) {
+    const appMod = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js");
+    const aiMod = await import("https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js");
+    const cfg = {
+      apiKey: gemFallback(),
+      authDomain: "tibiz-a395e.firebaseapp.com",
+      projectId: "tibiz-a395e",
+      storageBucket: "tibiz-a395e.firebasestorage.app",
+      messagingSenderId: "347209039114",
+      appId: "1:347209039114:web:0d3ff0477e7bb812210ef3"
+    };
+    const app = appMod.getApps().some(a => a.name === "bb") ? appMod.getApp("bb") : appMod.initializeApp(cfg, "bb");
+    const tries = [];
+    if (aiMod.VertexAIBackend) tries.push(() => new aiMod.VertexAIBackend("us-central1"));
+    if (aiMod.GoogleAIBackend) tries.push(() => new aiMod.GoogleAIBackend());
+    let last = "";
+    for (const make of tries) {
+      try {
+        const ai = aiMod.getAI(app, { backend: make() });
+        const model = aiMod.getGenerativeModel(ai, { model: "gemini-3.5-flash" });
+        const result = await model.generateContent(prompt);
+        const text = (result.response && result.response.text) ? result.response.text() : "";
+        if (text && String(text).trim()) return String(text).trim();
+      } catch (e) {
+        last = e && e.message ? e.message : String(e);
+      }
+    }
+    throw new Error(last || "firebase-ai");
   }
   async function geminiOnce(key, prompt) {
     const models = ["gemini-3.5-flash"];
@@ -2807,7 +2839,6 @@
           if (text) return text;
         }
         if (res.status === 401 || res.status === 403) break;
-        if (res.status !== 404) continue;
       } catch (e) {
         last = { status: 0, msg: e.message || "fetch" };
       }
@@ -2837,13 +2868,21 @@
       "短い理由: " + local,
       "日本語で3〜6文。1手目はどこに何を置くか、2手目3手目の順、なぜその順か、コンボの危険、穴や次に気をつけることを具体的に。絵文字なし。採用手と違う場所を言わない。"
     ].join("\n");
-    let lastErr = "";
-    const keys = geminiKeys();
-    for (const key of keys) {
-      try { return await geminiOnce(key, prompt); }
-      catch (e) { lastErr = e.message || lastErr; }
+    try { return await geminiViaFirebase(prompt); }
+    catch (e1) {
+      let lastErr = gemErr(e1 && e1.message, 0);
+      const keys = [];
+      try {
+        const saved = (localStorage.getItem(GEM_LS) || "").trim();
+        if (saved) keys.push(saved);
+      } catch (e) {}
+      keys.push(gemDefault());
+      for (const key of keys) {
+        try { return await geminiOnce(key, prompt); }
+        catch (e2) { lastErr = e2.message || lastErr; }
+      }
+      throw new Error(lastErr || "Geminiに繋がらなかった");
     }
-    throw new Error(lastErr || "Geminiに繋がらなかった");
   }
   function openGemini() {
     el.gemini.style.display = "flex";
