@@ -1,4 +1,4 @@
-import { state } from './state.js?v=157';
+import { state } from './state.js?v=158';
 
 export const rb = (kanji, kana) => `<ruby>${kanji}<rt>${kana}</rt></ruby>`;
 
@@ -764,7 +764,12 @@ export function getMarketRates(range = 'month') {
   return rates;
 }
 
-/** グラフに出せる銘柄（いま持っている + 売買ログにあるもの） */
+/** いま運用中の株だけ（売却済みは除く） */
+export function getActiveInvestments(investments) {
+  return (investments || []).filter(inv => inv.status !== 'sold');
+}
+
+/** グラフに出せる銘柄（いま持っている + 売却済みの履歴があるもの） */
 export function getChartMarketNames(investments, logs) {
   const names = new Set();
   for (const inv of investments || []) {
@@ -800,9 +805,29 @@ function positionFromLogs(logs, name, dayMs) {
   return { principal, shares };
 }
 
+/** 投資ドキュメント（売却済み含む）から、その日の元本と口数を出す */
+function positionFromInvestments(investments, name, dayMs) {
+  const dayStart = japanDayStartMs(new Date(dayMs));
+  let principal = 0;
+  let shares = 0;
+  for (const inv of investments || []) {
+    if (inv.name !== name) continue;
+    const created = Number(inv.createdAt) || 0;
+    if (created && japanDayStartMs(new Date(created)) > dayStart) continue;
+    const soldAt = Number(inv.soldAt) || 0;
+    // 売った日以降は持っていない
+    if (inv.status === 'sold' && soldAt && japanDayStartMs(new Date(soldAt)) <= dayStart) continue;
+    const pts = Number(inv.investedPoints) || 0;
+    const rate = Number(inv.buyRate) || 0;
+    principal += pts;
+    shares += pts > 0 && rate > 0 ? pts / rate : (Number(inv.shares) || 0);
+  }
+  return { principal, shares };
+}
+
 /**
  * 指定した銘柄の、その日の元本と運用資産。
- * 売買ログがあれば売り後も含めて再現する。無いときはいまの保有だけ。
+ * 売却済みの保有も含めて再現する（売って消さない前提）。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
   const rates = getMarketRates(range);
@@ -819,26 +844,11 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
     const price = targetName ? (sheetRateAt(targetName, ms) ?? 1) : 1;
-
-    if (hasLogs) {
-      const pos = positionFromLogs(logList, targetName, ms);
-      principal.push(Math.round(pos.principal));
-      assets.push(Math.round(pos.shares * price));
-      continue;
-    }
-
-    const owned = targetName
-      ? list.filter(inv => {
-          if (inv.name !== targetName) return false;
-          const created = Number(inv.createdAt) || 0;
-          if (!created) return true;
-          return japanDayStartMs(new Date(created)) <= japanDayStartMs(new Date(ms));
-        })
-      : [];
-    const dayRates = {};
-    for (const market of MARKET_ORDER) dayRates[market] = sheetRateAt(market, ms) ?? 1;
-    principal.push(owned.reduce((sum, inv) => sum + (Number(inv.investedPoints) || 0), 0));
-    assets.push(getInvestmentPortfolioValue(owned, dayRates, null));
+    const pos = hasLogs
+      ? positionFromLogs(logList, targetName, ms)
+      : positionFromInvestments(list, targetName, ms);
+    principal.push(Math.round(pos.principal));
+    assets.push(Math.round(pos.shares * price));
   }
   return { labels: rates.labels, principal, assets, name: targetName };
 }

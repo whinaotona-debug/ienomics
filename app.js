@@ -1,10 +1,10 @@
-import { state } from './state.js?v=157';
-import { render } from './ui.js?v=157';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=157';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=157';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=157';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=157';
-import { db, auth } from './firebase.js?v=157';
+import { state } from './state.js?v=158';
+import { render } from './ui.js?v=158';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=158';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=158';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=158';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=158';
+import { db, auth } from './firebase.js?v=158';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1242,7 +1242,7 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
 let investmentLogBackfillBusy = false;
 async function backfillInvestmentBuyLogs() {
   if (!state.familyCode || investmentLogBackfillBusy) return;
-  const invs = state.investments || [];
+  const invs = getActiveInvestments(state.investments);
   const logs = state.investmentLogs || [];
   if (!invs.length) return;
 
@@ -1293,12 +1293,12 @@ async function backfillInvestmentBuyLogs() {
 }
 
 window.sellCustom = async (id) => {
-  const inv = state.investments.find(i => i.id === id);
+  const inv = getActiveInvestments(state.investments).find(i => i.id === id);
   if (!inv) return showAlert('この投資は見つかりませんでした');
   const cur = getCurrentMarketRates();
   const r = cur[inv.name];
   if (!(r > 0)) return showAlert('いまの相場が取れませんでした');
-  const values = getInvestmentValues(state.investments, cur, state.stockCap);
+  const values = getInvestmentValues(getActiveInvestments(state.investments), cur, state.stockCap);
   const value = Math.max(0, values[id] ?? Math.round(getHoldingValue(inv, r)));
   const ok = await showConfirm(
     `今の価値は ${value}pt です。売ってポイントに戻します。`,
@@ -1308,29 +1308,38 @@ window.sellCustom = async (id) => {
   await guard(`sellCustom:${id}`, async () => {
     const famRef = doc(db, "families", state.familyCode);
     const invRef = doc(db, "investments", id);
-    const logRef = doc(collection(db, "investmentLogs"));
-    const sellShares = getHoldingShares(inv, r);
-    const sellPrincipal = Number(inv.investedPoints) || 0;
     const at = Date.now();
     await runTransaction(db, async (tx) => {
       const invSnap = await tx.get(invRef);
       if (!invSnap.exists()) throw new Error('この投資は見つかりませんでした');
+      const data = invSnap.data() || {};
+      if (data.status === 'sold') throw new Error('この投資はすでに売却済みです');
       const famSnap = await tx.get(famRef);
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
       const pts = famSnap.data().points || 0;
       if (value > 0) tx.update(famRef, { points: pts + value });
-      tx.set(logRef, {
+      // 消さず残す。過去の元本・運用資産をグラフで再現するため
+      tx.update(invRef, {
+        status: 'sold',
+        soldAt: at,
+        soldValue: value,
+        soldRate: r
+      });
+    });
+    try {
+      await addDoc(collection(db, "investmentLogs"), {
         familyCode: state.familyCode,
         name: inv.name,
         type: 'sell',
-        investedPoints: sellPrincipal,
-        shares: sellShares,
+        investedPoints: Number(inv.investedPoints) || 0,
+        shares: getHoldingShares(inv, r),
         value,
         rate: r,
         at
       });
-      tx.delete(invRef);
-    });
+    } catch (e) {
+      console.warn('[investmentLogs]', e);
+    }
     setView('invest');
     showToast(`${value}pt になりました`);
   }, { busyLabel: '売却しています...' });
@@ -1354,7 +1363,7 @@ window.investCustom = async (n) => {
   }
   const meta = MARKET_META[dbName];
   const currentStockValue = getInvestmentPortfolioValue(
-    state.investments,
+    getActiveInvestments(state.investments),
     getCurrentMarketRates(),
     null
   );
@@ -1380,7 +1389,7 @@ window.investCustom = async (n) => {
     const buyShares = a / r;
 
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) });
-    const ex = state.investments.find(i => i.name === dbName);
+    const ex = getActiveInvestments(state.investments).find(i => i.name === dbName);
     if (ex) {
       const oldInvested = Number(ex.investedPoints) || 0;
       const oldShares = getHoldingShares(ex, r);
@@ -1409,7 +1418,7 @@ window.investCustom = async (n) => {
       shares: buyShares,
       rate: r,
       at
-    });
+    }).catch(e => console.warn('[investmentLogs]', e));
     setView('invest');
     showToast(`${meta.label}を ${a}pt 買いました`);
   }, { busyLabel: '購入しています...' });
@@ -1593,7 +1602,7 @@ window.saveStockCap = async () => {
     if (cap === 0) cap = null;
   }
   const currentValue = getInvestmentPortfolioValue(
-    state.investments,
+    getActiveInvestments(state.investments),
     getCurrentMarketRates(),
     null
   );

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=157';
-import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames } from './utils.js?v=157';
-import { refreshTutorial } from './tutorial.js?v=157';
-import { auth } from './firebase.js?v=157';
+import { state } from './state.js?v=158';
+import { getIcon, rb, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=158';
+import { refreshTutorial } from './tutorial.js?v=158';
+import { auth } from './firebase.js?v=158';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -538,7 +538,7 @@ function renderHome() {
   });
   const rates = getCurrentMarketRates();
   const investTotal = getInvestmentPortfolioValue(
-    state.investments,
+    getActiveInvestments(state.investments),
     rates,
     state.stockCap
   );
@@ -786,9 +786,10 @@ function renderInvest() {
   const curRates = getCurrentMarketRates();
   const locked = state.points < 0;
   const stockCap = Number(state.stockCap) > 0 ? Number(state.stockCap) : null;
-  const rawStockValue = getInvestmentPortfolioValue(state.investments, curRates, null);
-  const stockValue = getInvestmentPortfolioValue(state.investments, curRates, stockCap);
-  const investmentValues = getInvestmentValues(state.investments, curRates, stockCap);
+  const activeInvs = getActiveInvestments(state.investments);
+  const rawStockValue = getInvestmentPortfolioValue(activeInvs, curRates, null);
+  const stockValue = getInvestmentPortfolioValue(activeInvs, curRates, stockCap);
+  const investmentValues = getInvestmentValues(activeInvs, curRates, stockCap);
   const capReached = stockCap != null && rawStockValue >= stockCap;
   const range = state.investRange || 'week';
   const rangeBtn = (id, label) => {
@@ -831,7 +832,7 @@ function renderInvest() {
     ` : ''}
     <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
     <p class="text-[9px] font-bold text-center mb-4 text-[#7a8f88]">
-      ${(state.investments || []).length
+      ${(activeInvs || []).length
         ? `${esc(MARKET_META[chartName]?.short || '')}の運用資産と元本（pt）`
         : '株を買うと、運用資産と元本のグラフが出ます'}
     </p>
@@ -856,7 +857,7 @@ function renderInvest() {
       </div>`)
     ) : `<p class="text-[10px] font-bold text-[#7a8f88] mb-4 text-center">銘柄を選んで、運用資産と元本を確認できます</p>`}
     <div class="space-y-3">
-      ${state.investments.length > 0 ? state.investments.map(inv => {
+      ${activeInvs.length > 0 ? activeInvs.map(inv => {
         const meta = MARKET_META[inv.name] || { label: inv.name };
         const val = investmentValues[inv.id] || 0;
         const invested = Number(inv.investedPoints) || 0;
