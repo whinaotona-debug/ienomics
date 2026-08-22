@@ -1,4 +1,25 @@
 {
-  "updatedAt": "",
-  "items": []
+  "updatedAt": "2026-08-22T11:31:04.007Z",
+  "items": [
+    {
+      "about": "日経平均",
+      "url": "https://news.google.com/rss/articles/CBMiYEFVX3lxTE1QNmU1NHN2ZzJLRXh5QWFTaGNKVFpRc3FZLUkzeWMzRjhRRFYyelhCQ3AwNUhsTDJJNXpNdnJSUWNVN3o4NDAwWG5PS054dU1PZmVYUWJRMnNNU3R6Z2NLNg?oc=5",
+      "source": "株探"
+    },
+    {
+      "about": "S&P500",
+      "url": "https://news.google.com/rss/articles/CBMihwFBVV95cUxQX3laQjFnT04tenZfQ3lYcW10azRnck5pM3FxOTE0TnhxY2VSeXlsY0Vmb0hHbzlWeEM5MUp6WHhHMXZad3RyVnJCcDUxZDdIVmdSMTdZSGRpSnVvVm9LWS1jdV9FcERQRjhWVFpDbFpZNnhOcjR2SGRoaTdhODhxWi0xLXMxVU0?oc=5",
+      "source": "Yahoo!ファイナンス"
+    },
+    {
+      "about": "金",
+      "url": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE1RVUZsSm9jNVNSdTRaRzNqT0dac2xZVUl1S3d2dlNSRnNsNGRTWERMb1ljak5pTTNjc0kyd25EVnhlLW9GRFlDRHZwcVpWME1OWGV2cHY1S194Zw?oc=5",
+      "source": "Forbes JAPAN"
+    },
+    {
+      "about": "原油",
+      "url": "https://news.google.com/rss/articles/CBMiVkFVX3lxTE1JVUMzX0FKQlhqSm9KWndDX2pOVUZacGp3ZDd5WWpCbWhqOU1QbjN3NG1NdnR4UzNGay1Ga1NQbktTeE5WcjVkRVVwMHN0SVVvMGlCV2ln?oc=5",
+      "source": "JBpress"
+    }
+  ]
 }
