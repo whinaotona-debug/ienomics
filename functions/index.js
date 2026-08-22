@@ -378,16 +378,19 @@ exports.generateRepeatedTasksCatchup = onSchedule(
 
 /**
  * 期限が近いお仕事を知らせる。10分ごとに動く。
- * 「あと1時間」のタイミングだけ通知する（残り52分などで途中通知しない）。
+ * 1時間前（残り55〜70分）と30分前（残り25〜38分）だけ。残り52分では出さない。
  */
 exports.remindDeadlines = onSchedule(
   { schedule: 'every 10 minutes', timeZone: 'Asia/Tokyo' },
   async () => {
     const now = Date.now();
-    const hour = 60 * 60 * 1000;
-    const window = 10 * 60 * 1000; // スケジューラ間隔±余裕
-    const from = now + hour - window; // 残り約70分〜
-    const to = now + hour + window;   // 残り約50分まで
+    const minute = 60 * 1000;
+    const slots = [
+      { id: '60', label: 'あと1時間', minMs: 55 * minute, maxMs: 70 * minute, field: 'deadlineRemind60For' },
+      { id: '30', label: 'あと30分', minMs: 25 * minute, maxMs: 38 * minute, field: 'deadlineRemind30For' }
+    ];
+    const from = now + 25 * minute;
+    const to = now + 70 * minute;
 
     const snap = await db.collection('tasks')
       .where('deadline', '>=', from)
@@ -399,19 +402,25 @@ exports.remindDeadlines = onSchedule(
     for (const d of snap.docs) {
       const t = d.data();
       if (!['open', 'accepted'].includes(t.status)) continue;
-      if (t.deadlineNotifiedFor === t.deadline) continue;
+      const remaining = t.deadline - now;
 
-      await d.ref.update({
-        deadlineNotifiedFor: t.deadline,
-        deadlineNotifiedAt: FieldValue.serverTimestamp()
-      });
+      for (const slot of slots) {
+        if (remaining < slot.minMs || remaining > slot.maxMs) continue;
+        if (t[slot.field] === t.deadline) continue;
 
-      await notify(
-        t.familyCode, 'all',
-        '期限が近づいています',
-        `「${t.title}」の期限はあと1時間です`,
-        `deadline-${d.id}`
-      );
+        await d.ref.update({
+          [slot.field]: t.deadline,
+          deadlineNotifiedAt: FieldValue.serverTimestamp()
+        });
+        t[slot.field] = t.deadline;
+
+        await notify(
+          t.familyCode, 'all',
+          '期限が近づいています',
+          `「${t.title}」の期限は${slot.label}です`,
+          `deadline-${d.id}-${slot.id}`
+        );
+      }
     }
   }
 );

@@ -1,10 +1,10 @@
-import { state } from './state.js?v=166';
-import { render } from './ui.js?v=166';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=166';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=166';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=166';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=166';
-import { db, auth } from './firebase.js?v=166';
+import { state } from './state.js?v=167';
+import { render } from './ui.js?v=167';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=167';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=167';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=167';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=167';
+import { db, auth } from './firebase.js?v=167';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -136,10 +136,13 @@ let generatedToday = {};
 let deadlineTimer = null;
 let midnightTimer = null;
 let watchedDayKey = null;
-const DEADLINE_REMIND_MS = 60 * 60 * 1000; // 1時間前
-/** 10分間隔のチェックでも拾えるよう、1時間前±10分の窓 */
-const DEADLINE_REMIND_WINDOW_MS = 10 * 60 * 1000;
 const DEADLINE_CHECK_MS = 30 * 1000;
+const MINUTE = 60 * 1000;
+/** 1時間前: 残り55〜70分。52分では出さない */
+const DEADLINE_REMIND_SLOTS = [
+  { id: '60', label: 'あと1時間', minMs: 55 * MINUTE, maxMs: 70 * MINUTE },
+  { id: '30', label: 'あと30分', minMs: 25 * MINUTE, maxMs: 38 * MINUTE }
+];
 
 function getDeadlineNotifiedMap() {
   try {
@@ -169,19 +172,17 @@ function checkDeadlineReminders() {
     if (!['open', 'accepted'].includes(t.status)) continue;
 
     const remaining = t.deadline - now;
-    // 「あと1時間」のタイミングだけ（±10分）。52分など途中では出さない
-    const skew = remaining - DEADLINE_REMIND_MS;
-    if (Math.abs(skew) > DEADLINE_REMIND_WINDOW_MS) continue;
-    // 同じ期限に対して二重通知しない
-    if (notified[t.id] === t.deadline) continue;
-
-    notified[t.id] = t.deadline;
-    changed = true;
-
-    if (state.role === 'child') {
-      localNotify("期限が近づいています！", `「${t.title}」の期限があと1時間です。急ぎましょう！`);
-    } else {
-      localNotify("期限アラーム", `「${t.title}」の期限があと1時間です`);
+    for (const slot of DEADLINE_REMIND_SLOTS) {
+      if (remaining < slot.minMs || remaining > slot.maxMs) continue;
+      const key = `${t.id}:${slot.id}:${t.deadline}`;
+      if (notified[key]) continue;
+      notified[key] = 1;
+      changed = true;
+      if (state.role === 'child') {
+        localNotify("期限が近づいています！", `「${t.title}」の期限が${slot.label}です。急ぎましょう！`);
+      } else {
+        localNotify("期限アラーム", `「${t.title}」の期限が${slot.label}です`);
+      }
     }
   }
 
