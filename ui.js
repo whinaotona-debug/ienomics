@@ -1,7 +1,7 @@
-import { state } from './state.js?v=171';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=171';
-import { refreshTutorial } from './tutorial.js?v=171';
-import { auth } from './firebase.js?v=171';
+import { state } from './state.js?v=172';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=172';
+import { refreshTutorial } from './tutorial.js?v=172';
+import { auth } from './firebase.js?v=172';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -151,7 +151,7 @@ export function render() {
   bottomNav.classList.remove('hidden');
   const midTab = state.role === 'parent'
     ? `<button onclick="setView('balloonSend')" data-tour="nav-mid" aria-current="${state.view==='balloonSend'?'page':'false'}" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
-    : `<button onclick="setView('tickets')" data-tour="nav-mid" aria-current="${state.view==='tickets'?'page':'false'}" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>`;
+    : '';
   bottomNav.innerHTML = `
     <div class="ie-nav-shell" role="tablist" aria-label="メインメニュー">
       <button onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
@@ -179,6 +179,7 @@ export function render() {
       else if(state.view === 'calendar') content = renderCalendar();
       else if(state.view === 'balloonSend') content = renderBalloonSend();
       else if(state.view === 'tickets') content = renderTickets();
+      else if(state.view === 'news') content = renderNews();
       else if(state.view === 'history') content = renderHistory();
       else if(state.view === 'settings') content = renderSettings();
       html += renderModal(content); 
@@ -219,7 +220,9 @@ function paintNewsTicker() {
   }
   const item = items[newsTickIdx % items.length];
   el.href = item.url;
-  el.textContent = `${item.about}についてのニュースがあります`;
+  el.textContent = item.title
+    ? item.title
+    : `${item.about}についてのニュースがあります`;
   if (newsTickTimer) return;
   newsTickTimer = setInterval(() => {
     newsTickIdx += 1;
@@ -228,7 +231,9 @@ function paintNewsTicker() {
     if (!node || !list.length) return;
     const next = list[newsTickIdx % list.length];
     node.href = next.url;
-    node.textContent = `${next.about}についてのニュースがあります`;
+    node.textContent = next.title
+      ? next.title
+      : `${next.about}についてのニュースがあります`;
   }, 5000);
 }
 
@@ -417,7 +422,7 @@ function renderHeader() {
   const news = (state.marketNews || []).filter(n => n && n.url && n.about);
   const firstNews = news[0];
   const newsTicker = firstNews
-    ? `<a class="ie-news-ticker" id="ie-news-ticker" href="${esc(firstNews.url)}" target="_blank" rel="noopener noreferrer">${esc(firstNews.about)}についてのニュースがあります</a>`
+    ? `<a class="ie-news-ticker" id="ie-news-ticker" href="${esc(firstNews.url)}" target="_blank" rel="noopener noreferrer">${esc(firstNews.title || `${firstNews.about}についてのニュースがあります`)}</a>`
     : '';
 
   return `
@@ -771,6 +776,10 @@ function renderHome() {
                   </div>
                   <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('運用','うんよう')}</span>
                 </button>
+                <button onclick="setView('news')" data-tour="news" class="solid-btn py-2.5 flex-row gap-2">
+                  <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('news')}</div>
+                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('ニュース','にゅーす')}</span>
+                </button>
               </div>
             </div>
             <div>
@@ -783,10 +792,6 @@ function renderHome() {
                 <button onclick="setView('exchange')" data-tour="exchange" class="solid-btn w-full py-2.5 flex-row gap-2">
                   <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('exchange')}</div>
                   <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${tEx}</span>
-                </button>
-                <button onclick="setView('tickets')" data-tour="tickets" class="solid-btn w-full py-2.5 flex-row gap-2">
-                  <div class="w-4 h-4 text-[#c9483c] shrink-0">${getIcon('ticket')}</div>
-                  <span class="text-[10px] font-bold text-[#2c3d38] leading-none">チケット</span>
                 </button>
               </div>
             </div>
@@ -1287,6 +1292,15 @@ function renderSettings() {
 
     ${pushRow}
 
+    <button onclick="setView('tickets')" class="ie-guide-btn w-full mb-4" aria-label="チケット">
+      <span class="ie-guide-icon text-[#c9483c]">${getIcon('ticket')}</span>
+      <span class="ie-guide-text">
+        <span class="ie-guide-title">チケット</span>
+        <span class="ie-guide-sub">${isChild ? '円で かえる ごほうび' : 'ごほうびチケットの登録と使用済み処理'}</span>
+      </span>
+      <span class="ie-guide-arrow" aria-hidden="true">›</span>
+    </button>
+
     ${isChild ? '' : `
       <button onclick="addNewChild()" class="ie-guide-btn w-full mb-4" aria-label="お子さまを追加する">
         <span class="ie-guide-icon">${getIcon('childAdd')}</span>
@@ -1486,6 +1500,34 @@ function renderExchange() {
   }
   return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`;
 }
+function renderNews() {
+  const order = ['日経平均', 'S&P500', '金', '原油'];
+  const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
+  const groups = order.map(about => ({
+    about,
+    items: all.filter(n => n.about === about).slice(0, 3)
+  })).filter(g => g.items.length);
+
+  const blocks = groups.length
+    ? groups.map(g => {
+      const rows = g.items.map(n => {
+        const label = n.title || `${n.about}についてのニュースがあります`;
+        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p></a>`;
+      }).join('');
+      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}</h3><div class="space-y-2">${rows}</div></section>`;
+    }).join('')
+    : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
+
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('news')}</div>
+      ${rb('ニュース','にゅーす')}
+    </h2>
+    <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">見出しだけ出しています。タップすると元の記事が開きます。</p>
+    ${blocks}
+  `;
+}
+
 function renderTickets() {
   const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true);
   const parentForm = state.role === 'parent' ? `

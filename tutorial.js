@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=171';
+import { esc } from './utils.js?v=172';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -59,9 +59,9 @@ const PARENT_STEPS = [
     body: 'お子さまからの「円を現金にしたい」という申請は、ここで承認または却下します。'
   },
   {
-    target: 'tickets',
-    title: 'チケット',
-    body: '「ゲーム1時間」などを円で買えるチケットとして登録できます。お子さまが買ったら、ここで使用済みにします。'
+    target: 'news',
+    title: 'ニュース',
+    body: '日経平均・S&P500・金・原油の見出しが、子どもにもわかりやすい順で3つずつ並びます。タップすると元の記事が開きます。'
   },
   {
     target: 'tasklist',
@@ -122,9 +122,9 @@ const CHILD_STEPS = [
     body: 'ためた 円を おかねに かえたいときは ここから おねがいします。おうちの人が みとめたら せいりつです。'
   },
   {
-    target: 'tickets',
-    title: 'チケット',
-    body: '「ゲーム1じかん」などを 円で こうにゅうできます。'
+    target: 'news',
+    title: 'ニュース',
+    body: 'かぶや きんの ニュースが みられます。みだしだけ でていて、タップすると もとの きじが ひらきます。'
   },
   {
     target: 'tasklist',

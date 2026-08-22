@@ -1,10 +1,10 @@
-import { state } from './state.js?v=171';
-import { render } from './ui.js?v=171';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=171';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=171';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=171';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=171';
-import { db, auth } from './firebase.js?v=171';
+import { state } from './state.js?v=172';
+import { render } from './ui.js?v=172';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=172';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=172';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=172';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=172';
+import { db, auth } from './firebase.js?v=172';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1578,8 +1578,8 @@ async function loadMarketNews() {
     const items = (Array.isArray(json?.items) ? json.items : [])
       .map(row => ({
         about: String(row?.about || '').trim().slice(0, 40),
-        url: String(row?.url || '').trim(),
-        source: String(row?.source || '').trim().slice(0, 80)
+        title: String(row?.title || '').trim().slice(0, 180),
+        url: String(row?.url || '').trim()
       }))
       .filter(row => row.about && isNewsHttpUrl(row.url));
     const next = JSON.stringify(items);

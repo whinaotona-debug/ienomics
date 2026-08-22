@@ -42,6 +42,8 @@ jobs:
         continue-on-error: true
 
       - name: ニュースURLを更新
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node tools/update-news.mjs
         continue-on-error: true
 
