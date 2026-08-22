@@ -1,7 +1,7 @@
-import { state } from './state.js?v=173';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=173';
-import { refreshTutorial } from './tutorial.js?v=173';
-import { auth } from './firebase.js?v=173';
+import { state } from './state.js?v=174';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=174';
+import { refreshTutorial } from './tutorial.js?v=174';
+import { auth } from './firebase.js?v=174';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1472,11 +1472,19 @@ function renderNews() {
     }).join('')
     : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
 
+  let updatedLine = '';
+  const at = Date.parse(state.marketNewsUpdatedAt || '');
+  if (Number.isFinite(at)) {
+    const j = japanParts(new Date(at));
+    updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
+  }
+
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('news')}</div>
       ${rb('ニュース','にゅーす')}
     </h2>
+    ${updatedLine}
     <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">見出しだけ出しています。タップすると元の記事が開きます。</p>
     ${blocks}
   `;
