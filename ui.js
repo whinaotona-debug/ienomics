@@ -1,7 +1,7 @@
-import { state } from './state.js?v=169';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=169';
-import { refreshTutorial } from './tutorial.js?v=169';
-import { auth } from './firebase.js?v=169';
+import { state } from './state.js?v=170';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=170';
+import { refreshTutorial } from './tutorial.js?v=170';
+import { auth } from './firebase.js?v=170';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -189,6 +189,7 @@ export function render() {
   animatePointsDisplay();
   bindSwipeRows(appDiv);
   tickJapanClock();
+  paintNewsTicker();
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
   // 画面が作り直されたので、ガイドの枠を測り直す
   refreshTutorial();
@@ -197,6 +198,38 @@ export function render() {
 function tickJapanClock() {
   const el = document.getElementById('ie-japan-clock');
   if (el) el.textContent = formatJapanClock();
+}
+
+let newsTickIdx = 0;
+let newsTickTimer = null;
+
+function newsTickerItems() {
+  return (state.marketNews || []).filter(n => n && n.url && n.about);
+}
+
+function paintNewsTicker() {
+  const el = document.getElementById('ie-news-ticker');
+  const items = newsTickerItems();
+  if (!el || !items.length) {
+    if (newsTickTimer) {
+      clearInterval(newsTickTimer);
+      newsTickTimer = null;
+    }
+    return;
+  }
+  const item = items[newsTickIdx % items.length];
+  el.href = item.url;
+  el.textContent = `${item.about}についてのニュースがあります`;
+  if (newsTickTimer) return;
+  newsTickTimer = setInterval(() => {
+    newsTickIdx += 1;
+    const list = newsTickerItems();
+    const node = document.getElementById('ie-news-ticker');
+    if (!node || !list.length) return;
+    const next = list[newsTickIdx % list.length];
+    node.href = next.url;
+    node.textContent = `${next.about}についてのニュースがあります`;
+  }, 5000);
 }
 
 if (typeof window !== 'undefined' && !window.__ieClockStarted) {
@@ -381,9 +414,16 @@ function renderHeader() {
     ? `<p class="text-[9px] font-bold text-[#b8f0e4] mt-0.5">${stamp.streak}日連続お手伝い中！</p>`
     : '';
 
+  const news = (state.marketNews || []).filter(n => n && n.url && n.about);
+  const firstNews = news[0];
+  const newsTicker = firstNews
+    ? `<a class="ie-news-ticker" id="ie-news-ticker" href="${esc(firstNews.url)}" target="_blank" rel="noopener noreferrer">${esc(firstNews.about)}についてのニュースがあります</a>`
+    : '';
+
   return `
-    <div class="flex-none px-3 円-3 pb-0">
+    <div class="flex-none px-3 pt-3 pb-0">
       <div class="ie-topbar" data-tour="topbar">
+        <div class="ie-topbar-row">
         <div class="ie-topbar-brand">
           <div class="ie-topbar-logo">
             <img src="logo.png" alt="" onerror="this.style.display='none'" />
@@ -396,6 +436,8 @@ function renderHeader() {
         <button type="button" onclick="reloadApp()" title="最新版を読み込む" class="ie-topbar-refresh" aria-label="更新">
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
+        </div>
+        ${newsTicker}
       </div>
       ${childTabs ? `<div class="ie-hero-tabs">${childTabs}</div>` : ''}
       <div class="ie-hero">

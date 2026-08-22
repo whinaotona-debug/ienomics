@@ -1,10 +1,10 @@
-import { state } from './state.js?v=169';
-import { render } from './ui.js?v=169';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=169';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=169';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=169';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=169';
-import { db, auth } from './firebase.js?v=169';
+import { state } from './state.js?v=170';
+import { render } from './ui.js?v=170';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=170';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=170';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=170';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=170';
+import { db, auth } from './firebase.js?v=170';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -424,6 +424,7 @@ async function processScheduledPayments() {
 }
 
 applyFuriganaState();
+loadMarketNews();
 
 window.onload = async () => {
   const params = new URLSearchParams(window.location.search);
@@ -1548,7 +1549,46 @@ function applyMarketSheetUrl(url) {
     marketSheetTimer = null;
   }
   loadMarketSheet(next);
-  marketSheetTimer = setInterval(() => loadMarketSheet(next), MARKET_SHEET_RELOAD_MS);
+  loadMarketNews();
+  marketSheetTimer = setInterval(() => {
+    loadMarketSheet(next);
+    loadMarketNews();
+  }, MARKET_SHEET_RELOAD_MS);
+}
+
+function defaultNewsUrl() {
+  const key = japanTodayKey().replace(/-/g, '');
+  return new URL(`news.json?d=${key}`, document.baseURI).href;
+}
+
+function isNewsHttpUrl(s) {
+  try {
+    const u = new URL(s);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+async function loadMarketNews() {
+  try {
+    const res = await fetch(defaultNewsUrl(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const json = await res.json();
+    const items = (Array.isArray(json?.items) ? json.items : [])
+      .map(row => ({
+        about: String(row?.about || '').trim().slice(0, 40),
+        url: String(row?.url || '').trim(),
+        source: String(row?.source || '').trim().slice(0, 80)
+      }))
+      .filter(row => row.about && isNewsHttpUrl(row.url));
+    const next = JSON.stringify(items);
+    if (next === JSON.stringify(state.marketNews || [])) return;
+    state.marketNews = items;
+    render();
+  } catch {
+    // ニュースが無くても相場は動かす
+  }
 }
 
 async function loadMarketSheet(url) {

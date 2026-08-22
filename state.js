@@ -36,6 +36,7 @@ export const state = {
   marketSheetMarkets: [],   // 表から読めた市場名
   marketSheetUpdatedAt: null,
   marketSheetError: '',
+  marketNews: [], // { about, url, source } 本文は持たない。リンクだけ。
   childLinked: true,
   tasks: [],
   taskTemplates: [],

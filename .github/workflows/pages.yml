@@ -13,6 +13,8 @@ on:
   schedule:
     # 米国市場の終了後（日本時間 朝6時・平日）に終値を取り直す
     - cron: '0 21 * * 1-5'
+    # 日本時間 0:15 にニュースのURLだけ取り直す
+    - cron: '15 15 * * *'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,12 @@ jobs:
 
       - name: 相場CSVを更新
         run: node tools/update-market.mjs
+        continue-on-error: true
+
+      - name: ニュースURLを更新
+        env:
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+        run: node tools/update-news.mjs
         continue-on-error: true
 
       - name: Pages の設定を読み込む
