@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=172';
+import { esc } from './utils.js?v=173';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -135,6 +135,11 @@ const CHILD_STEPS = [
     target: 'inbox',
     title: 'おしらせ',
     body: 'あたらしい おしごとや ギフトが とどくと ここに でます。ギフトは タップすると うけとれます。'
+  },
+  {
+    target: 'nav-mid',
+    title: 'チケット',
+    body: '「ゲーム1じかん」などを 円で かえます。したのバーから ひらけます。'
   },
   {
     target: 'nav-history',
