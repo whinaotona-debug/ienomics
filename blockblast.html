@@ -293,7 +293,7 @@
     }
     #ai-line {
       min-height: 28px;
-      max-height: 5.8em;
+      max-height: 7.2em;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       touch-action: pan-y;
@@ -2662,16 +2662,15 @@
     if (!piece) return;
     state.hint = ghostFor(piece, mv.r, mv.c);
     renderBoard();
-    const local = explain(plan).replace(/<\/?em>/g, "");
+    const local = explainDetail(plan);
     const tok = ++hintTok;
-    paintHint(local, getGeminiKey() ? "詳しく書いてる…" : "");
-    if (!getGeminiKey()) return;
+    paintHint(local, "詳しく書いてる…");
     geminiExplain(plan).then(text => {
       if (tok !== hintTok) return;
       if (text) paintHint(text, "");
-    }).catch((e) => {
+    }).catch(() => {
       if (tok !== hintTok) return;
-      paintHint(local, (e && e.message) ? String(e.message).slice(0, 90) : "Geminiに繋がらなかった");
+      paintHint(local, "");
     });
   }
 
@@ -2680,22 +2679,12 @@
   function gemDefault() {
     return ["AQ.Ab8RN6IN", "hITjCWRZwy3B", "vfDCL2b5k9OD", "rtdKXdShfQtS", "min7kg"].join("");
   }
-  function gemFallback() {
-    return ["AIzaSyA57yX", "g46NjGVue3WUK", "-jbZ68hwQwdLA-g"].join("");
-  }
-  function geminiKeys() {
-    const out = [];
+  function getGeminiKey() {
     try {
       const saved = (localStorage.getItem(GEM_LS) || "").trim();
-      if (saved) out.push(saved);
+      if (saved) return saved;
     } catch (e) {}
-    const d = gemDefault(), f = gemFallback();
-    if (out.indexOf(d) < 0) out.push(d);
-    if (out.indexOf(f) < 0) out.push(f);
-    return out;
-  }
-  function getGeminiKey() {
-    return geminiKeys()[0] || "";
+    return gemDefault();
   }
   function setGeminiKey(k) {
     try { localStorage.setItem(GEM_LS, String(k || "").trim()); }
@@ -2745,6 +2734,29 @@
     const h = c < 3 ? "左" : c > 4 ? "右" : "中央";
     return v + "の" + h + "（行" + (r + 1) + "・列" + (c + 1) + "、左上原点）";
   }
+  function explainDetail(plan) {
+    if (!plan || !plan.moves.length) return "置ける場所を探している…";
+    const slots = ["左", "まんなか", "右"];
+    const bits = [];
+    plan.moves.forEach((m, i) => {
+      const p = state.tray[m.slot];
+      const name = p ? namePieceHint(p.shape) : "ブロック";
+      let s = (i + 1) + "手目は" + slots[m.slot] + "の" + name + "を" + posHint(m.r, m.c) + "へ。";
+      if (m.empty) s += "盤が空になって全消し+360。";
+      else if (m.lines >= 2) s += m.lines + "ライン同時消しになる。";
+      else if (m.lines === 1) s += "ラインが1本消える。";
+      else s += "いまは消さない。";
+      bits.push(s);
+    });
+    const total = plan.moves.reduce((a, x) => a + x.lines, 0);
+    if (plan.moves[0] && !plan.moves[0].lines && plan.moves.some((x, i) => i > 0 && x.lines)) {
+      bits.push("先に形を作って、残りでラインを消す順。");
+    }
+    if (state.combo > 0 && state.misses === 2) bits.push("コンボが次で切れるので、消せる置きを優先している。");
+    else if (state.combo > 0 && total === 0) bits.push("この3手では消えないので、コンボが途切れやすい。");
+    else bits.push("穴を増やさず、大きいブロックが入る空きを隅に残す。");
+    return bits.join("");
+  }
   function geminiText(json) {
     const parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
     const a = parts.map(p => p.text || "").join("").trim();
@@ -2763,42 +2775,47 @@
   }
   function gemErr(msg, status) {
     const m = String(msg || "");
-    if (/are blocked|API_KEY_SERVICE_BLOCKED|generativelanguage\.googleapis/i.test(m)) {
-      return "このキーではGemini APIが許可されていない";
-    }
-    if (/SERVICE_DISABLED|has not been used|API has not been enabled|PERMISSION_DENIED|403/i.test(m)) {
-      return "FirebaseでGemini（AI Logic）をオンにして、数分待って";
-    }
-    if (status === 401 || /UNAUTHENTICATED|ACCESS_TOKEN/i.test(m)) return "キーが新しい形式で弾かれた";
+    if (status === 401 || /UNAUTHENTICATED|ACCESS_TOKEN/i.test(m)) return "キーが通らなかった。AI Studioで作り直して入れて";
     if (status === 429) return "回数制限。少し待って";
+    if (status === 403 || /are blocked|PERMISSION_DENIED/i.test(m)) return "キーが制限されてる。AI Studioのキー制限を外して";
     if (status === 404 || /not found|no longer available/i.test(m)) return "モデルが見つからない";
-    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "通信できなかった。ネットとLINEの更新を確認して";
-    return "Geminiに繋がらなかった";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "通信できなかった。ハードリロードして";
+    return "くわしいヒントを取れなかった";
   }
-  async function geminiViaFirebase(prompt) {
-    const key = gemFallback();
-    const project = "tibiz-a395e";
-    const appId = "1:347209039114:web:0d3ff0477e7bb812210ef3";
-    const urls = [
-      "https://firebasevertexai.googleapis.com/v1beta/projects/" + project + "/locations/us-central1/publishers/google/models/gemini-3.5-flash:generateContent",
-      "https://firebasevertexai.googleapis.com/v1beta/projects/" + project + "/models/gemini-3.5-flash:generateContent"
-    ];
-    const body = JSON.stringify({
+  async function geminiCall(prompt) {
+    const key = getGeminiKey();
+    if (!key) throw new Error("キーがない");
+    const models = ["gemini-3.5-flash", "gemini-3.7-flash", "gemini-3.6-flash"];
+    const bodyGc = JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.3, maxOutputTokens: 320 }
     });
     let last = { status: 0, msg: "" };
-    for (const url of urls) {
+    for (const model of models) {
       try {
-        const res = await fetch(url, {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": key,
-            "x-goog-api-client": "gl-js/fire",
-            "X-Firebase-Appid": appId
-          },
-          body
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+          referrerPolicy: "no-referrer",
+          body: bodyGc
+        });
+        const json = await res.json().catch(() => ({}));
+        last = { status: res.status, msg: (json.error && json.error.message) || "" };
+        if (res.ok) {
+          const text = geminiText(json);
+          if (text) return text;
+        }
+      } catch (e) {
+        last = { status: 0, msg: e.message || "fetch" };
+      }
+    }
+    for (const model of models) {
+      try {
+        const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": key, "Api-Revision": "2026-05-20" },
+          referrerPolicy: "no-referrer",
+          body: JSON.stringify({ model, input: prompt })
         });
         const json = await res.json().catch(() => ({}));
         last = { status: res.status, msg: (json.error && json.error.message) || "" };
@@ -2835,7 +2852,7 @@
       "短い理由: " + local,
       "日本語で3〜6文。1手目はどこに何を置くか、2手目3手目の順、なぜその順か、コンボの危険、穴や次に気をつけることを具体的に。絵文字なし。採用手と違う場所を言わない。"
     ].join("\n");
-    return geminiViaFirebase(prompt);
+    return geminiCall(prompt);
   }
   function openGemini() {
     el.gemini.style.display = "flex";
