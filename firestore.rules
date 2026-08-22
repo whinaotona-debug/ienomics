@@ -170,6 +170,28 @@ service cloud.firestore {
       allow delete: if isMember(resource.data.familyCode);
     }
 
+    // ---- Block Blast 5分勝負（匿名ログイン可） ----
+    match /blastLobby/{id} {
+      allow read, write: if signedIn();
+    }
+    match /blastRooms/{id} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+                    && request.resource.data.size in [2, 3, 4]
+                    && request.resource.data.status == 'wait'
+                    && request.resource.data.players.keys().hasOnly([request.auth.uid]);
+      allow update: if signedIn() && (
+                      request.auth.uid in resource.data.players
+                      || (
+                        resource.data.status == 'wait'
+                        && request.auth.uid in request.resource.data.players
+                        && request.resource.data.size == resource.data.size
+                      )
+                    );
+      allow delete: if false;
+    }
+
     // 上で明示していないものはすべて拒否
     match /{document=**} {
       allow read, write: if false;
