@@ -1,7 +1,7 @@
-import { state } from './state.js?v=168';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=168';
-import { refreshTutorial } from './tutorial.js?v=168';
-import { auth } from './firebase.js?v=168';
+import { state } from './state.js?v=169';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=169';
+import { refreshTutorial } from './tutorial.js?v=169';
+import { auth } from './firebase.js?v=169';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -805,13 +805,16 @@ function renderInvest() {
   const tradeable = state.marketSheetStatus === 'ok' ? getTradeableMarkets() : [];
   const sheetInfo = state.marketSheetStatus === 'ok' ? getMarketSheetInfo() : null;
   const heldNames = getChartMarketNames(state.investments, state.investmentLogs);
-  const chartName = heldNames.includes(state.investChartName)
-    ? state.investChartName
-    : (heldNames[0] || null);
+  const chartTotal = !state.investChartName || state.investChartName === CHART_TOTAL;
+  const chartName = chartTotal
+    ? CHART_TOTAL
+    : (heldNames.includes(state.investChartName) ? state.investChartName : CHART_TOTAL);
+  const chipCls = (on) =>
+    `py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}`;
   const marketChip = (name) => {
     const on = chartName === name;
-    const short = MARKET_META[name]?.short || name;
-    return `<button type="button" onclick="setInvestChartName('${name}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${esc(short)}</button>`;
+    const short = name === '日本' ? '日経' : name === 'アメリカ' ? '米国' : name;
+    return `<button type="button" onclick="setInvestChartName('${name}')" class="${chipCls(on)}">${esc(short)}</button>`;
   };
   const buyButtons = tradeable.map(name => {
     const m = MARKET_META[name];
@@ -833,6 +836,7 @@ function renderInvest() {
     </div>
     ${heldNames.length ? `
       <div class="flex flex-col gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
+        <button type="button" onclick="setInvestChartName('${CHART_TOTAL}')" class="${chipCls(chartName === CHART_TOTAL)}">合計</button>
         <div class="grid grid-cols-2 gap-1.5">
           ${heldNames.map(marketChip).join('')}
         </div>
@@ -841,7 +845,9 @@ function renderInvest() {
     <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
     <p class="text-[9px] font-bold text-center mb-4 text-[#7a8f88]">
       ${(activeInvs || []).length
-        ? `${esc(MARKET_META[chartName]?.short || '')}の運用資産と元本（円）`
+        ? (chartName === CHART_TOTAL
+          ? '全銘柄の合計（運用資産と元本・円）'
+          : `${esc(MARKET_META[chartName]?.label || chartName)}の運用資産と元本（円）`)
         : '株を買うと、運用資産と元本のグラフが出ます'}
     </p>
     ${stockCap != null ? `
@@ -1286,8 +1292,10 @@ export function drawInvestChart() {
   const range = isDetail ? (state.investRange || 'week') : 'week';
   const names = getChartMarketNames(state.investments, state.investmentLogs);
   const chartName = isDetail
-    ? (names.includes(state.investChartName) ? state.investChartName : names[0] || null)
-    : (names[0] || null);
+    ? (!state.investChartName || state.investChartName === CHART_TOTAL || !names.includes(state.investChartName)
+      ? CHART_TOTAL
+      : state.investChartName)
+    : CHART_TOTAL;
   const history = getPortfolioHistory(
     state.investments,
     range,
@@ -1295,7 +1303,7 @@ export function drawInvestChart() {
     state.investmentLogs
   );
   const meta = MARKET_META[chartName];
-  const color = meta?.color || '#2f8f82';
+  const color = (chartName === CHART_TOTAL ? '#2f8f82' : meta?.color) || '#2f8f82';
   const ctx = canvas.getContext('2d');
 
   if (investChartInstance) investChartInstance.destroy();

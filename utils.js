@@ -1,4 +1,4 @@
-import { state } from './state.js?v=168';
+import { state } from './state.js?v=169';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -922,37 +922,50 @@ function positionFromInvestments(investments, name, dayMs) {
   return { principal, shares };
 }
 
+export const CHART_TOTAL = '__total__';
+
+function positionAtDay(list, logList, name, ms) {
+  const hasInv = list.some(inv => inv.name === name);
+  if (hasInv) return positionFromInvestments(list, name, ms);
+  if (logList.some(l => l.name === name)) return positionFromLogs(logList, name, ms);
+  return { principal: 0, shares: 0 };
+}
+
 /**
  * 指定した銘柄の、その日の元本と運用資産。
- * 売却済みの保有も含めて再現する（売って消さない前提）。
- *
- * 売買ログは重複することがある（買いの記録＋あとから埋めたログなど）。
- * いまの保有ドキュメントがある銘柄は、カードと同じ数字になるようそちらを使う。
+ * name が CHART_TOTAL のときは全銘柄の合計。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
   const list = investments || [];
   const logList = logs || [];
   const names = getChartMarketNames(list, logList);
-  const targetName = (name && names.includes(name)) ? name : (names[0] || null);
-  const fromMs = range === 'all' ? firstInvestMs(list, logList, targetName) : null;
+  const wantTotal = name === CHART_TOTAL || name == null || name === '';
+  const targetName = wantTotal
+    ? CHART_TOTAL
+    : ((name && names.includes(name)) ? name : CHART_TOTAL);
+  const isTotal = targetName === CHART_TOTAL;
+  const fromMs = range === 'all'
+    ? firstInvestMs(list, logList, isTotal ? null : targetName)
+    : null;
   const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
   const principal = [];
   const assets = [];
-  const hasInv = targetName ? list.some(inv => inv.name === targetName) : false;
-  const hasLogs = targetName
-    ? logList.some(l => l.name === targetName)
-    : false;
+  const loopNames = isTotal ? names : (targetName && names.includes(targetName) ? [targetName] : []);
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
-    const price = targetName ? (sheetRateAt(targetName, ms) ?? 1) : 1;
-    const pos = hasInv
-      ? positionFromInvestments(list, targetName, ms)
-      : (hasLogs ? positionFromLogs(logList, targetName, ms) : { principal: 0, shares: 0 });
-    principal.push(Math.round(pos.principal));
-    assets.push(Math.round(pos.shares * price));
+    let p = 0;
+    let a = 0;
+    for (const n of loopNames) {
+      const pos = positionAtDay(list, logList, n, ms);
+      const price = sheetRateAt(n, ms) ?? 1;
+      p += pos.principal;
+      a += pos.shares * price;
+    }
+    principal.push(Math.round(p));
+    assets.push(Math.round(a));
   }
-  return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName };
+  return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName, isTotal };
 }
 
 /** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */
