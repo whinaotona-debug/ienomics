@@ -925,6 +925,9 @@ function positionFromInvestments(investments, name, dayMs) {
 /**
  * 指定した銘柄の、その日の元本と運用資産。
  * 売却済みの保有も含めて再現する（売って消さない前提）。
+ *
+ * 売買ログは重複することがある（買いの記録＋あとから埋めたログなど）。
+ * いまの保有ドキュメントがある銘柄は、カードと同じ数字になるようそちらを使う。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
   const list = investments || [];
@@ -935,6 +938,7 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
   const principal = [];
   const assets = [];
+  const hasInv = targetName ? list.some(inv => inv.name === targetName) : false;
   const hasLogs = targetName
     ? logList.some(l => l.name === targetName)
     : false;
@@ -942,9 +946,9 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
     const price = targetName ? (sheetRateAt(targetName, ms) ?? 1) : 1;
-    const pos = hasLogs
-      ? positionFromLogs(logList, targetName, ms)
-      : positionFromInvestments(list, targetName, ms);
+    const pos = hasInv
+      ? positionFromInvestments(list, targetName, ms)
+      : (hasLogs ? positionFromLogs(logList, targetName, ms) : { principal: 0, shares: 0 });
     principal.push(Math.round(pos.principal));
     assets.push(Math.round(pos.shares * price));
   }
