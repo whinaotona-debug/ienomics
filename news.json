@@ -1,6 +1,46 @@
 {
-  "updatedAt": "2026-08-23T01:00:00.000Z",
-  "source": "GDELT Project",
-  "sourceUrl": "https://www.gdeltproject.org/",
-  "items": []
+  "updatedAt": "2026-08-23T05:00:38.124Z",
+  "source": "イエノミクス解説",
+  "learnedFrom": [
+    "金融庁",
+    "日本銀行",
+    "日本銀行（統計）",
+    "JPX マーケットニュース",
+    "JPX お知らせ",
+    "JPX 注意喚起",
+    "METI Journal",
+    "FRB",
+    "SEC",
+    "FRB 金利"
+  ],
+  "items": [
+    {
+      "about": "日経平均",
+      "title": "日本の会社の株のねだんが、ちょっと下がったよ",
+      "body": "株のねだんは、売りたい人が多いと下がるよ。会社の成績や世界のニュースで気持ちが変わるから、下がった日があっても、それがずっと続くとは限らないよ。",
+      "url": "https://www.jpx.co.jp/news/1031/20260821_01.html",
+      "source": "JPX マーケットニュース"
+    },
+    {
+      "about": "S&P500",
+      "title": "アメリカの株のねだんは、きょうはほぼ横ばいだよ",
+      "body": "S&P500はアメリカ経済の温度計みたいなもの。大きく動かない日は、新しい大きなニュースが少なかった、ということでもあるよ。",
+      "url": "https://www.federalreserve.gov/newsevents/pressreleases/orders20260820a.htm",
+      "source": "FRB"
+    },
+    {
+      "about": "金",
+      "title": "金のねだんは、きょうはほぼ変わらなかったよ",
+      "body": "金は株とちがって会社の成績では動かない。世界のお金の話でゆっくり動くことが多いよ。",
+      "url": "https://www.jpx.co.jp/news/1070/20260817.html",
+      "source": "JPX マーケットニュース"
+    },
+    {
+      "about": "原油",
+      "title": "原油のねだんは、きょうはあまり動かなかったよ",
+      "body": "原油は世界のエネルギーのもとになっているよ。動きが小さい日は、需要と供給のバランスが一時的に安定しているとき、と考えていいよ。",
+      "url": "https://journal.meti.go.jp/",
+      "source": "公式発表"
+    }
+  ]
 }

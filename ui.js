@@ -1,7 +1,7 @@
-import { state } from './state.js?v=182';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=182';
-import { refreshTutorial } from './tutorial.js?v=182';
-import { auth } from './firebase.js?v=182';
+import { state } from './state.js?v=183';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=183';
+import { refreshTutorial } from './tutorial.js?v=183';
+import { auth } from './firebase.js?v=183';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1498,9 +1498,10 @@ function renderNews() {
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
-        const label = n.title || `${n.about}についてのニュースがあります`;
-        const site = n.source ? `<p class="text-[10px] font-bold text-slate-400 mt-1">${esc(n.source)}</p>` : '';
-        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${site}</a>`;
+        const label = n.title || `${n.about}についての解説`;
+        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed ie-wrap-text">${esc(n.body)}</p>` : '';
+        const site = n.source ? `<p class="text-[10px] font-bold text-slate-400 mt-2">参考: ${esc(n.source)}</p>` : '';
+        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}${site}</a>`;
       }).join('');
       return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}のニュース</h3><div class="space-y-2">${rows}</div></section>`;
     }).join('')
@@ -1519,10 +1520,8 @@ function renderNews() {
       ${rb('ニュース','にゅーす')}
     </h2>
     ${updatedLine}
-    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">${rb('転載元','てんさいもと')}
-      <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" class="text-[#2f8f82] underline">GDELT Project</a>
-    </p>
-    <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">見出しだけ出しています。タップすると元の記事が開きます。</p>
+    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">解説はイエノミクスが書いています。タップすると、学びの参考にした公式の発表が開きます。</p>
+    <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">Yahoo・Googleニュース・NHKなどのRSSは使っていません。</p>
     ${blocks}
   `;
 }

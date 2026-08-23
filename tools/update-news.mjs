@@ -1,51 +1,32 @@
 /**
- * GDELT DOC 2.0 から各銘柄の記事見出しとURLを取る。
- * 本文は保存しない。NHK・Yahooなどの媒体RSSは使わない。
- * 利用時は https://www.gdeltproject.org/ への出典が必要。
+ * 禁止文のない公的RSSを学び用に読み、自前の小6向け解説を news.json に書く。
+ * 媒体の見出しは画面に出さない。Yahoo・Googleニュース・NHK等は使わない。
  */
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 const OUT = new URL('../news.json', import.meta.url);
-const GAP_MS = 8000;
+const MARKET_CSV = new URL('../market.csv', import.meta.url);
 
-async function gdeltFetch(href) {
-  return fetch(href, {
-    headers: { Accept: 'application/json', 'User-Agent': 'ienomics-gdelt-news' },
-    signal: AbortSignal.timeout(90000)
-  });
-}
-
-const TOPICS = [
-  {
-    about: '日経平均',
-    query: '(Nikkei OR "Nikkei 225" OR 日経平均) sourcelang:japanese',
-    hints: ['日経', 'nikkei', '平均', '株', '東証', 'topix', '株価']
-  },
-  {
-    about: 'S&P500',
-    query: '(S&P OR SP500 OR 米国株) sourcelang:japanese',
-    hints: ['s&p', 'sp500', '米国株', 'アメリカ', 'ダウ', 'ナスダック', 'ウォール']
-  },
-  {
-    about: '金',
-    query: '(ゴールド OR 金価格 OR 金相場 OR "gold price") sourcelang:japanese',
-    hints: ['ゴールド', 'gold', '金価格', '金相場', '金先物', '貴金属']
-  },
-  {
-    about: '原油',
-    query: '(原油 OR WTI OR 石油価格) sourcelang:japanese',
-    hints: ['原油', '石油', 'wti', 'oil', 'ガソリン']
-  }
+const FEEDS = [
+  { name: '金融庁', href: 'https://www.fsa.go.jp/fsaNewsListAll_rss2.xml' },
+  { name: '日本銀行', href: 'https://www.boj.or.jp/rss/whatsnew.xml' },
+  { name: '日本銀行（統計）', href: 'https://www.boj.or.jp/rss/statistics.xml' },
+  { name: 'JPX マーケットニュース', href: 'https://www.jpx.co.jp/rss/markets_news.xml' },
+  { name: 'JPX お知らせ', href: 'https://www.jpx.co.jp/rss/jpx-news.xml' },
+  { name: 'JPX 注意喚起', href: 'https://www.jpx.co.jp/rss/alerts.xml' },
+  { name: 'METI Journal', href: 'https://journal.meti.go.jp/feed/' },
+  { name: 'FRB', href: 'https://www.federalreserve.gov/feeds/press_all.xml' },
+  { name: 'SEC', href: 'https://www.sec.gov/news/pressreleases.rss' },
+  { name: 'FRB 金利', href: 'https://www.federalreserve.gov/feeds/prates.xml' }
 ];
 
-const SKIP_HARD = /レイプ|性的|自殺/;
-const SKIP_SOFT = /逮捕|疑惑/;
-const BOOST_EASY = /なぜ|とは|解説|しくみ|仕組み|わかり|上が|下が|円安|円高|高い|安い|初めて/;
-
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+const FALLBACK_URL = {
+  日経平均: 'https://www.jpx.co.jp/news/index.html',
+  'S&P500': 'https://www.federalreserve.gov/newsevents.htm',
+  金: 'https://www.boj.or.jp/',
+  原油: 'https://journal.meti.go.jp/'
+};
 
 function isHttpUrl(s) {
   try {
@@ -56,202 +37,188 @@ function isHttpUrl(s) {
   }
 }
 
-function cleanTitle(raw) {
-  let t = String(raw || '');
-  t = t.replace(/_\s*x[0-9A-Fa-f]{4}\s*_/g, '');
-  t = t.replace(/[\u0000-\u001f]/g, '');
-  t = t.replace(/\s+/g, ' ').trim();
-  t = t.replace(/([ぁ-んァ-ン一-龥々ー])\s+(?=[ぁ-んァ-ン一-龥々ー「」『』（）％])/g, '$1');
-  t = t.replace(/\s*[|｜]\s*[^|｜]+$/, '');
-  t = t.replace(/\s+[-–—]\s*(日経|ロイター|朝日|毎日|読売|共同|時事).*$/, '');
-  return t.slice(0, 160);
+function decodeXml(s) {
+  return String(s || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
 }
 
-function titleLooksLikeSiteName(title, domain) {
-  const d = String(domain || '').replace(/^www\./, '');
-  const n = title.replace(/\s/g, '');
-  if (n.length < 8) return true;
-  if (d && n === d.replace(/\./g, '')) return true;
-  return /ONLINE$|公式サイト$/.test(title) && n.length < 18;
-}
-
-function hoursAgo(seendate) {
-  const m = String(seendate || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
-  if (!m) return 72;
-  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
-  return (Date.now() - ms) / 3600000;
-}
-
-function scoreArticle(topic, art) {
-  const title = art.title;
-  const low = title.toLowerCase();
-  let s = 40;
-
-  if (art.language === 'Japanese') s += 18;
-  if (art.sourcecountry === 'Japan') s += 10;
-  if (SKIP_HARD.test(title)) s -= 80;
-  if (SKIP_SOFT.test(title)) s -= 18;
-  if (BOOST_EASY.test(title)) s += 16;
-
-  const hit = topic.hints.some(h => low.includes(h.toLowerCase()) || title.includes(h));
-  s += hit ? 22 : -12;
-
-  const len = title.length;
-  if (len >= 16 && len <= 72) s += 10;
-  else if (len > 100) s -= 8;
-  else if (len < 12) s -= 20;
-
-  const age = hoursAgo(art.seendate);
-  if (age <= 24) s += 12;
-  else if (age <= 72) s += 4;
-  else s -= 6;
-
-  if (/[！!]{2,}|[？?]{2,}/.test(title)) s -= 6;
-  return s;
-}
-
-function keepForTopic(topic, title) {
-  if (SKIP_HARD.test(title)) return false;
-  if (/金総書記|金正恩|金銭疑惑/.test(title)) return false;
-  if (topic.about === '金') return /(ゴールド|金価格|金相場|金先物|貴金属|\bgold\b)/i.test(title);
-  if (topic.about === '原油') return /(原油|石油|WTI|\boil\b|ガソリン)/i.test(title);
-  if (topic.about === '日経平均') return /(日経|株価|TOPIX|東証|株式)/i.test(title);
-  if (topic.about === 'S&P500') return /(S&P|SP500|米国株|ダウ|ナスダック|ウォール|NY株|ニューヨーク)/i.test(title);
-  return true;
-}
-
-function pickTop5(topic, list) {
-  const ranked = [...list].sort((a, b) => b.score - a.score);
-  const out = [];
-  const hostCount = new Map();
-  for (const row of ranked) {
-    if (row.score < 0) continue;
-    const host = (() => {
-      try { return new URL(row.url).hostname.replace(/^www\./, ''); } catch { return row.domain || ''; }
-    })();
-    if (host && (hostCount.get(host) || 0) >= 2) continue;
-    const dup = out.some(x => x.title.slice(0, 18) === row.title.slice(0, 18));
-    if (dup) continue;
-    out.push(row);
-    if (host) hostCount.set(host, (hostCount.get(host) || 0) + 1);
-    if (out.length === 5) break;
+function parseRssItems(xml) {
+  const items = [];
+  const chunks = String(xml || '').split(/<item[\s>]/i).slice(1);
+  for (const chunk of chunks) {
+    const body = chunk.split(/<\/item>/i)[0] || '';
+    const title = decodeXml((body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
+    const link = decodeXml((body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '').trim();
+    if (title && isHttpUrl(link)) items.push({ title, url: link });
   }
-  if (out.length < 5) {
-    for (const row of ranked) {
-      if (out.includes(row)) continue;
-      out.push(row);
-      if (out.length === 5) break;
+  return items;
+}
+
+function topicOf(title) {
+  const t = title || '';
+  if (/(原油|石油|WTI|ガソリン|OPEC|(?<![A-Za-z])oil(?![A-Za-z])|petroleum|crude)/i.test(t)) return '原油';
+  if (/(金価格|金相場|ゴールド|\bgold\b)/i.test(t) && !/金利|金額|資金|現金|税金/.test(t)) return '金';
+  if (/(S&P|SP500|米国株|ダウ|ナスダック|FRB|FOMC|Federal Reserve|SEC |Treasury)/i.test(t)) return 'S&P500';
+  if (/(日経|東証|TOPIX|JPX|売買停止|株式)/i.test(t)) return '日経平均';
+  return '';
+}
+
+function lastMovePct(col) {
+  const text = readFileSync(fileURLToPath(MARKET_CSV), 'utf8');
+  const rows = text.trim().split(/\r?\n/).slice(1).filter(Boolean);
+  if (rows.length < 2) return 0;
+  const idx = { 日本: 1, アメリカ: 2, 原油: 3, 金: 4 }[col];
+  const a = Number(String(rows[rows.length - 2]).split(',')[idx]);
+  const b = Number(String(rows[rows.length - 1]).split(',')[idx]);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return 0;
+  return ((b - a) / a) * 100;
+}
+
+function dirWord(pct) {
+  if (pct > 0.4) return 'up';
+  if (pct < -0.4) return 'down';
+  return 'flat';
+}
+
+function composeKids(about, pct) {
+  const d = dirWord(pct);
+  if (about === '日経平均') {
+    if (d === 'up') {
+      return {
+        title: '日本の会社の株のねだんが、ちょっと上がったよ',
+        body: '日本の大きな会社の株を集めた「日経平均」は、みんなの買い物みたいに、買う人が多いとねだんが上がるよ。今日は上がるほうに動いたみたい。ねだんは毎日変わるから、一回で一喜一憂しなくて大丈夫。'
+      };
     }
-  }
-  return out.slice(0, 5);
-}
-
-async function searchTopic(topic) {
-  const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
-  url.searchParams.set('query', topic.query);
-  url.searchParams.set('mode', 'ArtList');
-  url.searchParams.set('maxrecords', '40');
-  url.searchParams.set('timespan', '3d');
-  url.searchParams.set('sort', 'DateDesc');
-  url.searchParams.set('format', 'json');
-
-  let lastErr = '';
-  for (let i = 0; i < 2; i++) {
-    try {
-      const res = await gdeltFetch(url.href);
-      if (res.status === 429) {
-        lastErr = '429';
-        await sleep(15000);
-        continue;
-      }
-      if (!res.ok) throw new Error(`${topic.about} ${res.status}`);
-      const text = await res.text();
-      if (/limit requests/i.test(text)) {
-        lastErr = '429';
-        await sleep(15000);
-        continue;
-      }
-      let json;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        throw new Error(`${topic.about} JSONではない`);
-      }
-      const raw = Array.isArray(json?.articles) ? json.articles : [];
-      const seen = new Set();
-      const list = [];
-      for (const a of raw) {
-        const title = cleanTitle(a?.title);
-        const link = String(a?.url || '').trim();
-        if (!title || !isHttpUrl(link)) continue;
-        if (titleLooksLikeSiteName(title, a?.domain)) continue;
-        if (!keepForTopic(topic, title)) continue;
-        const key = link.replace(/[?#].*$/, '');
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const row = {
-          title,
-          url: link,
-          domain: String(a?.domain || ''),
-          language: String(a?.language || ''),
-          sourcecountry: String(a?.sourcecountry || ''),
-          seendate: String(a?.seendate || '')
-        };
-        row.score = scoreArticle(topic, row);
-        list.push(row);
-      }
-      return list;
-    } catch (e) {
-      lastErr = String(e?.code || e?.cause?.code || e?.message || e);
-      await sleep(8000);
+    if (d === 'down') {
+      return {
+        title: '日本の会社の株のねだんが、ちょっと下がったよ',
+        body: '株のねだんは、売りたい人が多いと下がるよ。会社の成績や世界のニュースで気持ちが変わるから、下がった日があっても、それがずっと続くとは限らないよ。'
+      };
     }
+    return {
+      title: '日本の株のねだんは、きょうはあまり動かなかったよ',
+      body: '日経平均は日本の会社の株の平均のねだんだよ。あまり動かない日は、買う人と売る人の力が近いとき。こういう日も普通にあるよ。'
+    };
   }
-  throw new Error(`${topic.about} ${lastErr || '取得失敗'}`);
-}
-
-function toOutput(topic, row) {
+  if (about === 'S&P500') {
+    if (d === 'up') {
+      return {
+        title: 'アメリカの会社の株のねだんが、ちょっと上がったよ',
+        body: 'S&P500は、アメリカの大きな会社をたくさん集めたものさしだよ。アメリカの金利や会社の話で動くことが多い。今日は上がるほうだったよ。'
+      };
+    }
+    if (d === 'down') {
+      return {
+        title: 'アメリカの会社の株のねだんが、ちょっと下がったよ',
+        body: '遠い国の株でも、ねだんは人と人の売り買いできまるよ。下がった日は、みんな少し慎重になっているサインのことがある。長く見るときは、一日だけでは決めないよ。'
+      };
+    }
+    return {
+      title: 'アメリカの株のねだんは、きょうはほぼ横ばいだよ',
+      body: 'S&P500はアメリカ経済の温度計みたいなもの。大きく動かない日は、新しい大きなニュースが少なかった、ということでもあるよ。'
+    };
+  }
+  if (about === '金') {
+    if (d === 'up') {
+      return {
+        title: '金のねだんが、ちょっと上がったよ',
+        body: '金はきらきらの金属で、世界中で買われているよ。お金のねだんや金利の話で、金を買いたい人が増えるとねだんが上がることがあるよ。'
+      };
+    }
+    if (d === 'down') {
+      return {
+        title: '金のねだんが、ちょっと下がったよ',
+        body: '金は「安心したいとき」に買われやすい、と言われるよ。下がった日は、ほかの資産のほうに気持ちが向いていることもある。一日の動きだけで判断しなくていいよ。'
+      };
+    }
+    return {
+      title: '金のねだんは、きょうはほぼ変わらなかったよ',
+      body: '金は株とちがって会社の成績では動かない。世界のお金の話でゆっくり動くことが多いよ。'
+    };
+  }
+  if (d === 'up') {
+    return {
+      title: '原油のねだんが、ちょっと上がったよ',
+      body: '原油は車のガソリンや飛行機の燃料のもとだよ。世界で使う量と、掘る量がずれるとねだんが変わる。上がると、ものの運びにかかるお金も気になるよ。'
+    };
+  }
+  if (d === 'down') {
+    return {
+      title: '原油のねだんが、ちょっと下がったよ',
+      body: '原油が下がると、運ぶコストが楽になる話につながることもあるよ。ただしねだんは世界の出来事ですぐ変わるから、今日下がっても明日はどうかはわからないよ。'
+    };
+  }
   return {
-    about: topic.about,
-    title: row.title,
-    url: row.url,
-    source: String(row.domain || '').replace(/^www\./, '')
+    title: '原油のねだんは、きょうはあまり動かなかったよ',
+    body: '原油は世界のエネルギーのもとになっているよ。動きが小さい日は、需要と供給のバランスが一時的に安定しているとき、と考えていいよ。'
   };
 }
 
+async function fetchFeed(feed) {
+  const res = await fetch(feed.href, {
+    headers: { 'User-Agent': 'ienomics-rss-learn', Accept: 'application/rss+xml, application/xml, text/xml, */*' },
+    signal: AbortSignal.timeout(20000)
+  });
+  if (!res.ok) throw new Error(`${feed.name} ${res.status}`);
+  return parseRssItems(await res.text()).map(row => ({ ...row, source: feed.name }));
+}
+
 async function main() {
-  await sleep(GAP_MS);
-  const items = [];
-  for (let i = 0; i < TOPICS.length; i++) {
-    const topic = TOPICS[i];
-    if (i > 0) await sleep(GAP_MS);
-    let found = [];
+  const learned = [];
+  for (const feed of FEEDS) {
     try {
-      found = await searchTopic(topic);
+      const items = await fetchFeed(feed);
+      learned.push(...items);
+      console.log(`${feed.name} ${items.length}件`);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
-
-    const top = pickTop5(topic, found);
-    for (const row of top) items.push(toOutput(topic, row));
-    console.log(`${topic.about} 候補${found.length} → ${top.length}件`);
   }
 
-  if (!items.length) {
-    console.warn('ニュースが1件も取れませんでした');
-    return;
-  }
+  const pick = {
+    日経平均: learned.find(x => topicOf(x.title) === '日経平均'),
+    'S&P500': learned.find(x => topicOf(x.title) === 'S&P500'),
+    金: learned.find(x => topicOf(x.title) === '金'),
+    原油: learned.find(x => topicOf(x.title) === '原油')
+  };
+
+  const moves = {
+    日経平均: lastMovePct('日本'),
+    'S&P500': lastMovePct('アメリカ'),
+    金: lastMovePct('金'),
+    原油: lastMovePct('原油')
+  };
+
+  const items = ['日経平均', 'S&P500', '金', '原油'].map(about => {
+    const written = composeKids(about, moves[about]);
+    const hit = pick[about];
+    return {
+      about,
+      title: written.title,
+      body: written.body,
+      url: hit?.url || FALLBACK_URL[about],
+      source: hit?.source || '公式発表'
+    };
+  });
 
   writeFileSync(
     fileURLToPath(OUT),
     JSON.stringify({
       updatedAt: new Date().toISOString(),
-      source: 'GDELT Project',
-      sourceUrl: 'https://www.gdeltproject.org/',
+      source: 'イエノミクス解説',
+      learnedFrom: FEEDS.map(f => f.name),
       items
     }, null, 2) + '\n',
     'utf8'
   );
-  console.log(`news.json ${items.length}件`);
+  console.log(`news.json ${items.length}件 学び${learned.length}件`);
 }
 
 main().catch((e) => {
