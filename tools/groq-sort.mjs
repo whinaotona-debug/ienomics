@@ -1,8 +1,9 @@
 /**
- * Groq（gpt-oss、だめなら Qwen）で見出しだけ銘柄仕分けする。
+ * Groq（gpt-oss）で見出しだけ銘柄仕分けする。
  * 子ども向け画面からは呼ばない。キーが無いときは null。
+ * 無料枠は1分のトークンが少ないので、呼び出しは1回だけにする。
  */
-const MODELS = ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+const MODEL = 'openai/gpt-oss-20b';
 const TOPIC_LIST = ['日経平均', 'S&P500', '金', '原油', 'なし'];
 const TOPICS = new Set(TOPIC_LIST);
 
@@ -48,75 +49,67 @@ function parseTopics(text, n) {
   return out;
 }
 
-async function groqChat(key, model, titles, { schema } = {}) {
+function retryWaitMs(res, body) {
+  const header = Number(res.headers.get('retry-after'));
+  if (Number.isFinite(header) && header > 0) return Math.min(header, 45) * 1000;
+  const reset = String(body || '').match(/try again in ([\d.]+)s/i);
+  if (reset) return Math.min(Number(reset[1]), 45) * 1000;
+  return 20000;
+}
+
+async function groqChat(key, titles) {
   const numbered = titles.map((t, i) => `${i}: ${t}`).join('\n');
   const payload = {
-    model,
+    model: MODEL,
     temperature: 0,
-    max_tokens: 1200,
+    max_tokens: 800,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'topics', strict: true, schema: SCHEMA }
+    },
     messages: [
       {
         role: 'system',
-        content: 'Classify each headline into exactly one topic. Gold means gold price only, not money or interest. Return JSON only: {"items":[{"i":0,"topic":"日経平均"}]} topic must be one of 日経平均,S&P500,金,原油,なし'
+        content: 'Classify each headline into exactly one topic. Gold means gold price only, not money or interest. JSON only.'
       },
       { role: 'user', content: numbered }
     ]
   };
-  if (schema) {
-    payload.response_format = {
-      type: 'json_schema',
-      json_schema: { name: 'topics', strict: true, schema: SCHEMA }
-    };
-  }
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(30000)
-  });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`${model} ${res.status} ${body.slice(0, 180)}`);
-  const json = JSON.parse(body);
-  const text = json?.choices?.[0]?.message?.content || '';
-  return parseTopics(text, titles.length);
+  let last = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(30000)
+    });
+    const body = await res.text();
+    if (res.status === 429) {
+      last = `${MODEL} 429`;
+      await sleep(retryWaitMs(res, body));
+      continue;
+    }
+    if (!res.ok) throw new Error(`${MODEL} ${res.status} ${body.slice(0, 180)}`);
+    const json = JSON.parse(body);
+    const text = json?.choices?.[0]?.message?.content || '';
+    return parseTopics(text, titles.length);
+  }
+  throw new Error(last || `${MODEL} 429`);
 }
 
 export async function groqLabelTitles(titles) {
   const key = String(process.env.GROQ_API_KEY || '').trim();
-  if (!key) return null;
-
-  const labels = Array(titles.length).fill('');
-  const size = 8;
-  let model = MODELS[0];
-  let any = false;
-
-  for (let start = 0; start < titles.length; start += size) {
-    const chunk = titles.slice(start, start + size);
-    let ok = false;
-    const order = model === MODELS[0] ? MODELS : [model, ...MODELS.filter(m => m !== model)];
-    for (const tryModel of order) {
-      const modes = tryModel.startsWith('openai/') ? [true, false] : [false];
-      for (const schema of modes) {
-        try {
-          const got = await groqChat(key, tryModel, chunk, { schema });
-          got.forEach((topic, j) => { labels[start + j] = topic; });
-          model = tryModel;
-          ok = true;
-          any = true;
-          break;
-        } catch (e) {
-          console.warn(String(e?.message || e));
-        }
-      }
-      if (ok) break;
-    }
-    if (start + size < titles.length) await sleep(1500);
+  if (!key || !titles.length) return null;
+  try {
+    const labels = await groqChat(key, titles);
+    console.log(`Groq仕分け ${labels.filter(Boolean).length}/${titles.length} ${MODEL}`);
+    return labels;
+  } catch (e) {
+    console.warn(String(e?.message || e));
+    return null;
   }
-  if (!any) return null;
-  console.log(`Groq仕分け ${labels.filter(Boolean).length}/${titles.length} ${model}`);
-  return labels;
 }

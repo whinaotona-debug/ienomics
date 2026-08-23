@@ -183,8 +183,16 @@ async function main() {
     }
   }
 
-  const groq = await groqLabelTitles(learned.map(x => x.title));
-  const topicOf = (row, i) => (groq && groq[i]) || sortTopic(row.title);
+  const taneOf = learned.map(x => sortTopic(x.title));
+  const publicish = /JPX|日本銀行|金融庁|FRB|SEC|METI/;
+  const groqIdx = learned
+    .map((_, i) => i)
+    .filter(i => !taneOf[i])
+    .sort((a, b) => Number(publicish.test(learned[b].source)) - Number(publicish.test(learned[a].source)))
+    .slice(0, 20);
+  const groq = await groqLabelTitles(groqIdx.map(i => learned[i].title));
+  const groqAt = new Map(groqIdx.map((i, j) => [i, groq?.[j] || '']));
+  const topicOf = (row, i) => groqAt.get(i) || taneOf[i];
 
   const pick = {
     日経平均: learned.find((x, i) => topicOf(x, i) === '日経平均'),
