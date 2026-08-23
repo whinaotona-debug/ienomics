@@ -4,6 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { groqLabelTitles } from './groq-sort.mjs';
 import { sortTopic } from './tane-sort.mjs';
 
 const OUT = new URL('../news.json', import.meta.url);
@@ -67,10 +68,6 @@ function parseRssItems(xml) {
     if (title && isHttpUrl(link)) items.push({ title, url: link });
   }
   return items;
-}
-
-function topicOf(title) {
-  return sortTopic(title);
 }
 
 function lastMovePct(col) {
@@ -180,17 +177,20 @@ async function main() {
       const items = await fetchFeed(feed);
       learned.push(...items);
       const tagged = items.filter(x => sortTopic(x.title));
-      console.log(`${feed.name} ${items.length}件 仕分け${tagged.length}`);
+      console.log(`${feed.name} ${items.length}件 語彙仕分け${tagged.length}`);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
   }
 
+  const groq = await groqLabelTitles(learned.map(x => x.title));
+  const topicOf = (row, i) => (groq && groq[i]) || sortTopic(row.title);
+
   const pick = {
-    日経平均: learned.find(x => topicOf(x.title) === '日経平均'),
-    'S&P500': learned.find(x => topicOf(x.title) === 'S&P500'),
-    金: learned.find(x => topicOf(x.title) === '金'),
-    原油: learned.find(x => topicOf(x.title) === '原油')
+    日経平均: learned.find((x, i) => topicOf(x, i) === '日経平均'),
+    'S&P500': learned.find((x, i) => topicOf(x, i) === 'S&P500'),
+    金: learned.find((x, i) => topicOf(x, i) === '金'),
+    原油: learned.find((x, i) => topicOf(x, i) === '原油')
   };
 
   const moves = {
