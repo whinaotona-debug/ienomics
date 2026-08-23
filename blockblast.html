@@ -7,8 +7,9 @@
     (function () {
       function fit() {
         var v = window.visualViewport;
-        var h = v ? v.height : window.innerHeight;
-        var t = v ? v.offsetTop : 0;
+        var h = window.innerHeight || document.documentElement.clientHeight || 640;
+        if (v && v.height && v.height >= 80) h = v.height;
+        var t = (v && v.height >= 80) ? v.offsetTop : 0;
         var r = document.documentElement;
         r.style.setProperty("--app-h", h + "px");
         r.style.setProperty("--app-top", t + "px");
@@ -60,6 +61,7 @@
       right: 0;
       top: var(--app-top, 0px);
       height: var(--app-h, 100dvh);
+      min-height: 100dvh;
       overflow: hidden;
       touch-action: pan-y;
     }
@@ -474,9 +476,9 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: flex-start;
       text-align: center;
-      padding: 24px 20px max(28px, env(safe-area-inset-bottom));
+      padding: 18px 20px max(28px, env(safe-area-inset-bottom));
       box-sizing: border-box;
     }
     .coin-chip {
@@ -1563,11 +1565,11 @@
   }
   function renderCoins() {
     const n = String(save.coins);
-    el.hudCoins.textContent = n;
-    el.homeCoins.textContent = n;
-    el.shopCoins.textContent = n;
-    el.homeBest.textContent = save.best;
-    el.homePerfects.textContent = save.perfects;
+    if (el.hudCoins) el.hudCoins.textContent = n;
+    if (el.homeCoins) el.homeCoins.textContent = n;
+    if (el.shopCoins) el.shopCoins.textContent = n;
+    if (el.homeBest) el.homeBest.textContent = save.best;
+    if (el.homePerfects) el.homePerfects.textContent = save.perfects;
     if (el.homeStreak) el.homeStreak.textContent = save.streak ? ("連続ログイン " + save.streak + "日目") : "";
   }
   function toast(msg) {
@@ -1867,17 +1869,14 @@
     applyModeHud();
     newGame();
   }
-  applyTheme();
-  renderCoins();
-  grantDaily();
-  renderCoins();
-
   const cellsDom = [];
-  for (let i = 0; i < 64; i++) {
-    const d = document.createElement("div");
-    d.className = "cell";
-    el.board.appendChild(d);
-    cellsDom.push(d);
+  if (el.board) {
+    for (let i = 0; i < 64; i++) {
+      const d = document.createElement("div");
+      d.className = "cell";
+      el.board.appendChild(d);
+      cellsDom.push(d);
+    }
   }
 
   const state = {
@@ -1901,9 +1900,16 @@
     endAt: 0,
     clockStart: 0
   };
-  el.best.textContent = state.best;
-  document.getElementById("btnHome").innerHTML = UI_ICO.home;
-  paintMute();
+  try {
+    applyTheme();
+    renderCoins();
+    grantDaily();
+    renderCoins();
+  } catch (e) {}
+  if (el.best) el.best.textContent = state.best;
+  const homeIco = document.getElementById("btnHome");
+  if (homeIco) homeIco.innerHTML = UI_ICO.home;
+  try { paintMute(); } catch (e) {}
 
   const SFX = {
     ctx: null,
@@ -2879,14 +2885,21 @@
     };
     fb.db = fsMod.getFirestore(app);
     fb.auth = authMod.getAuth(app);
+    try {
+      if (authMod.setPersistence && authMod.inMemoryPersistence) {
+        await authMod.setPersistence(fb.auth, authMod.inMemoryPersistence);
+      }
+    } catch (e) {}
     if (!fb.auth.currentUser) await authMod.signInAnonymously(fb.auth);
+    if (!fb.auth.currentUser) throw new Error("auth");
     fb.uid = fb.auth.currentUser.uid;
     return fb;
   }
 
   function matchBtns(ids) {
     ["btnSize2", "btnSize3", "btnSize4", "btnMatchCancel"].forEach(id => {
-      document.getElementById(id).style.display = ids.indexOf(id) >= 0 ? "block" : "none";
+      const n = document.getElementById(id);
+      if (n) n.style.display = ids.indexOf(id) >= 0 ? "block" : "none";
     });
   }
   function openMatchPick() {
@@ -3479,35 +3492,39 @@
   window.addEventListener("pointerup", onUp);
   window.addEventListener("pointercancel", onUp);
 
-  document.getElementById("btnAi").onclick = () => { if (assistBlocked()) return; SFX.ensure(); markAi(); runAi(false); };
-  document.getElementById("btnHint").onclick = () => { if (assistBlocked()) return; SFX.ensure(); showHint(); };
-  document.getElementById("btnGemini").onclick = () => openGemini();
-  document.getElementById("btnGeminiClose").onclick = () => { el.gemini.style.display = "none"; };
-  document.getElementById("btnGeminiSave").onclick = () => {
+  function bind(id, fn) {
+    const n = document.getElementById(id);
+    if (n) n.onclick = fn;
+  }
+  bind("btnAi", () => { if (assistBlocked()) return; SFX.ensure(); markAi(); runAi(false); });
+  bind("btnHint", () => { if (assistBlocked()) return; SFX.ensure(); showHint(); });
+  bind("btnGemini", () => openGemini());
+  bind("btnGeminiClose", () => { el.gemini.style.display = "none"; });
+  bind("btnGeminiSave", () => {
     setGeminiKey(el.geminiKey.value);
     el.gemini.style.display = "none";
     toast(el.geminiKey.value.trim() ? "キーを保存した" : "最初のキーに戻した");
-  };
-  document.getElementById("btnAuto").onclick = () => {
+  });
+  bind("btnAuto", () => {
     if (assistBlocked()) return;
     SFX.ensure();
     if (state.over) return;
     state.auto = !state.auto;
     document.getElementById("btnAuto").textContent = state.auto ? "停止" : "おまかせ";
     if (state.auto) { markAi(); runAi(true); }
-  };
-  document.getElementById("btnMute").onclick = () => {
+  });
+  bind("btnMute", () => {
     state.muted = !state.muted;
     paintMute();
     if (state.muted) BGM.stop();
     else BGM.start();
-  };
-  document.getElementById("btnRetry").onclick = () => {
+  });
+  bind("btnRetry", () => {
     if (state.mode === "vs") return;
     SFX.ensure();
     newGame();
-  };
-  document.getElementById("btnAgain").onclick = () => {
+  });
+  bind("btnAgain", () => {
     SFX.ensure();
     const mode = state.mode;
     const n = state.vsSize;
@@ -3520,36 +3537,36 @@
     if (mode === "min1") { startMin1(); return; }
     if (mode === "race10k") { startRace(); return; }
     newGame();
-  };
-  document.getElementById("btnStart").onclick = () => { SFX.ensure(); BGM.start(); state.mode = null; goPlay(); };
-  document.getElementById("btnNear").onclick = () => { SFX.ensure(); openMatchPick(); };
-  document.getElementById("btnMin1").onclick = () => { SFX.ensure(); BGM.start(); startMin1(); };
-  document.getElementById("btnRace").onclick = () => { SFX.ensure(); BGM.start(); startRace(); };
-  document.getElementById("btnSize2").onclick = () => startMatch(2);
-  document.getElementById("btnSize3").onclick = () => startMatch(3);
-  document.getElementById("btnSize4").onclick = () => startMatch(4);
-  document.getElementById("btnMatchCancel").onclick = () => {
+  });
+  bind("btnStart", () => { SFX.ensure(); BGM.start(); state.mode = null; goPlay(); });
+  bind("btnNear", () => { SFX.ensure(); openMatchPick(); });
+  bind("btnMin1", () => { SFX.ensure(); BGM.start(); startMin1(); });
+  bind("btnRace", () => { SFX.ensure(); BGM.start(); startRace(); });
+  bind("btnSize2", () => startMatch(2));
+  bind("btnSize3", () => startMatch(3));
+  bind("btnSize4", () => startMatch(4));
+  bind("btnMatchCancel", () => {
     leaveMatch();
     state.roomId = null;
     el.match.style.display = "none";
-  };
-  document.getElementById("btnHome").onclick = () => {
+  });
+  bind("btnHome", () => {
     if (!state.over && (state.score > 0 || state.mode === "vs") && !confirm("ホームに戻る？ このプレイのスコアは消えるよ")) return;
     showHome();
-  };
-  document.getElementById("btnEndHome").onclick = () => showHome();
-  document.getElementById("btnShop").onclick = () => {
+  });
+  bind("btnEndHome", () => showHome());
+  bind("btnShop", () => {
     el.shop.classList.add("show");
     renderShop();
-  };
-  document.getElementById("btnShopClose").onclick = () => el.shop.classList.remove("show");
-  document.getElementById("btnHow").onclick = () => { el.howto.style.display = "flex"; };
-  document.getElementById("btnHowClose").onclick = () => { el.howto.style.display = "none"; };
-  document.getElementById("btnShare").onclick = () => shareScore();
-  document.getElementById("btnMissions").onclick = () => { el.missions.classList.add("show"); renderMissions(); };
-  document.getElementById("btnMissionsClose").onclick = () => el.missions.classList.remove("show");
-  document.getElementById("btnRecords").onclick = () => { el.records.classList.add("show"); renderRecords(); };
-  document.getElementById("btnRecordsClose").onclick = () => el.records.classList.remove("show");
+  });
+  bind("btnShopClose", () => el.shop.classList.remove("show"));
+  bind("btnHow", () => { el.howto.style.display = "flex"; });
+  bind("btnHowClose", () => { el.howto.style.display = "none"; });
+  bind("btnShare", () => shareScore());
+  bind("btnMissions", () => { el.missions.classList.add("show"); renderMissions(); });
+  bind("btnMissionsClose", () => el.missions.classList.remove("show"));
+  bind("btnRecords", () => { el.records.classList.add("show"); renderRecords(); });
+  bind("btnRecordsClose", () => el.records.classList.remove("show"));
 })();
 </script>
 </body>

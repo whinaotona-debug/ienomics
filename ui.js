@@ -1,7 +1,7 @@
-import { state } from './state.js?v=174';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=174';
-import { refreshTutorial } from './tutorial.js?v=174';
-import { auth } from './firebase.js?v=174';
+import { state } from './state.js?v=176';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=176';
+import { refreshTutorial } from './tutorial.js?v=176';
+import { auth } from './firebase.js?v=176';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1485,6 +1485,9 @@ function renderNews() {
       ${rb('ニュース','にゅーす')}
     </h2>
     ${updatedLine}
+    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">${rb('転載元','てんさいもと')}
+      <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" class="text-[#2f8f82] underline">GDELT Project</a>
+    </p>
     <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">見出しだけ出しています。タップすると元の記事が開きます。</p>
     ${blocks}
   `;
