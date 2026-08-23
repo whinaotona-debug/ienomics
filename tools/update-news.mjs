@@ -1,6 +1,6 @@
 /**
- * 禁止文のない公的RSSを学び用に読み、自前の小6向け解説を news.json に書く。
- * 媒体の見出しは画面に出さない。Yahoo・Googleニュース・NHK等は使わない。
+ * 学び用RSS。AI学習・スクレイピング禁止が書いてある媒体は使わない。
+ * 媒体の見出しは画面に出さない。Yahoo・Googleニュースは使わない。
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -18,7 +18,14 @@ const FEEDS = [
   { name: 'METI Journal', href: 'https://journal.meti.go.jp/feed/' },
   { name: 'FRB', href: 'https://www.federalreserve.gov/feeds/press_all.xml' },
   { name: 'SEC', href: 'https://www.sec.gov/news/pressreleases.rss' },
-  { name: 'FRB 金利', href: 'https://www.federalreserve.gov/feeds/prates.xml' }
+  { name: 'FRB 金利', href: 'https://www.federalreserve.gov/feeds/prates.xml' },
+  { name: '毎日新聞 速報', href: 'https://mainichi.jp/rss/etc/mainichi-flash.rss' },
+  { name: '朝日 ビジネス', href: 'https://www.asahi.com/rss/asahi/business.rdf' },
+  { name: '朝日 国際', href: 'https://www.asahi.com/rss/asahi/international.rdf' },
+  { name: 'Impress Watch', href: 'https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf' },
+  { name: 'PC Watch', href: 'https://pc.watch.impress.co.jp/data/rss/1.0/pcw/feed.rdf' },
+  { name: 'INTERNET Watch', href: 'https://internet.watch.impress.co.jp/data/rss/1.0/iw/feed.rdf' },
+  { name: 'GIGAZINE', href: 'https://gigazine.net/news/rss_2.0/' }
 ];
 
 const FALLBACK_URL = {
