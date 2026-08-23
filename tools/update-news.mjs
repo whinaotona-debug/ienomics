@@ -30,11 +30,27 @@ const FEEDS = [
   { name: 'GIGAZINE', href: 'https://gigazine.net/news/rss_2.0/' }
 ];
 
-const FALLBACK_URL = {
-  日経平均: 'https://www.jpx.co.jp/news/index.html',
-  'S&P500': 'https://www.federalreserve.gov/newsevents.htm',
-  金: 'https://www.boj.or.jp/',
-  原油: 'https://journal.meti.go.jp/'
+const FALLBACK_URLS = {
+  日経平均: [
+    'https://www.jpx.co.jp/news/index.html',
+    'https://www.jpx.co.jp/markets/indices/n225/index.html',
+    'https://www.fsa.go.jp/'
+  ],
+  'S&P500': [
+    'https://www.federalreserve.gov/newsevents.htm',
+    'https://www.sec.gov/news/pressreleases',
+    'https://www.federalreserve.gov/releases/h15/'
+  ],
+  金: [
+    'https://www.boj.or.jp/',
+    'https://www.boj.or.jp/statistics/index.htm',
+    'https://www.fsa.go.jp/'
+  ],
+  原油: [
+    'https://journal.meti.go.jp/',
+    'https://www.meti.go.jp/',
+    'https://www.boj.or.jp/statistics/index.htm'
+  ]
 };
 
 function isHttpUrl(s) {
@@ -161,6 +177,53 @@ function composeKids(about, pct) {
   };
 }
 
+function composeKidsPack(about, pct) {
+  const main = composeKids(about, pct);
+  const extra = {
+    日経平均: [
+      {
+        title: '日経平均は、日本の大きな会社をまとめたものさしだよ',
+        body: 'ひとつひとつの会社の株ではなく、たくさんの会社を平均したものだから、「日本の会社全体の気分」が見えやすいよ。ニュースを見るときは、会社の名前より、みんなで買う気持ちが強いか弱いかに注目してみてね。'
+      },
+      {
+        title: '株のねだんは、一日で決まらないよ',
+        body: '今日の動きは大事だけど、明日また反対に動くこともあるよ。学びでは「なぜ上がった・下がったか」より、「売り買いの気持ちが毎日変わる」ことを覚えるのが先で大丈夫。'
+      }
+    ],
+    'S&P500': [
+      {
+        title: 'S&P500は、アメリカの大きな会社の温度計だよ',
+        body: '500社くらいの大きな会社をまとめて見るものさしだよ。アメリカの金利や仕事の話で動くことが多い。遠い国でも、ねだんの決まり方は日本と同じく売り買いだよ。'
+      },
+      {
+        title: 'アメリカの発表は、世界の株にも届くよ',
+        body: '中央銀行や会社のルールを決めるところの話は、お金を借りるやすさが変わるサインになることがあるよ。全部を読まなくていい。『お金の流れの話かな』と見当をつけるだけで学びになるよ。'
+      }
+    ],
+    金: [
+      {
+        title: '金は、会社の成績では動かないねだんだよ',
+        body: '株は会社のもうけで動くけど、金は金属そのもののねだんだよ。世界で安心したい気持ちが強いと買われやすい、と言われる。金利やお金の話とセットで出てくることが多いよ。'
+      },
+      {
+        title: '「金」という言葉は、お金のことではないよ',
+        body: 'ニュースの「金額」や「資金」は、きらきらの金属の金とはちがうよ。学びではゴールドのねだんの話だけを金として見る。まぎらわしい言葉は、まず中身を確かめてから分けよう。'
+      }
+    ],
+    原油: [
+      {
+        title: '原油は、運ぶエネルギーのもとになっているよ',
+        body: 'ガソリンや飛行機の燃料、ものを作る材料にもつながるよ。世界で使う量と掘る量がずれるとねだんが変わる。私たちの生活の「運ぶコスト」とつながっている、と覚えておこう。'
+      },
+      {
+        title: '原油のニュースは、世界の出来事とセットで出やすいよ',
+        body: 'どこかでたくさん使う、あまり掘れない、という話があるとねだんが動きやすいよ。一日の動きだけで「これからずっと」とは決めない。エネルギーは世界で分け合っている、がポイント。'
+      }
+    ]
+  };
+  return [main, ...extra[about]];
+}
+
 async function fetchFeed(feed) {
   const res = await fetch(feed.href, {
     headers: { 'User-Agent': 'ienomics-rss-learn', Accept: 'application/rss+xml, application/xml, text/xml, */*' },
@@ -195,13 +258,6 @@ async function main() {
   const groqAt = new Map(groqIdx.map((i, j) => [i, groq?.[j] || '']));
   const topicOf = (row, i) => groqAt.get(i) || taneOf[i];
 
-  const pick = {
-    日経平均: learned.find((x, i) => topicOf(x, i) === '日経平均'),
-    'S&P500': learned.find((x, i) => topicOf(x, i) === 'S&P500'),
-    金: learned.find((x, i) => topicOf(x, i) === '金'),
-    原油: learned.find((x, i) => topicOf(x, i) === '原油')
-  };
-
   const moves = {
     日経平均: lastMovePct('日本'),
     'S&P500': lastMovePct('アメリカ'),
@@ -209,16 +265,34 @@ async function main() {
     原油: lastMovePct('原油')
   };
 
-  const items = ['日経平均', 'S&P500', '金', '原油'].map(about => {
-    const written = composeKids(about, moves[about]);
-    const hit = pick[about];
-    return {
+  const pickThree = about => {
+    const seen = new Set();
+    const hits = [];
+    for (let i = 0; i < learned.length && hits.length < 3; i++) {
+      if (topicOf(learned[i], i) !== about) continue;
+      if (seen.has(learned[i].url)) continue;
+      seen.add(learned[i].url);
+      hits.push(learned[i]);
+    }
+    for (const url of FALLBACK_URLS[about]) {
+      if (hits.length >= 3) break;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      hits.push({ url, source: '公式発表' });
+    }
+    return hits;
+  };
+
+  const items = ['日経平均', 'S&P500', '金', '原油'].flatMap(about => {
+    const pack = composeKidsPack(about, moves[about]);
+    const hits = pickThree(about);
+    return pack.map((written, i) => ({
       about,
       title: written.title,
       body: written.body,
-      url: hit?.url || FALLBACK_URL[about],
-      source: hit?.source || '公式発表'
-    };
+      url: hits[i].url,
+      source: hits[i].source
+    }));
   });
 
   writeFileSync(

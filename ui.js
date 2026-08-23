@@ -1,7 +1,7 @@
-import { state } from './state.js?v=186';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=186';
-import { refreshTutorial } from './tutorial.js?v=186';
-import { auth } from './firebase.js?v=186';
+import { state } from './state.js?v=187';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=187';
+import { refreshTutorial } from './tutorial.js?v=187';
+import { auth } from './firebase.js?v=187';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1492,7 +1492,7 @@ function renderNews() {
   const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
   const groups = order.map(about => ({
     about,
-    items: all.filter(n => n.about === about).slice(0, 5)
+        items: all.filter(n => n.about === about).slice(0, 3)
   })).filter(g => g.items.length);
 
   const blocks = groups.length
