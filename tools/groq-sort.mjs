@@ -1,9 +1,30 @@
 /**
- * Groq（Qwen、だめなら gpt-oss）で見出しだけ銘柄仕分けする。
+ * Groq（gpt-oss、だめなら Qwen）で見出しだけ銘柄仕分けする。
  * 子ども向け画面からは呼ばない。キーが無いときは null。
  */
-const MODELS = ['qwen/qwen3.6-27b', 'openai/gpt-oss-20b'];
-const TOPICS = new Set(['日経平均', 'S&P500', '金', '原油', 'なし']);
+const MODELS = ['openai/gpt-oss-20b', 'qwen/qwen3.6-27b'];
+const TOPIC_LIST = ['日経平均', 'S&P500', '金', '原油', 'なし'];
+const TOPICS = new Set(TOPIC_LIST);
+
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          i: { type: 'integer' },
+          topic: { type: 'string', enum: TOPIC_LIST }
+        },
+        required: ['i', 'topic'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['items'],
+  additionalProperties: false
+};
 
 function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
@@ -27,27 +48,34 @@ function parseTopics(text, n) {
   return out;
 }
 
-async function groqChat(key, model, titles) {
+async function groqChat(key, model, titles, { schema } = {}) {
   const numbered = titles.map((t, i) => `${i}: ${t}`).join('\n');
+  const payload = {
+    model,
+    temperature: 0,
+    max_tokens: 1200,
+    messages: [
+      {
+        role: 'system',
+        content: 'Classify each headline into exactly one topic. Gold means gold price only, not money or interest. Return JSON only: {"items":[{"i":0,"topic":"日経平均"}]} topic must be one of 日経平均,S&P500,金,原油,なし'
+      },
+      { role: 'user', content: numbered }
+    ]
+  };
+  if (schema) {
+    payload.response_format = {
+      type: 'json_schema',
+      json_schema: { name: 'topics', strict: true, schema: SCHEMA }
+    };
+  }
+
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      model,
-      temperature: 0,
-      max_tokens: 800,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: '見出しを日経平均,S&P500,金,原油,なしのどれか一つに分類する。金は金価格・ゴールドのみ。金利・金額・資金は金ではない。JSONのみ。形式:{"items":[{"i":0,"topic":"日経平均"}]}'
-        },
-        { role: 'user', content: numbered }
-      ]
-    }),
+    body: JSON.stringify(payload),
     signal: AbortSignal.timeout(30000)
   });
   const body = await res.text();
@@ -62,26 +90,33 @@ export async function groqLabelTitles(titles) {
   if (!key) return null;
 
   const labels = Array(titles.length).fill('');
-  const size = 12;
+  const size = 8;
   let model = MODELS[0];
+  let any = false;
 
   for (let start = 0; start < titles.length; start += size) {
     const chunk = titles.slice(start, start + size);
     let ok = false;
-    for (const tryModel of (model === MODELS[0] ? MODELS : [model, ...MODELS.filter(m => m !== model)])) {
-      try {
-        const got = await groqChat(key, tryModel, chunk);
-        got.forEach((topic, j) => { labels[start + j] = topic; });
-        model = tryModel;
-        ok = true;
-        break;
-      } catch (e) {
-        console.warn(String(e?.message || e));
+    const order = model === MODELS[0] ? MODELS : [model, ...MODELS.filter(m => m !== model)];
+    for (const tryModel of order) {
+      const modes = tryModel.startsWith('openai/') ? [true, false] : [false];
+      for (const schema of modes) {
+        try {
+          const got = await groqChat(key, tryModel, chunk, { schema });
+          got.forEach((topic, j) => { labels[start + j] = topic; });
+          model = tryModel;
+          ok = true;
+          any = true;
+          break;
+        } catch (e) {
+          console.warn(String(e?.message || e));
+        }
       }
+      if (ok) break;
     }
-    if (!ok) return null;
     if (start + size < titles.length) await sleep(1500);
   }
+  if (!any) return null;
   console.log(`Groq仕分け ${labels.filter(Boolean).length}/${titles.length} ${model}`);
   return labels;
 }
