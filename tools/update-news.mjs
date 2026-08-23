@@ -4,6 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { sortTopic } from './tane-sort.mjs';
 
 const OUT = new URL('../news.json', import.meta.url);
 const MARKET_CSV = new URL('../market.csv', import.meta.url);
@@ -69,12 +70,7 @@ function parseRssItems(xml) {
 }
 
 function topicOf(title) {
-  const t = title || '';
-  if (/(原油|石油|WTI|ガソリン|OPEC|(?<![A-Za-z])oil(?![A-Za-z])|petroleum|crude)/i.test(t)) return '原油';
-  if (/(金価格|金相場|ゴールド|\bgold\b)/i.test(t) && !/金利|金額|資金|現金|税金/.test(t)) return '金';
-  if (/(S&P|SP500|米国株|ダウ|ナスダック|FRB|FOMC|Federal Reserve|SEC |Treasury)/i.test(t)) return 'S&P500';
-  if (/(日経|東証|TOPIX|JPX|売買停止|株式)/i.test(t)) return '日経平均';
-  return '';
+  return sortTopic(title);
 }
 
 function lastMovePct(col) {
@@ -183,7 +179,8 @@ async function main() {
     try {
       const items = await fetchFeed(feed);
       learned.push(...items);
-      console.log(`${feed.name} ${items.length}件`);
+      const tagged = items.filter(x => sortTopic(x.title));
+      console.log(`${feed.name} ${items.length}件 仕分け${tagged.length}`);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
