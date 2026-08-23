@@ -1,7 +1,7 @@
-import { state } from './state.js?v=187';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=187';
-import { refreshTutorial } from './tutorial.js?v=187';
-import { auth } from './firebase.js?v=187';
+import { state } from './state.js?v=188';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=188';
+import { refreshTutorial } from './tutorial.js?v=188';
+import { auth } from './firebase.js?v=188';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1492,7 +1492,7 @@ function renderNews() {
   const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
   const groups = order.map(about => ({
     about,
-        items: all.filter(n => n.about === about).slice(0, 3)
+    items: all.filter(n => n.about === about).slice(0, 3)
   })).filter(g => g.items.length);
 
   const blocks = groups.length
@@ -1520,7 +1520,7 @@ function renderNews() {
       ${rb('ニュース','にゅーす')}
     </h2>
     ${updatedLine}
-    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">解説はイエノミクスが書いています。タップすると、学びの参考にした公式の発表が開きます。</p>
+    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">12〜15歳向けの解説です。タップすると、参考にした公式の発表が開きます。媒体の見出しは転載していません。</p>
     <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">Yahoo・Googleニュースや、AI学習・自動収集を禁じている媒体のRSSは使っていません。</p>
     ${blocks}
   `;
