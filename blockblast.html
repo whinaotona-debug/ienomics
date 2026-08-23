@@ -1179,9 +1179,9 @@
 
   function findAllClearSet(occ) {
     const fill = 64 - emptyCount(occ);
-    if (fill === 0 || fill > 28) return null;
-
+    if (fill === 0 || fill > 16) return null;
     for (const shape of SHAPES) {
+      if (shape.n !== fill) continue;
       const spots = placements(occ, shape);
       for (const rc of spots) {
         if (applyPlace(occ, shape.cells, rc >> 3, rc & 7).empty) {
@@ -1189,36 +1189,34 @@
         }
       }
     }
-
-    const firsts = [];
-    for (const shape of SHAPES) {
-      const spots = placements(occ, shape);
-      if (!spots.length) continue;
-      const tries = [];
-      for (const rc of spots) {
-        const res = applyPlace(occ, shape.cells, rc >> 3, rc & 7);
-        tries.push({ res, q: (res.empty ? 1e6 : 0) + res.lines * 120 + res.clearedN });
-      }
-      tries.sort((a, b) => b.q - a.q);
-      firsts.push({ shape, tries: tries.slice(0, 5) });
-    }
-    firsts.sort((a, b) => b.tries[0].q - a.tries[0].q);
-
-    for (const a of firsts.slice(0, 10)) {
-      for (const pa of a.tries) {
-        if (pa.res.empty) return [a.shape, fillerForEmpty(), fillerForEmpty()];
-        for (const b of SHAPES) {
-          if (b === a.shape) continue;
-          const spots = placements(pa.res.next, b);
-          for (const rc of spots) {
-            if (applyPlace(pa.res.next, b.cells, rc >> 3, rc & 7).empty) {
-              return [a.shape, b, fillerForEmpty()];
-            }
-          }
-        }
-      }
-    }
     return null;
+  }
+
+  function cheapHelp(occ, shape, combo, misses) {
+    const spots = placements(occ, shape);
+    if (!spots.length) return null;
+    let canClear = false, maxLines = 0, bestQ = -1e9, best = null;
+    const n = spots.length;
+    const take = n > 12 ? 12 : n;
+    for (let k = 0; k < take; k++) {
+      const rc = spots[k === take - 1 ? n - 1 : ((k * n / take) | 0)];
+      const res = applyPlace(occ, shape.cells, rc >> 3, rc & 7);
+      const sc = scoreMove(shape.n, res.lines, res.clearedN, res.empty, combo, misses);
+      let q = sc.pts + res.lines * 120;
+      if (res.empty) q += 5000;
+      if (res.lines) {
+        canClear = true;
+        if (res.lines > maxLines) maxLines = res.lines;
+        q += 200 * res.lines;
+      }
+      if (q > bestQ) {
+        bestQ = q;
+        best = { res, sc, r: rc >> 3, c: rc & 7 };
+      }
+    }
+    let help = bestQ + shape.n * 8 + Math.random() * 30;
+    if (shape.n <= 2) help -= 420;
+    return { help, shape, canClear, maxLines, best };
   }
 
   function deal() {
@@ -1232,58 +1230,34 @@
       SFX.deal();
       return;
     }
-    const needClear = (combo > 0 && misses >= 1) || misses >= 2;
     const ranked = [];
     for (const shape of SHAPES) {
-      const h = pieceHelp(occ, shape, combo, misses);
-      if (h.best) ranked.push(h);
+      const h = cheapHelp(occ, shape, combo, misses);
+      if (h) ranked.push(h);
     }
     ranked.sort((a, b) => b.help - a.help);
-
     if (!ranked.length) {
       state.tray = [0, 1, 2].map(i => ({ shape: SHAPES[0], color: colors[i] }));
       SFX.deal();
       return;
     }
-
-    const seeds = [];
+    const needClear = (combo > 0 && misses >= 1) || misses >= 2;
     const clears = ranked.filter(x => x.canClear);
-    const bigClears = clears.filter(x => x.shape.n >= 4);
-    const big = ranked.filter(x => x.shape.n >= 4);
-    if (needClear && (bigClears.length || clears.length)) {
-      const src = bigClears.length ? bigClears : clears;
-      for (let i = 0; i < Math.min(5, src.length); i++) seeds.push(src[i]);
-    } else {
-      const src = big.length ? big : ranked;
-      for (let i = 0; i < Math.min(6, src.length); i++) seeds.push(src[i]);
+    const pool = (needClear && clears.length) ? clears : ranked.slice(0, Math.min(14, ranked.length));
+    const picked = [];
+    const used = [];
+    for (let n = 0; n < 3; n++) {
+      const src = pool.filter(x => used.indexOf(x.shape) < 0);
+      const fallback = ranked.filter(x => used.indexOf(x.shape) < 0);
+      const list = src.length ? src : fallback;
+      if (!list.length) break;
+      const x = list[(Math.random() * Math.min(list.length, 8)) | 0];
+      picked.push(x.shape);
+      used.push(x.shape);
     }
-
-    let bestShapes = null, bestS = -1e9;
-    for (const seed of seeds) {
-      const used = [seed.shape];
-      let board = seed.best.res.next;
-      let cmb = seed.best.sc.combo;
-      let miss = seed.best.sc.misses;
-      const second = bestRemaining(board, cmb, miss, used);
-      if (!second) continue;
-      used.push(second.shape);
-      board = second.best.res.next;
-      cmb = second.best.sc.combo;
-      miss = second.best.sc.misses;
-      const third = bestRemaining(board, cmb, miss, used);
-      if (!third) continue;
-      const shapes = [seed.shape, second.shape, third.shape];
-      const s = scoreTrio(occ, combo, misses, shapes) + seed.maxLines * 80;
-      if (s > bestS) {
-        bestS = s;
-        bestShapes = shapes;
-      }
-    }
-
-    if (!bestShapes) bestShapes = ranked.slice(0, 3).map(x => x.shape);
-    while (bestShapes.length < 3) bestShapes.push(ranked[0].shape);
-
-    state.tray = bestShapes.map((shape, i) => ({ shape, color: colors[i] }));
+    while (picked.length < 3) picked.push(ranked[0].shape);
+    if (!picked.some(s => hasAny(occ, s.cells, s.h, s.w))) picked[0] = ranked[0].shape;
+    state.tray = picked.map((shape, i) => ({ shape, color: colors[i] }));
     SFX.deal();
   }
 
@@ -1637,8 +1611,11 @@
 
   function seedPick(seed, n, len) {
     const out = [];
+    if (!len) return out;
+    if (n > len) n = len;
     let x = seed || 1;
-    while (out.length < n) {
+    let guard = 0;
+    while (out.length < n && guard++ < 400) {
       x = (x * 1103515245 + 12345) & 0x7fffffff;
       const i = x % len;
       if (!out.includes(i)) out.push(i);
@@ -2254,7 +2231,9 @@
         continue;
       }
       let local = 40;
-      for (const rc of spots) {
+      const lim = Math.min(spots.length, 8);
+      for (let i = 0; i < lim; i++) {
+        const rc = spots[(i * spots.length / lim) | 0];
         const res = applyPlace(board, item.p.shape.cells, rc >> 3, rc & 7);
         if (!res.lines) continue;
         const s = 320 * res.lines + res.clearedN * 8 + (res.empty ? 700 : 0) + (missNow >= 1 ? 400 : 0);
@@ -2275,8 +2254,9 @@
     if (missNow >= 2 && res.lines === 0) q -= 25000;
     if (missNow >= 2 && res.lines > 0) q += 4000;
     if (missNow === 1 && res.lines > 0) q += 700;
-    q += evalFast(res.next, sc.combo, sc.misses);
-    if (rest.length && depth < 2) q += setupBonus(res.next, rest, sc.combo, sc.misses);
+    if (depth > 0) q += evalFast(res.next, sc.combo, sc.misses);
+    else q += emptyCount(res.next) * 2 + res.lines * 40;
+    if (rest.length && depth < 1) q += setupBonus(res.next, rest, sc.combo, sc.misses);
     return q;
   }
 
@@ -2285,12 +2265,12 @@
     tray.forEach((p, i) => { if (p) live.push({ p, i }); });
     if (!live.length) return null;
 
-    const beam = live.length === 3 ? [22, 16, 64] : live.length === 2 ? [36, 64] : [64];
+    const beam = live.length === 3 ? [10, 8, 12] : live.length === 2 ? [14, 16] : [24];
     const finals = [];
 
     function keepLeaf(quick, moves, board, comboNow, missNow, pts) {
       const row = { quick, moves: moves.map(m => ({ ...m })), board, comboNow, missNow, pts };
-      if (finals.length < 48) {
+      if (finals.length < 12) {
         finals.push(row);
         return;
       }
