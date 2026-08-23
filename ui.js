@@ -1,7 +1,7 @@
-import { state } from './state.js?v=179';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=179';
-import { refreshTutorial } from './tutorial.js?v=179';
-import { auth } from './firebase.js?v=179';
+import { state } from './state.js?v=180';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=180';
+import { refreshTutorial } from './tutorial.js?v=180';
+import { auth } from './firebase.js?v=180';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1521,6 +1521,7 @@ function renderNews() {
     ${updatedLine}
     <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">${rb('転載元','てんさいもと')}
       <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer" class="text-[#2f8f82] underline">GDELT Project</a>
+      ・NHK・Yahoo!ニュース RSS
     </p>
     <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">見出しだけ出しています。タップすると元の記事が開きます。</p>
     ${blocks}

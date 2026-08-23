@@ -1,30 +1,31 @@
 /**
  * GDELT DOC 2.0 から各銘柄の記事見出しとURLを取る。
- * 本文は保存しない。子ども向けの点数で上位5件だけ news.json に書く。
+ * 失敗時は公開RSS（NHK・Yahoo）で穴埋めする。本文は保存しない。
  * 利用時は https://www.gdeltproject.org/ への出典が必要。
  */
 import { writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { Agent, fetch as gdeltFetch } from 'undici';
 
 const OUT = new URL('../news.json', import.meta.url);
-const GAP_MS = 12000;
-const dispatcher = new Agent({
-  connect: { timeout: 60000 },
-  bodyTimeout: 120000,
-  headersTimeout: 60000
-});
+const GAP_MS = 8000;
+
+async function gdeltFetch(href) {
+  return fetch(href, {
+    headers: { Accept: 'application/json', 'User-Agent': 'ienomics-gdelt-news' },
+    signal: AbortSignal.timeout(90000)
+  });
+}
 
 const TOPICS = [
   {
     about: '日経平均',
     query: '(Nikkei OR "Nikkei 225" OR 日経平均) sourcelang:japanese',
-    hints: ['日経', 'nikkei', '平均', '株', '東証', 'topix']
+    hints: ['日経', 'nikkei', '平均', '株', '東証', 'topix', '株価']
   },
   {
     about: 'S&P500',
     query: '(S&P OR SP500 OR 米国株) sourcelang:japanese',
-    hints: ['s&p', 'sp500', '米国株', 'アメリカ', 'ダウ', 'ナスダック']
+    hints: ['s&p', 'sp500', '米国株', 'アメリカ', 'ダウ', 'ナスダック', 'ウォール']
   },
   {
     about: '金',
@@ -36,6 +37,12 @@ const TOPICS = [
     query: '(原油 OR WTI OR 石油価格) sourcelang:japanese',
     hints: ['原油', '石油', 'wti', 'oil', 'ガソリン']
   }
+];
+
+const RSS_FEEDS = [
+  'https://www.nhk.or.jp/rss/news/cat5.xml',
+  'https://news.yahoo.co.jp/rss/topics/business.xml',
+  'https://news.yahoo.co.jp/rss/topics/world.xml'
 ];
 
 const SKIP_HARD = /レイプ|性的|自殺/;
@@ -64,6 +71,18 @@ function cleanTitle(raw) {
   t = t.replace(/\s*[|｜]\s*[^|｜]+$/, '');
   t = t.replace(/\s+[-–—]\s*(日経|ロイター|朝日|毎日|読売|共同|時事).*$/, '');
   return t.slice(0, 160);
+}
+
+function decodeXml(s) {
+  return String(s || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
 }
 
 function titleLooksLikeSiteName(title, domain) {
@@ -109,12 +128,22 @@ function scoreArticle(topic, art) {
   return s;
 }
 
+function keepForTopic(topic, title) {
+  if (SKIP_HARD.test(title)) return false;
+  if (/金総書記|金正恩|金銭疑惑/.test(title)) return false;
+  if (topic.about === '金') return /(ゴールド|金価格|金相場|金先物|貴金属|\bgold\b)/i.test(title);
+  if (topic.about === '原油') return /(原油|石油|WTI|\boil\b|ガソリン)/i.test(title);
+  if (topic.about === '日経平均') return /(日経|株価|TOPIX|東証|株式)/i.test(title);
+  if (topic.about === 'S&P500') return /(S&P|SP500|米国株|ダウ|ナスダック|ウォール|NY株|ニューヨーク)/i.test(title);
+  return true;
+}
+
 function pickTop5(topic, list) {
   const ranked = [...list].sort((a, b) => b.score - a.score);
   const out = [];
   const hostCount = new Map();
   for (const row of ranked) {
-    if (row.score < 8) continue;
+    if (row.score < 0) continue;
     const host = (() => {
       try { return new URL(row.url).hostname.replace(/^www\./, ''); } catch { return row.domain || ''; }
     })();
@@ -135,6 +164,40 @@ function pickTop5(topic, list) {
   return out.slice(0, 5);
 }
 
+function parseRssItems(xml) {
+  const items = [];
+  const chunks = String(xml || '').split(/<item[\s>]/i).slice(1);
+  for (const chunk of chunks) {
+    const body = chunk.split(/<\/item>/i)[0] || '';
+    const title = decodeXml((body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').trim();
+    const link = decodeXml((body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '').trim();
+    if (title && isHttpUrl(link)) items.push({ title: cleanTitle(title), url: link });
+  }
+  return items;
+}
+
+async function fetchRssPool() {
+  const pool = [];
+  for (const href of RSS_FEEDS) {
+    try {
+      const res = await fetch(href, {
+        headers: { 'User-Agent': 'ienomics-news', Accept: 'application/rss+xml, application/xml, text/xml' },
+        signal: AbortSignal.timeout(20000)
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      for (const item of parseRssItems(xml)) {
+        let domain = '';
+        try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+        pool.push({ ...item, domain, language: 'Japanese', sourcecountry: 'Japan', seendate: '' });
+      }
+    } catch (e) {
+      console.warn(`RSS ${href} ${e?.message || e}`);
+    }
+  }
+  return pool;
+}
+
 async function searchTopic(topic) {
   const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
   url.searchParams.set('query', topic.query);
@@ -145,12 +208,9 @@ async function searchTopic(topic) {
   url.searchParams.set('format', 'json');
 
   let lastErr = '';
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 2; i++) {
     try {
-      const res = await gdeltFetch(url.href, {
-        dispatcher,
-        headers: { Accept: 'application/json', 'User-Agent': 'ienomics-gdelt-news' }
-      });
+      const res = await gdeltFetch(url.href);
       if (res.status === 429) {
         lastErr = '429';
         await sleep(15000);
@@ -177,9 +237,7 @@ async function searchTopic(topic) {
         const link = String(a?.url || '').trim();
         if (!title || !isHttpUrl(link)) continue;
         if (titleLooksLikeSiteName(title, a?.domain)) continue;
-        if (topic.about === '金' && !/(ゴールド|金価格|金相場|金先物|貴金属|\bgold\b)/i.test(title)) continue;
-        if (topic.about === '日経平均' && !/(日経|株価|TOPIX|東証)/i.test(title)) continue;
-        if (/金総書記|金正恩|金銭疑惑/.test(title)) continue;
+        if (!keepForTopic(topic, title)) continue;
         const key = link.replace(/[?#].*$/, '');
         if (seen.has(key)) continue;
         seen.add(key);
@@ -203,27 +261,44 @@ async function searchTopic(topic) {
   throw new Error(`${topic.about} ${lastErr || '取得失敗'}`);
 }
 
+function toOutput(topic, row) {
+  return {
+    about: topic.about,
+    title: row.title,
+    url: row.url,
+    source: String(row.domain || '').replace(/^www\./, '')
+  };
+}
+
 async function main() {
+  const rssPool = await fetchRssPool();
+  console.log(`RSS ${rssPool.length}件`);
+
   await sleep(GAP_MS);
   const items = [];
   for (let i = 0; i < TOPICS.length; i++) {
     const topic = TOPICS[i];
     if (i > 0) await sleep(GAP_MS);
+    let found = [];
     try {
-      const found = await searchTopic(topic);
-      const top = pickTop5(topic, found);
-      for (const row of top) {
-        items.push({
-          about: topic.about,
-          title: row.title,
-          url: row.url,
-          source: String(row.domain || '').replace(/^www\./, '')
-        });
-      }
-      console.log(`${topic.about} 候補${found.length} → ${top.length}件`);
+      found = await searchTopic(topic);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
+
+    const seen = new Set(found.map(r => r.url.replace(/[?#].*$/, '')));
+    for (const r of rssPool) {
+      if (!keepForTopic(topic, r.title)) continue;
+      const key = r.url.replace(/[?#].*$/, '');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const row = { ...r, score: scoreArticle(topic, r) };
+      found.push(row);
+    }
+
+    const top = pickTop5(topic, found);
+    for (const row of top) items.push(toOutput(topic, row));
+    console.log(`${topic.about} 候補${found.length} → ${top.length}件`);
   }
 
   if (!items.length) {
