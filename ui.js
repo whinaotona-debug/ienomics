@@ -1,7 +1,7 @@
-import { state } from './state.js?v=178';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=178';
-import { refreshTutorial } from './tutorial.js?v=178';
-import { auth } from './firebase.js?v=178';
+import { state } from './state.js?v=179';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=179';
+import { refreshTutorial } from './tutorial.js?v=179';
+import { auth } from './firebase.js?v=179';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -370,12 +370,13 @@ function renderHeader() {
     ? `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('口座','こうざ')}</span>`
     : `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('資産','しさん')}</span>`;
 
-  const nextPay = getNextPaymentInfo(state.scheduledPayments);
-  let payHint = '';
-  if (nextPay) {
-    const leftTxt = nextPay.daysLeft === 0 ? '本日' : `残り${nextPay.daysLeft}日`;
-    payHint = `<p class="text-[10px] font-bold text-[#ffe2b8] mt-1.5 leading-snug truncate" title="${esc(nextPay.title)}">${esc(nextPay.title)}まで${leftTxt}</p>`;
-  }
+  const upcoming = getUpcomingPayments(state.scheduledPayments, state.tasks, state.balloons, 2);
+  const payHint = upcoming.length
+    ? upcoming.map(p => {
+        const leftTxt = p.daysLeft === 0 ? '本日' : `あと${p.daysLeft}日`;
+        return `<p class="text-[10px] font-bold text-[#ffe2b8] mt-1.5 leading-snug" title="${esc(p.title)}">${esc(p.title)} ${leftTxt} · ${esc(p.amountLabel)}</p>`;
+      }).join('')
+    : '';
 
   const stamp = getHelpStampData(state.tasks);
   const streakHint = stamp.streak > 0
@@ -1491,16 +1492,17 @@ function renderNews() {
   const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
   const groups = order.map(about => ({
     about,
-    items: all.filter(n => n.about === about).slice(0, 3)
+    items: all.filter(n => n.about === about).slice(0, 5)
   })).filter(g => g.items.length);
 
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}についてのニュースがあります`;
-        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p></a>`;
+        const site = n.source ? `<p class="text-[10px] font-bold text-slate-400 mt-1">${esc(n.source)}</p>` : '';
+        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${site}</a>`;
       }).join('');
-      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}</h3><div class="space-y-2">${rows}</div></section>`;
+      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}のニュース</h3><div class="space-y-2">${rows}</div></section>`;
     }).join('')
     : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
 

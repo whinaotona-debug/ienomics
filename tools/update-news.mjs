@@ -1,6 +1,6 @@
 /**
  * GDELT DOC 2.0 から各銘柄の記事見出しとURLを取る。
- * 本文は保存しない。子ども向けの点数で上位3件だけ news.json に書く。
+ * 本文は保存しない。子ども向けの点数で上位5件だけ news.json に書く。
  * 利用時は https://www.gdeltproject.org/ への出典が必要。
  */
 import { writeFileSync } from 'fs';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import { Agent, fetch as gdeltFetch } from 'undici';
 
 const OUT = new URL('../news.json', import.meta.url);
-const GAP_MS = 10000;
+const GAP_MS = 12000;
 const dispatcher = new Agent({
   connect: { timeout: 60000 },
   bodyTimeout: 120000,
@@ -38,8 +38,8 @@ const TOPICS = [
   }
 ];
 
-const SKIP_HARD = /戦争|空爆|ミサイル|テロ|殺害|虐殺|死者|遺体|レイプ|性的|自殺|爆発事故/;
-const SKIP_SOFT = /制裁|ホルムズ|侵攻|核兵器|クーデター|逮捕|疑惑/;
+const SKIP_HARD = /レイプ|性的|自殺/;
+const SKIP_SOFT = /逮捕|疑惑/;
 const BOOST_EASY = /なぜ|とは|解説|しくみ|仕組み|わかり|上が|下が|円安|円高|高い|安い|初めて/;
 
 function sleep(ms) {
@@ -61,10 +61,8 @@ function cleanTitle(raw) {
   t = t.replace(/[\u0000-\u001f]/g, '');
   t = t.replace(/\s+/g, ' ').trim();
   t = t.replace(/([ぁ-んァ-ン一-龥々ー])\s+(?=[ぁ-んァ-ン一-龥々ー「」『』（）％])/g, '$1');
-  t = t.replace(/\s*[|｜]\s*[^|｜]{0,40}$/, (tail) => {
-    if (/ニュース|新聞|公式|オフィシャル|オンライン/.test(tail)) return '';
-    return tail;
-  });
+  t = t.replace(/\s*[|｜]\s*[^|｜]+$/, '');
+  t = t.replace(/\s+[-–—]\s*(日経|ロイター|朝日|毎日|読売|共同|時事).*$/, '');
   return t.slice(0, 160);
 }
 
@@ -111,37 +109,37 @@ function scoreArticle(topic, art) {
   return s;
 }
 
-function pickTop3(topic, list) {
+function pickTop5(topic, list) {
   const ranked = [...list].sort((a, b) => b.score - a.score);
   const out = [];
-  const domains = new Set();
+  const hostCount = new Map();
   for (const row of ranked) {
-    if (row.score < 20) continue;
+    if (row.score < 8) continue;
     const host = (() => {
       try { return new URL(row.url).hostname.replace(/^www\./, ''); } catch { return row.domain || ''; }
     })();
-    if (host && domains.has(host)) continue;
+    if (host && (hostCount.get(host) || 0) >= 2) continue;
     const dup = out.some(x => x.title.slice(0, 18) === row.title.slice(0, 18));
     if (dup) continue;
     out.push(row);
-    if (host) domains.add(host);
-    if (out.length === 3) break;
+    if (host) hostCount.set(host, (hostCount.get(host) || 0) + 1);
+    if (out.length === 5) break;
   }
-  if (out.length < 3) {
+  if (out.length < 5) {
     for (const row of ranked) {
       if (out.includes(row)) continue;
       out.push(row);
-      if (out.length === 3) break;
+      if (out.length === 5) break;
     }
   }
-  return out.slice(0, 3);
+  return out.slice(0, 5);
 }
 
 async function searchTopic(topic) {
   const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
   url.searchParams.set('query', topic.query);
   url.searchParams.set('mode', 'ArtList');
-  url.searchParams.set('maxrecords', '25');
+  url.searchParams.set('maxrecords', '40');
   url.searchParams.set('timespan', '3d');
   url.searchParams.set('sort', 'DateDesc');
   url.searchParams.set('format', 'json');
@@ -180,7 +178,7 @@ async function searchTopic(topic) {
         if (!title || !isHttpUrl(link)) continue;
         if (titleLooksLikeSiteName(title, a?.domain)) continue;
         if (topic.about === '金' && !/(ゴールド|金価格|金相場|金先物|貴金属|\bgold\b)/i.test(title)) continue;
-        if (topic.about === '日経平均' && !/(日経平均|株価|TOPIX|東証)/i.test(title)) continue;
+        if (topic.about === '日経平均' && !/(日経|株価|TOPIX|東証)/i.test(title)) continue;
         if (/金総書記|金正恩|金銭疑惑/.test(title)) continue;
         const key = link.replace(/[?#].*$/, '');
         if (seen.has(key)) continue;
@@ -213,9 +211,14 @@ async function main() {
     if (i > 0) await sleep(GAP_MS);
     try {
       const found = await searchTopic(topic);
-      const top = pickTop3(topic, found);
+      const top = pickTop5(topic, found);
       for (const row of top) {
-        items.push({ about: topic.about, title: row.title, url: row.url });
+        items.push({
+          about: topic.about,
+          title: row.title,
+          url: row.url,
+          source: String(row.domain || '').replace(/^www\./, '')
+        });
       }
       console.log(`${topic.about} 候補${found.length} → ${top.length}件`);
     } catch (e) {

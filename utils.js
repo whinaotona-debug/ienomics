@@ -1,4 +1,4 @@
-import { state } from './state.js?v=178';
+import { state } from './state.js?v=179';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -298,24 +298,36 @@ function toDateKey(d) {
   return japanTodayKey(d);
 }
 
-/** 次の自動支払いまでの情報 { title, daysLeft } */
-export function getNextPaymentInfo(payments) {
+/** 近い自動支払いを日数順に最大件数返す { title, daysLeft, amountYen, amountLabel } */
+export function getUpcomingPayments(payments, tasks, balloons, limit = 2) {
   const active = (payments || []).filter(p => p.status === 'active');
-  if (active.length === 0) return null;
+  if (active.length === 0) return [];
 
   const today = startOfLocalDay();
   const todayStr = toDateKey(today);
-  let best = null;
+  const rows = [];
 
   for (const p of active) {
     const next = calcNextPaymentDate(p, today, todayStr);
     if (!next) continue;
     const daysLeft = Math.max(0, Math.round((startOfLocalDay(next) - today) / 86400000));
-    if (!best || daysLeft < best.daysLeft || (daysLeft === best.daysLeft && (p.amount || 0) > (best.amount || 0))) {
-      best = { title: p.title || '支払い', daysLeft, amount: p.amount || 0 };
-    }
+    const amountYen = scheduledPaymentAmount(p, tasks, balloons);
+    rows.push({
+      title: p.title || '支払い',
+      daysLeft,
+      amountYen,
+      amountLabel: p.amountKind === 'percentLastMonth'
+        ? `${formatPaymentAmountLabel(p)}（${amountYen}円）`
+        : `${amountYen}円`
+    });
   }
-  return best;
+
+  rows.sort((a, b) => a.daysLeft - b.daysLeft || b.amountYen - a.amountYen);
+  return rows.slice(0, Math.max(1, limit));
+}
+
+export function getNextPaymentInfo(payments) {
+  return getUpcomingPayments(payments, [], [], 1)[0] || null;
 }
 
 function calcNextPaymentDate(p, today, todayStr) {
