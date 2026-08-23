@@ -184,12 +184,13 @@ async function main() {
   }
 
   const taneOf = learned.map(x => sortTopic(x.title));
-  const publicish = /JPX|日本銀行|金融庁|FRB|SEC|METI/;
-  const groqIdx = learned
-    .map((_, i) => i)
-    .filter(i => !taneOf[i])
-    .sort((a, b) => Number(publicish.test(learned[b].source)) - Number(publicish.test(learned[a].source)))
-    .slice(0, 20);
+  const prefer = ['JPX マーケットニュース', 'FRB', 'FRB 金利', '日本銀行', 'METI Journal', 'SEC', '金融庁', 'JPX お知らせ'];
+  const groqIdx = [];
+  for (const name of prefer) {
+    for (let i = 0; i < learned.length && groqIdx.length < 20; i++) {
+      if (learned[i].source === name && !groqIdx.includes(i)) groqIdx.push(i);
+    }
+  }
   const groq = await groqLabelTitles(groqIdx.map(i => learned[i].title));
   const groqAt = new Map(groqIdx.map((i, j) => [i, groq?.[j] || '']));
   const topicOf = (row, i) => groqAt.get(i) || taneOf[i];
