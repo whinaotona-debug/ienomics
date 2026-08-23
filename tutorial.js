@@ -61,7 +61,7 @@ const PARENT_STEPS = [
   {
     target: 'news',
     title: 'ニュース',
-    body: '日経平均・S&P500・金・原油の見出しが、子どもにもわかりやすい順で3つずつ並びます。タップすると元の記事が開きます。'
+    body: '日経平均・S&P500・金・原油の見出しが並びます。データは GDELT Project です。タップすると元の記事が開きます。'
   },
   {
     target: 'tasklist',

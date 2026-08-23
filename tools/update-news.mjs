@@ -1,20 +1,50 @@
 /**
- * Google ニュース RSS から各銘柄10件取り、Gemini で子ども向けに3件選ぶ。
- * 本文は保存しない。タイトルとURLだけ news.json に書く。
+ * GDELT DOC 2.0 から各銘柄の記事見出しとURLを取る。
+ * 本文は保存しない。子ども向けの点数で上位3件だけ news.json に書く。
+ * 利用時は https://www.gdeltproject.org/ への出典が必要。
  */
 import { writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { Agent, fetch as gdeltFetch } from 'undici';
 
 const OUT = new URL('../news.json', import.meta.url);
-const KEY = String(process.env.GEMINI_API_KEY || '').trim();
-const MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash'];
+const GAP_MS = 10000;
+const dispatcher = new Agent({
+  connect: { timeout: 60000 },
+  bodyTimeout: 120000,
+  headersTimeout: 60000
+});
 
 const TOPICS = [
-  { about: '日経平均', q: '日経平均' },
-  { about: 'S&P500', q: 'S&P 500' },
-  { about: '金', q: '金 価格 OR ゴールド' },
-  { about: '原油', q: '原油 価格 OR WTI' }
+  {
+    about: '日経平均',
+    query: '(Nikkei OR "Nikkei 225" OR 日経平均) sourcelang:japanese',
+    hints: ['日経', 'nikkei', '平均', '株', '東証', 'topix']
+  },
+  {
+    about: 'S&P500',
+    query: '(S&P OR SP500 OR 米国株) sourcelang:japanese',
+    hints: ['s&p', 'sp500', '米国株', 'アメリカ', 'ダウ', 'ナスダック']
+  },
+  {
+    about: '金',
+    query: '(ゴールド OR 金価格 OR 金相場 OR "gold price") sourcelang:japanese',
+    hints: ['ゴールド', 'gold', '金価格', '金相場', '金先物', '貴金属']
+  },
+  {
+    about: '原油',
+    query: '(原油 OR WTI OR 石油価格) sourcelang:japanese',
+    hints: ['原油', '石油', 'wti', 'oil', 'ガソリン']
+  }
 ];
+
+const SKIP_HARD = /戦争|空爆|ミサイル|テロ|殺害|虐殺|死者|遺体|レイプ|性的|自殺|爆発事故/;
+const SKIP_SOFT = /制裁|ホルムズ|侵攻|核兵器|クーデター|逮捕|疑惑/;
+const BOOST_EASY = /なぜ|とは|解説|しくみ|仕組み|わかり|上が|下が|円安|円高|高い|安い|初めて/;
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
 
 function isHttpUrl(s) {
   try {
@@ -25,138 +55,172 @@ function isHttpUrl(s) {
   }
 }
 
-function decodeXml(s) {
-  return String(s || '')
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .trim();
-}
-
-function parseRssItems(xml, max = 10) {
-  const items = [];
-  const re = /<item\b[\s\S]*?<\/item>/gi;
-  let m;
-  while ((m = re.exec(xml)) && items.length < max) {
-    const block = m[0];
-    const title = decodeXml((block.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '');
-    const linkTag = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
-    const guid = block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
-    const alt = block.match(/<atom:link[^>]+href="([^"]+)"/i);
-    const url = decodeXml(linkTag?.[1] || guid?.[1] || alt?.[1] || '');
-    if (!title || !isHttpUrl(url)) continue;
-    items.push({ title: title.slice(0, 180), url });
-  }
-  return items;
-}
-
-async function searchTen(topic) {
-  const url = new URL('https://news.google.com/rss/search');
-  url.searchParams.set('q', topic.q);
-  url.searchParams.set('hl', 'ja');
-  url.searchParams.set('gl', 'JP');
-  url.searchParams.set('ceid', 'JP:ja');
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 ienomics-news-rss' }
+function cleanTitle(raw) {
+  let t = String(raw || '');
+  t = t.replace(/_\s*x[0-9A-Fa-f]{4}\s*_/g, '');
+  t = t.replace(/[\u0000-\u001f]/g, '');
+  t = t.replace(/\s+/g, ' ').trim();
+  t = t.replace(/([ぁ-んァ-ン一-龥々ー])\s+(?=[ぁ-んァ-ン一-龥々ー「」『』（）％])/g, '$1');
+  t = t.replace(/\s*[|｜]\s*[^|｜]{0,40}$/, (tail) => {
+    if (/ニュース|新聞|公式|オフィシャル|オンライン/.test(tail)) return '';
+    return tail;
   });
-  if (!res.ok) throw new Error(`${topic.about} ${res.status}`);
-  return parseRssItems(await res.text(), 10);
+  return t.slice(0, 160);
 }
 
-function geminiText(json) {
-  const parts = (((json.candidates || [])[0] || {}).content || {}).parts || [];
-  return parts.map(p => p.text || '').join('').trim();
+function titleLooksLikeSiteName(title, domain) {
+  const d = String(domain || '').replace(/^www\./, '');
+  const n = title.replace(/\s/g, '');
+  if (n.length < 8) return true;
+  if (d && n === d.replace(/\./g, '')) return true;
+  return /ONLINE$|公式サイト$/.test(title) && n.length < 18;
 }
 
-function parseIndexList(text, n) {
-  const raw = String(text || '').replace(/```json|```/g, '').trim();
-  const m = raw.match(/\[[\s\S]*?\]/);
-  if (!m) return [];
-  try {
-    const arr = JSON.parse(m[0]);
-    if (!Array.isArray(arr)) return [];
-    const seen = new Set();
-    const out = [];
-    for (const v of arr) {
-      const i = Number(v);
-      if (!Number.isInteger(i) || i < 1 || i > n || seen.has(i)) continue;
-      seen.add(i);
-      out.push(i);
+function hoursAgo(seendate) {
+  const m = String(seendate || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (!m) return 72;
+  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+  return (Date.now() - ms) / 3600000;
+}
+
+function scoreArticle(topic, art) {
+  const title = art.title;
+  const low = title.toLowerCase();
+  let s = 40;
+
+  if (art.language === 'Japanese') s += 18;
+  if (art.sourcecountry === 'Japan') s += 10;
+  if (SKIP_HARD.test(title)) s -= 80;
+  if (SKIP_SOFT.test(title)) s -= 18;
+  if (BOOST_EASY.test(title)) s += 16;
+
+  const hit = topic.hints.some(h => low.includes(h.toLowerCase()) || title.includes(h));
+  s += hit ? 22 : -12;
+
+  const len = title.length;
+  if (len >= 16 && len <= 72) s += 10;
+  else if (len > 100) s -= 8;
+  else if (len < 12) s -= 20;
+
+  const age = hoursAgo(art.seendate);
+  if (age <= 24) s += 12;
+  else if (age <= 72) s += 4;
+  else s -= 6;
+
+  if (/[！!]{2,}|[？?]{2,}/.test(title)) s -= 6;
+  return s;
+}
+
+function pickTop3(topic, list) {
+  const ranked = [...list].sort((a, b) => b.score - a.score);
+  const out = [];
+  const domains = new Set();
+  for (const row of ranked) {
+    if (row.score < 20) continue;
+    const host = (() => {
+      try { return new URL(row.url).hostname.replace(/^www\./, ''); } catch { return row.domain || ''; }
+    })();
+    if (host && domains.has(host)) continue;
+    const dup = out.some(x => x.title.slice(0, 18) === row.title.slice(0, 18));
+    if (dup) continue;
+    out.push(row);
+    if (host) domains.add(host);
+    if (out.length === 3) break;
+  }
+  if (out.length < 3) {
+    for (const row of ranked) {
+      if (out.includes(row)) continue;
+      out.push(row);
+      if (out.length === 3) break;
     }
-    return out;
-  } catch {
-    return [];
   }
+  return out.slice(0, 3);
 }
 
-async function geminiPick(prompt, n) {
-  if (!KEY) return [];
-  const body = JSON.stringify({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 80 }
-  });
-  for (const model of MODELS) {
+async function searchTopic(topic) {
+  const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
+  url.searchParams.set('query', topic.query);
+  url.searchParams.set('mode', 'ArtList');
+  url.searchParams.set('maxrecords', '25');
+  url.searchParams.set('timespan', '3d');
+  url.searchParams.set('sort', 'DateDesc');
+  url.searchParams.set('format', 'json');
+
+  let lastErr = '';
+  for (let i = 0; i < 4; i++) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KEY },
-          body
-        }
-      );
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) continue;
-      const ids = parseIndexList(geminiText(json), n);
-      if (ids.length) return ids;
-    } catch {
-      // 次のモデルへ
+      const res = await gdeltFetch(url.href, {
+        dispatcher,
+        headers: { Accept: 'application/json', 'User-Agent': 'ienomics-gdelt-news' }
+      });
+      if (res.status === 429) {
+        lastErr = '429';
+        await sleep(15000);
+        continue;
+      }
+      if (!res.ok) throw new Error(`${topic.about} ${res.status}`);
+      const text = await res.text();
+      if (/limit requests/i.test(text)) {
+        lastErr = '429';
+        await sleep(15000);
+        continue;
+      }
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(`${topic.about} JSONではない`);
+      }
+      const raw = Array.isArray(json?.articles) ? json.articles : [];
+      const seen = new Set();
+      const list = [];
+      for (const a of raw) {
+        const title = cleanTitle(a?.title);
+        const link = String(a?.url || '').trim();
+        if (!title || !isHttpUrl(link)) continue;
+        if (titleLooksLikeSiteName(title, a?.domain)) continue;
+        if (topic.about === '金' && !/(ゴールド|金価格|金相場|金先物|貴金属|\bgold\b)/i.test(title)) continue;
+        if (topic.about === '日経平均' && !/(日経平均|株価|TOPIX|東証)/i.test(title)) continue;
+        if (/金総書記|金正恩|金銭疑惑/.test(title)) continue;
+        const key = link.replace(/[?#].*$/, '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const row = {
+          title,
+          url: link,
+          domain: String(a?.domain || ''),
+          language: String(a?.language || ''),
+          sourcecountry: String(a?.sourcecountry || ''),
+          seendate: String(a?.seendate || '')
+        };
+        row.score = scoreArticle(topic, row);
+        list.push(row);
+      }
+      return list;
+    } catch (e) {
+      lastErr = String(e?.code || e?.cause?.code || e?.message || e);
+      await sleep(8000);
     }
   }
-  return [];
-}
-
-async function pickTop3(about, list) {
-  if (list.length <= 3) return list;
-  const numbered = list.map((x, i) => `${i + 1}. ${x.title}`).join('\n');
-  const prompt = [
-    '小学生でも意味が想像しやすい見出しを、わかりやすい順に3つ選んでください。',
-    '政治や戦争の生々しい話、専門用語だらけの話は後ろにしてください。',
-    '答えは番号だけのJSON配列。例: [2,5,1]',
-    `テーマ: ${about}`,
-    numbered
-  ].join('\n');
-  const ids = await geminiPick(prompt, list.length);
-  const picked = [];
-  const used = new Set();
-  for (const i of ids) {
-    picked.push(list[i - 1]);
-    used.add(i - 1);
-    if (picked.length === 3) break;
-  }
-  for (let i = 0; i < list.length && picked.length < 3; i++) {
-    if (used.has(i)) continue;
-    picked.push(list[i]);
-  }
-  return picked.slice(0, 3);
+  throw new Error(`${topic.about} ${lastErr || '取得失敗'}`);
 }
 
 async function main() {
+  await sleep(GAP_MS);
   const items = [];
-  for (const topic of TOPICS) {
+  for (let i = 0; i < TOPICS.length; i++) {
+    const topic = TOPICS[i];
+    if (i > 0) await sleep(GAP_MS);
     try {
-      const ten = await searchTen(topic);
-      const top = await pickTop3(topic.about, ten);
+      const found = await searchTopic(topic);
+      const top = pickTop3(topic, found);
       for (const row of top) {
         items.push({ about: topic.about, title: row.title, url: row.url });
       }
+      console.log(`${topic.about} 候補${found.length} → ${top.length}件`);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
-    await new Promise(r => setTimeout(r, 400));
   }
 
   if (!items.length) {
@@ -166,7 +230,12 @@ async function main() {
 
   writeFileSync(
     fileURLToPath(OUT),
-    JSON.stringify({ updatedAt: new Date().toISOString(), items }, null, 2) + '\n',
+    JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      source: 'GDELT Project',
+      sourceUrl: 'https://www.gdeltproject.org/',
+      items
+    }, null, 2) + '\n',
     'utf8'
   );
   console.log(`news.json ${items.length}件`);
