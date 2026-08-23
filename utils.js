@@ -1,4 +1,4 @@
-import { state } from './state.js?v=176';
+import { state } from './state.js?v=177';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -101,8 +101,55 @@ export function getIcon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${icons[name] || ''}</svg>`;
 }
 
+export function formatPaymentAmountLabel(p) {
+  if (!p) return '';
+  if (p.amountKind === 'percentLastMonth') {
+    const pct = Number(p.percent);
+    if (!Number.isFinite(pct) || pct <= 0) return '前月の稼ぎの％';
+    return `前月の${pct}％`;
+  }
+  return `−${Number(p.amount) || 0}円`;
+}
+
+/** 前月（日本時間）にお仕事承認とギフトで得た円 */
+export function lastMonthEarnedPoints(tasks, balloons, now = new Date()) {
+  const j = japanParts(now);
+  let year = j.year;
+  let month = j.month - 1;
+  if (month < 1) {
+    month = 12;
+    year -= 1;
+  }
+  let sum = 0;
+  for (const t of tasks || []) {
+    if (t.status !== 'approved') continue;
+    const at = t.approvedAt || t.completedAt;
+    if (!at) continue;
+    const p = japanParts(new Date(at));
+    if (p.year === year && p.month === month) sum += Math.max(0, Number(t.points) || 0);
+  }
+  for (const b of balloons || []) {
+    if (b.status !== 'received') continue;
+    const at = b.receivedAt || b.createdAt;
+    if (!at) continue;
+    const p = japanParts(new Date(at));
+    if (p.year === year && p.month === month) sum += Math.max(0, Number(b.points) || 0);
+  }
+  return sum;
+}
+
+export function scheduledPaymentAmount(p, tasks, balloons, now = new Date()) {
+  if (!p) return 0;
+  if (p.amountKind === 'percentLastMonth') {
+    const pct = Math.min(100, Math.max(0, Number(p.percent) || 0));
+    if (pct <= 0) return 0;
+    return Math.floor(lastMonthEarnedPoints(tasks, balloons, now) * pct / 100);
+  }
+  return Math.max(0, Number(p.amount) || 0);
+}
+
 export function formatTimeLeft(deadlineTime) {
-  if (!deadlineTime) return '--';
+  if (!deadlineTime) return '期限なし';
   const diff = deadlineTime - Date.now();
   if (diff < 0) return '期限切れ';
   
@@ -131,17 +178,22 @@ export function formatRepeatLabel(temp) {
   const days = (temp.days || []).map(d => Number(d)).filter(d => Number.isFinite(d));
   if (temp.type === 'weekly') {
     const label = days.slice().sort((a, b) => a - b).map(d => weekNames[d] || '?').join('');
-    return `毎週${label || '？'} ${temp.time || ''}`;
+    return `毎週${label || '？'}${temp.time ? ` ${temp.time}` : ''}`;
   }
   const day = days[0] ?? '?';
-  return `毎月${day}日 ${temp.time || ''}`;
+  return `毎月${day}日${temp.time ? ` ${temp.time}` : ''}`;
 }
 
 export function formatPaymentSchedule(p) {
   if (!p) return '';
   const weekNames = ['日', '月', '火', '水', '木', '金', '土'];
   if (p.mode === 'once') {
-    return `単発 ${p.dueDate || ''}`;
+    let once = `単発 ${p.dueDate || ''}`;
+    if (p.amountKind === 'percentLastMonth') {
+      const pct = Number(p.percent);
+      if (Number.isFinite(pct) && pct > 0) once += `・前月の稼ぎの${pct}％`;
+    }
+    return once;
   }
   let sched = '';
   if (p.interval === 'weekly') {
@@ -151,9 +203,16 @@ export function formatPaymentSchedule(p) {
     const day = (p.days && p.days[0]) || '?';
     sched = `毎月${day}日`;
   }
-  if (p.countMode === 'infinite') return `${sched}・無限`;
-  const left = p.remainingCount ?? p.totalCount ?? '?';
-  return `${sched}・残り${left}回`;
+  if (p.countMode === 'infinite') sched = `${sched}・無限`;
+  else {
+    const left = p.remainingCount ?? p.totalCount ?? '?';
+    sched = `${sched}・残り${left}回`;
+  }
+  if (p.amountKind === 'percentLastMonth') {
+    const pct = Number(p.percent);
+    if (Number.isFinite(pct) && pct > 0) sched += `・前月の稼ぎの${pct}％`;
+  }
+  return sched;
 }
 
 /** 日付キー YYYY-M-D を比較用数値に */

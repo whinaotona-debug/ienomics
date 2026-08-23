@@ -1,7 +1,7 @@
-import { state } from './state.js?v=176';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=176';
-import { refreshTutorial } from './tutorial.js?v=176';
-import { auth } from './firebase.js?v=176';
+import { state } from './state.js?v=177';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getNextPaymentInfo, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=177';
+import { refreshTutorial } from './tutorial.js?v=177';
+import { auth } from './firebase.js?v=177';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -921,14 +921,14 @@ function renderTaskCreate() {
           </select>
         </div>
         <div>
-          <p class="text-[9px] font-bold text-slate-400 mb-2">仕事の時間（この時間順に並び、通知が届きます）</p>
-          <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="19:00">
+          <p class="text-[9px] font-bold text-slate-400 mb-2">仕事の時間（任意。空なら期限なし）</p>
+          <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none">
         </div>
       </div>
     </div>
 
     <div id="normal-deadline-wrap">
-      <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">仕事の時間（この時間順に並び、通知が届きます）</p>
+      <p class="text-[9px] font-bold text-slate-400 mb-2" id="normal-deadline-title">仕事の時間（任意。空なら期限なし）</p>
       <input type="datetime-local" id="task-deadline" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-6 font-bold text-sm text-slate-500 focus:outline-none" />
     </div>
     <button onclick="addTask()" class="solid-btn primary-btn w-full py-4 font-bold">${rb('発注','はっちゅう')}する</button>
@@ -1036,8 +1036,8 @@ function renderTemplateEdit() {
         </select>
       </div>
       <div>
-        <p class="text-[9px] font-bold text-slate-400 mb-2">その日の期限（締切時間）を設定</p>
-        <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="${temp.time || '19:00'}">
+        <p class="text-[9px] font-bold text-slate-400 mb-2">仕事の時間（任意。空なら期限なし）</p>
+        <input type="time" id="repeat-time" class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:outline-none" value="${esc(temp.time || '')}">
       </div>
     </div>
     <button onclick="updateTemplate()" class="solid-btn primary-btn w-full py-4 font-bold mb-3">変更を保存</button>
@@ -1069,6 +1069,9 @@ function renderPayments() {
 
   const card = (p) => {
     const sched = formatPaymentSchedule(p);
+    const amtLabel = p.amountKind === 'percentLastMonth'
+      ? `${formatPaymentAmountLabel(p)}（${scheduledPaymentAmount(p, state.tasks, state.balloons)}円）`
+      : formatPaymentAmountLabel(p);
     const editBtn = state.role === 'parent'
       ? `<button onclick="openPaymentEdit('${esc(p.id)}')" class="text-[10px] font-bold text-indigo-600 hover:text-indigo-800">編集</button>`
       : '';
@@ -1079,7 +1082,7 @@ function renderPayments() {
       <div class="p-4 bg-white border border-slate-100 rounded-xl">
         <div class="flex justify-between items-start gap-2 mb-1">
           <p class="font-bold text-sm text-slate-800 ie-wrap-text min-w-0 flex-1">${esc(p.title)}</p>
-          <span class="text-sm font-black text-indigo-600 shrink-0">−${Number(p.amount) || 0}円</span>
+          <span class="text-sm font-black text-indigo-600 shrink-0">${esc(amtLabel)}</span>
         </div>
         <p class="text-[10px] font-bold text-slate-500 mb-2">${esc(sched)}</p>
         <div class="flex gap-3 justify-end">${editBtn}${delBtn}</div>
@@ -1092,7 +1095,7 @@ function renderPayments() {
       <div class="w-4 h-4 text-indigo-500">${getIcon('pay')}</div>${rb('自動支払い','じどうしはらい')}
     </h2>
     <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">
-      ${state.role === 'parent' ? '期日になると子供の口座から自動で引き落とされます。' : '設定された支払いが、期日に口座から引き落とされます。'}
+      ${state.role === 'parent' ? '期日になると子供の口座から自動で引き落とされます。定額のほか、前月の稼ぎの○％も指定できます。' : '設定された支払いが、期日に口座から引き落とされます。'}
     </p>
     ${state.role === 'parent' ? `<button onclick="setView('paymentCreate')" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-5">＋ 支払いを設定</button>` : ''}
     <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">設定中</p>
@@ -1121,10 +1124,25 @@ function renderPaymentCreate() {
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">支払いを設定</h2>
     <input type="text" id="pay-title" placeholder="名目（例: お小遣い返済・スマホ代）" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
     <div class="ie-field-stack mb-4">
-      <label>金額</label>
-      <div class="ie-field-row">
-        <input type="number" id="pay-amount" inputmode="numeric" placeholder="金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">円</span>
+      <p class="text-[9px] font-bold text-slate-400">金額の決め方</p>
+      <div class="flex gap-4 text-xs font-bold text-slate-700 mb-3">
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-amount-kind" value="fixed" checked onchange="togglePaymentAmountUI()"> 定額</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-amount-kind" value="percentLastMonth" onchange="togglePaymentAmountUI()"> 前月の稼ぎの％</label>
+      </div>
+      <div id="pay-amount-fixed">
+        <label>金額</label>
+        <div class="ie-field-row">
+          <input type="number" id="pay-amount" inputmode="numeric" placeholder="金額" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+          <span class="ie-unit">円</span>
+        </div>
+      </div>
+      <div id="pay-amount-percent" class="hidden">
+        <p class="text-[10px] font-bold text-slate-500 mb-2 leading-relaxed">前月にお仕事とギフトで得た円の何％を引くか。税金のようなイメージです。</p>
+        <label>割合</label>
+        <div class="ie-field-row">
+          <input type="number" id="pay-percent" inputmode="decimal" min="1" max="100" step="1" placeholder="例: 10" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+          <span class="ie-unit">％</span>
+        </div>
       </div>
     </div>
 
@@ -1184,12 +1202,26 @@ function renderPaymentEdit() {
     <p class="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-4">${formatPaymentSchedule(p)}</p>
     <p class="text-[9px] font-bold text-slate-400 mb-2">名目</p>
     <input type="text" id="pay-edit-title" value="${esc(p.title || '')}" class="w-full p-3 bg-white border border-slate-200 rounded-xl mb-4 font-bold text-sm focus:outline-none" />
-    <p class="text-[9px] font-bold text-slate-400 mb-2">金額</p>
     <div class="ie-field-stack mb-6">
-      <label>金額</label>
-      <div class="ie-field-row">
-        <input type="number" id="pay-edit-amount" inputmode="numeric" value="${p.amount || ''}" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
-        <span class="ie-unit">円</span>
+      <p class="text-[9px] font-bold text-slate-400">金額の決め方</p>
+      <div class="flex gap-4 text-xs font-bold text-slate-700 mb-3">
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-edit-amount-kind" value="fixed" ${p.amountKind === 'percentLastMonth' ? '' : 'checked'} onchange="togglePaymentEditAmountUI()"> 定額</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="pay-edit-amount-kind" value="percentLastMonth" ${p.amountKind === 'percentLastMonth' ? 'checked' : ''} onchange="togglePaymentEditAmountUI()"> 前月の稼ぎの％</label>
+      </div>
+      <div id="pay-edit-amount-fixed" class="${p.amountKind === 'percentLastMonth' ? 'hidden' : ''}">
+        <label>金額</label>
+        <div class="ie-field-row">
+          <input type="number" id="pay-edit-amount" inputmode="numeric" value="${p.amount || ''}" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+          <span class="ie-unit">円</span>
+        </div>
+      </div>
+      <div id="pay-edit-amount-percent" class="${p.amountKind === 'percentLastMonth' ? '' : 'hidden'}">
+        <p class="text-[10px] font-bold text-slate-500 mb-2 leading-relaxed">前月にお仕事とギフトで得た円の何％を引くか。</p>
+        <label>割合</label>
+        <div class="ie-field-row">
+          <input type="number" id="pay-edit-percent" inputmode="decimal" min="1" max="100" step="1" value="${p.percent || ''}" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+          <span class="ie-unit">％</span>
+        </div>
       </div>
     </div>
     <button onclick="updateScheduledPayment()" class="solid-btn primary-btn w-full py-4 font-bold mb-3">変更を保存</button>

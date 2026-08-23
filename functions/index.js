@@ -327,17 +327,20 @@ async function runGenerateRepeatedTasks() {
     else if (temp.type === 'monthly') due = days.includes(j.day);
     if (!due) continue;
 
-    const timeParts = String(temp.time || '19:00').split(':');
-    const hours = Number(timeParts[0]);
-    const minutes = Number(timeParts[1]) || 0;
-    const deadlineMs = japanDeadlineMs(hours, minutes, now);
+    const timeParts = String(temp.time || '').trim();
+    const deadlineMs = timeParts
+      ? (() => {
+          const parts = timeParts.split(':');
+          return japanDeadlineMs(Number(parts[0]), Number(parts[1]) || 0, now);
+        })()
+      : null;
 
     const generatedKey = `rep_${d.id}_${todayStr}`;
     const taskRef = db.collection('tasks').doc(generatedKey);
     const existing = await taskRef.get();
     if (existing.exists) {
       const data = existing.data() || {};
-      if (data.deadline !== deadlineMs && ['open', 'accepted'].includes(data.status)) {
+      if (deadlineMs != null && data.deadline !== deadlineMs && ['open', 'accepted'].includes(data.status)) {
         await taskRef.update({ deadline: deadlineMs });
         fixed += 1;
       }

@@ -1,10 +1,10 @@
-import { state } from './state.js?v=176';
-import { render } from './ui.js?v=176';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries } from './utils.js?v=176';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=176';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=176';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=176';
-import { db, auth } from './firebase.js?v=176';
+import { state } from './state.js?v=177';
+import { render } from './ui.js?v=177';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount } from './utils.js?v=177';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=177';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=177';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=177';
+import { db, auth } from './firebase.js?v=177';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -349,8 +349,22 @@ async function processScheduledPayments() {
     for (const p of state.scheduledPayments) {
       if (!isScheduledPaymentDue(p, now, todayStr)) continue;
 
-      const amount = Number(p.amount) || 0;
-      if (amount <= 0) continue;
+      const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
+      if (amount <= 0) {
+        try {
+          const updates = { lastChargedKey: todayStr };
+          if (p.mode === 'once') updates.status = 'done';
+          else if (p.countMode === 'finite') {
+            const left = Math.max(0, (p.remainingCount ?? 1) - 1);
+            updates.remainingCount = left;
+            if (left <= 0) updates.status = 'done';
+          }
+          await updateDoc(doc(db, "scheduledPayments", p.id), updates);
+        } catch (err) {
+          console.error("支払い0円処理エラー:", err);
+        }
+        continue;
+      }
 
       const chargeId = `${p.id}_${todayStr}`;
       const chargeRef = doc(db, "paymentLogs", chargeId);
@@ -632,10 +646,10 @@ async function checkAndGenerateRepeatedTasks() {
     for (const temp of state.taskTemplates) {
       try {
         const generatedKey = `rep_${temp.id}_${todayStr}`;
-        const timeParts = String(temp.time || '19:00').split(':');
-        const hours = Number(timeParts[0]);
-        const minutes = Number(timeParts[1]) || 0;
-        const deadlineMs = japanDeadlineMs(hours, minutes, now);
+        const time = String(temp.time || '').trim();
+        const deadlineMs = time
+          ? japanDeadlineMs(Number(time.split(':')[0]), Number(time.split(':')[1]) || 0, now)
+          : null;
 
         if (generatedToday[generatedKey] || existingKeys.has(generatedKey)) {
           generatedToday[generatedKey] = true;
@@ -651,6 +665,7 @@ async function checkAndGenerateRepeatedTasks() {
           // 以前UTCで作った期限がずれている分は、日本時間に直す
           const data = existingDoc.data() || {};
           if (
+            deadlineMs != null &&
             data.deadline !== deadlineMs &&
             ['open', 'accepted'].includes(data.status)
           ) {
@@ -961,7 +976,7 @@ function readRepeatFormDays() {
   } else {
     days.push(parseInt(document.getElementById('repeat-day-select').value));
   }
-  return { repeatType, days, time: document.getElementById('repeat-time').value || '19:00' };
+  return { repeatType, days, time: (document.getElementById('repeat-time')?.value || '').trim() };
 }
 
 window.updateTemplate = async () => {
@@ -980,8 +995,9 @@ window.updateTemplate = async () => {
     });
 
     // 今日すでに出ている未完了の定期ジョブも内容を揃える
-    const [hours, minutes] = time.split(':').map(Number);
-    const deadlineMs = japanDeadlineMs(hours, minutes);
+    const deadlineMs = time
+      ? japanDeadlineMs(Number(time.split(':')[0]), Number(time.split(':')[1]) || 0)
+      : null;
 
     for (const t of state.tasks) {
       const tid = getTemplateIdFromTask(t);
@@ -1059,7 +1075,7 @@ window.addTask = async () => {
 
   await guard('addTask', async () => {
     if (isRepeat) {
-      const time = document.getElementById('repeat-time').value || '19:00';
+      const time = (document.getElementById('repeat-time')?.value || '').trim();
 
       await addDoc(collection(db, "taskTemplates"), {
         familyCode: state.familyCode, title: t, titleKana, points: p, type: repeatType, days: days, time: time, createdAt: Date.now()
@@ -1068,9 +1084,9 @@ window.addTask = async () => {
       showToast("定期発注として保存しました");
     } else {
       const d = document.getElementById('task-deadline').value;
-      if (!d) return showAlert("仕事の時間を設定してください");
+      const deadline = d ? new Date(d).getTime() : null;
       await addDoc(collection(db, "tasks"), { 
-        familyCode: state.familyCode, title: t, titleKana, points: p, deadline: new Date(d).getTime(), status: 'open', createdAt: Date.now() 
+        familyCode: state.familyCode, title: t, titleKana, points: p, deadline, status: 'open', createdAt: Date.now() 
       }); 
       setView('home');
       showToast("お仕事を発注しました");
@@ -1875,6 +1891,18 @@ window.openPaymentEdit = async (id) => {
   render();
 };
 
+window.togglePaymentAmountUI = () => {
+  const kind = document.querySelector('input[name="pay-amount-kind"]:checked')?.value || 'fixed';
+  document.getElementById('pay-amount-fixed')?.classList.toggle('hidden', kind !== 'fixed');
+  document.getElementById('pay-amount-percent')?.classList.toggle('hidden', kind !== 'percentLastMonth');
+};
+
+window.togglePaymentEditAmountUI = () => {
+  const kind = document.querySelector('input[name="pay-edit-amount-kind"]:checked')?.value || 'fixed';
+  document.getElementById('pay-edit-amount-fixed')?.classList.toggle('hidden', kind !== 'fixed');
+  document.getElementById('pay-edit-amount-percent')?.classList.toggle('hidden', kind !== 'percentLastMonth');
+};
+
 window.togglePaymentModeUI = () => {
   const mode = document.querySelector('input[name="pay-mode"]:checked')?.value || 'once';
   document.getElementById('pay-once-ui')?.classList.toggle('hidden', mode !== 'once');
@@ -1898,20 +1926,33 @@ window.setPayInterval = (type) => {
 window.addScheduledPayment = async () => {
   if (state.role !== 'parent') return;
   const title = document.getElementById('pay-title')?.value.trim();
-  const amount = parseInt(document.getElementById('pay-amount')?.value);
-  if (!title) return showAlert("支払いの名目を入力してください");
-  if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
-
+  const amountKind = document.querySelector('input[name="pay-amount-kind"]:checked')?.value || 'fixed';
   const mode = document.querySelector('input[name="pay-mode"]:checked')?.value || 'once';
+  if (!title) return showAlert("支払いの名目を入力してください");
+
   const data = {
     familyCode: state.familyCode,
     title,
-    amount,
+    amountKind,
     mode,
     status: 'active',
     lastChargedKey: null,
     createdAt: Date.now()
   };
+
+  if (amountKind === 'percentLastMonth') {
+    const percent = Number(document.getElementById('pay-percent')?.value);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      return showAlert("割合は1〜100の数字で入力してください");
+    }
+    data.percent = percent;
+    data.amount = 0;
+  } else {
+    const amount = parseInt(document.getElementById('pay-amount')?.value);
+    if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
+    data.amount = amount;
+    data.percent = null;
+  }
 
   if (mode === 'once') {
     const due = document.getElementById('pay-due-date')?.value;
@@ -1955,11 +1996,24 @@ window.updateScheduledPayment = async () => {
   const id = state.editingPaymentId;
   if (!id) return;
   const title = document.getElementById('pay-edit-title')?.value.trim();
-  const amount = parseInt(document.getElementById('pay-edit-amount')?.value);
+  const amountKind = document.querySelector('input[name="pay-edit-amount-kind"]:checked')?.value || 'fixed';
   if (!title) return showAlert("名目を入力してください");
-  if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
+  const updates = { title, amountKind };
+  if (amountKind === 'percentLastMonth') {
+    const percent = Number(document.getElementById('pay-edit-percent')?.value);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      return showAlert("割合は1〜100の数字で入力してください");
+    }
+    updates.percent = percent;
+    updates.amount = 0;
+  } else {
+    const amount = parseInt(document.getElementById('pay-edit-amount')?.value);
+    if (!amount || amount <= 0) return showAlert("正しい金額を入力してください");
+    updates.amount = amount;
+    updates.percent = null;
+  }
   await guard(`updatePayment:${id}`, async () => {
-    await updateDoc(doc(db, "scheduledPayments", id), { title, amount });
+    await updateDoc(doc(db, "scheduledPayments", id), updates);
     state.editingPaymentId = null;
     setView('payments');
     showToast("支払い設定を更新しました");
