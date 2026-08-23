@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <script>
+    (function () {
+      function fit() {
+        var v = window.visualViewport;
+        var h = window.innerHeight || document.documentElement.clientHeight || 640;
+        if (v && v.height && v.height >= 80) h = v.height;
+        var t = (v && v.height >= 80) ? v.offsetTop : 0;
+        var r = document.documentElement;
+        r.style.setProperty("--app-h", h + "px");
+        r.style.setProperty("--app-top", t + "px");
+      }
+      fit();
+      window.addEventListener("resize", fit);
+      if (window.visualViewport) {
+        visualViewport.addEventListener("resize", fit);
+        visualViewport.addEventListener("scroll", fit);
+      }
+    })();
+  </script>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="たね">
+  <meta name="theme-color" content="#2d2118">
+  <title>たね｜さがして おぼえる</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%232d2118' width='64' height='64' rx='14'/%3E%3Ccircle cx='32' cy='40' r='10' fill='%23c4a35a'/%3E%3Cpath d='M32 30 C28 18 40 14 38 24 C42 16 48 22 40 30' fill='%235a9a4a'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #2d2118;
+      --bg1: #4a3424;
+      --paper: #f3ead6;
+      --ink: #2a2018;
+      --muted: #8a7358;
+      --sprout: #4f9a4a;
+      --seed: #c4a35a;
+      --soil: #6a4a32;
+      --you: #efe2c4;
+      --me: #fffaf0;
+      --warn: #c45c38;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0;
+      color: var(--paper);
+      font-family: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+    }
+    html {
+      background:
+        radial-gradient(900px 480px at 50% -8%, #5a3d28 0%, var(--bg0) 58%);
+      height: 100%;
+      overflow: hidden;
+    }
+    body {
+      position: fixed;
+      left: 0; right: 0;
+      top: var(--app-top, 0px);
+      height: var(--app-h, 100dvh);
+      overflow: hidden;
+    }
+    #app {
+      max-width: 480px;
+      margin: 0 auto;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: calc(8px + env(safe-area-inset-top)) 12px calc(8px + env(safe-area-inset-bottom));
+      min-height: 0;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: none;
+      padding: 4px 2px 8px;
+    }
+    .face {
+      width: 52px; height: 52px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #6a4a32, #3d2a1c);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 4px 0 #1a120c;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      line-height: 1;
+    }
+    .who { flex: 1; min-width: 0; }
+    .who h1 { margin: 0; font-size: 20px; letter-spacing: .06em; }
+    .who p { margin: 2px 0 0; font-size: 12px; color: #d9c4a4; }
+    .iconbtn {
+      width: 42px; height: 42px;
+      border: 0; border-radius: 14px;
+      background: #3d2c20;
+      color: var(--paper);
+      font-weight: 800;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      box-shadow: 0 3px 0 #1a120c;
+    }
+    .iconbtn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a120c; }
+    .grow {
+      height: 8px;
+      background: #1a120c;
+      border-radius: 99px;
+      overflow: hidden;
+      flex: none;
+      margin-bottom: 8px;
+    }
+    .grow > i {
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--seed), var(--sprout));
+      border-radius: 99px;
+      transition: width .4s ease;
+    }
+    #log {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 4px 2px 10px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .msg {
+      max-width: 88%;
+      padding: 10px 12px;
+      border-radius: 16px;
+      font-size: 15px;
+      line-height: 1.55;
+      font-weight: 700;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.me {
+      align-self: flex-start;
+      background: var(--me);
+      color: var(--ink);
+      border-bottom-left-radius: 6px;
+    }
+    .msg.you {
+      align-self: flex-end;
+      background: var(--you);
+      color: var(--ink);
+      border-bottom-right-radius: 6px;
+    }
+    .msg.sys {
+      align-self: center;
+      background: transparent;
+      color: #d9c4a4;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      max-width: 100%;
+      padding: 4px 8px;
+    }
+    .msg.search {
+      background: #e8f3dc;
+      color: #23401c;
+    }
+    .composer {
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-top: 6px;
+    }
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      border: 0;
+      background: #3d2c20;
+      color: #f3ead6;
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .row { display: flex; gap: 8px; }
+    #in {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      border-radius: 16px;
+      padding: 12px 14px;
+      font: 700 16px/1.4 inherit;
+      background: var(--paper);
+      color: var(--ink);
+      outline: none;
+    }
+    #go {
+      width: 56px;
+      border: 0;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #6db85a, #3d7a38);
+      color: #fff;
+      font: 800 15px inherit;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #1e4a1c;
+    }
+    #go:active { transform: translateY(2px); box-shadow: 0 2px 0 #1e4a1c; }
+    #go:disabled { opacity: .5; cursor: default; transform: none; }
+    #panel {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(20,12,8,.55);
+      z-index: 5;
+    }
+    #panel.on { display: block; }
+    #sheet {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 0;
+      width: min(480px, 100%);
+      max-height: 82%;
+      overflow: auto;
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: 22px 22px 0 0;
+      padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    }
+    #sheet h2 { margin: 0 0 8px; font-size: 18px; }
+    #sheet .muted { color: var(--muted); font-size: 13px; line-height: 1.5; font-weight: 500; }
+    .facts { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }
+    .fact {
+      background: #fff;
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .fact b { color: var(--sprout); }
+    .fact.user b { color: #b06a18; }
+    .tools { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .tools button {
+      font-family: inherit;
+      font-weight: 800;
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #3d2c20;
+      color: var(--paper);
+      cursor: pointer;
+    }
+    .tools button.danger { background: var(--warn); }
+    .words {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin: 8px 0 12px;
+    }
+    .words span {
+      background: #fff;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="face" id="face" aria-hidden="true">🌰</div>
+      <div class="who">
+        <h1>たね</h1>
+        <p id="stageLabel">あたま、まだ からっぽ</p>
+      </div>
+      <button class="iconbtn" id="btnBrain" type="button">なか</button>
+    </header>
+    <div class="grow" aria-hidden="true"><i id="bar"></i></div>
+    <div id="log"></div>
+    <form class="composer" id="form">
+      <div class="chips">
+        <button class="chip" type="button" data-fill="さがして ">さがして</button>
+        <button class="chip" type="button" data-fill="は ">〜は〜</button>
+        <button class="chip" type="button" data-fill="なに">なに</button>
+      </div>
+      <div class="row">
+        <input id="in" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="やさしい ことば で">
+        <button id="go" type="submit">おく</button>
+      </div>
+    </form>
+  </div>
+  <div id="panel">
+    <div id="sheet">
+      <h2>あたまの なか</h2>
+      <p class="muted" id="brainSummary"></p>
+      <p class="muted">グーグルやヤフーは鍵がいる。このこは無料の百科事典をさがす。あなたが教えたことがいちばん強い。だから偏る。</p>
+      <div class="words" id="wordCloud"></div>
+      <div class="facts" id="factList"></div>
+      <div class="tools">
+        <button type="button" id="btnExport">あたま を だす</button>
+        <button type="button" id="btnImport">あたま を いれる</button>
+        <button type="button" class="danger" id="btnReset">うまれなおす</button>
+        <button type="button" id="btnClose">とじる</button>
+      </div>
+      <input id="file" type="file" accept="application/json" hidden>
+    </div>
+  </div>
+<script>
+(function () {
+  const SAVE = "tane-brain-v1";
+  const SEED = [
+    "なに", "だれ", "どこ", "いつ", "なぜ", "どうして",
+    "わかる", "わからない", "おしえて", "おぼえる", "おぼえた",
+    "ありがとう", "ごめん", "はい", "いいえ",
+    "これ", "それ", "あれ", "この", "その",
+    "さがす", "さがして", "みる", "きく", "いう",
+    "ひと", "もの", "こと", "なまえ",
+    "よい", "わるい", "おおきい", "ちいさい",
+    "すき", "きらい",
+    "わたし", "あなた", "いま", "まえ", "あと",
+    "する", "した", "して", "ある", "いる", "ない",
+    "だ", "です", "ます", "たい",
+    "は", "が", "を", "に", "で", "と", "の", "も", "や", "か",
+    "ね", "よ", "な", "わ", "って", "という", "とは", "から", "まで",
+    "むずかしい", "やさしい", "もじ", "おおい", "ちがい", "あってる"
+  ];
+  const STAGES = [
+    { id: 0, name: "たね", face: "🌰", need: 0, talk: "まだ ことば すくない" },
+    { id: 1, name: "め", face: "🌱", need: 12, talk: "すこし わかってきた" },
+    { id: 2, name: "なえ", face: "🌿", need: 40, talk: "さがして おぼえる" },
+    { id: 3, name: "き", face: "🌳", need: 100, talk: "いくつか くみあわせる" },
+    { id: 4, name: "もり", face: "🌲", need: 220, talk: "へんだけど あたま ある" }
+  ];
+
+  const el = {
+    log: document.getElementById("log"),
+    form: document.getElementById("form"),
+    input: document.getElementById("in"),
+    go: document.getElementById("go"),
+    face: document.getElementById("face"),
+    stageLabel: document.getElementById("stageLabel"),
+    bar: document.getElementById("bar"),
+    panel: document.getElementById("panel"),
+    brainSummary: document.getElementById("brainSummary"),
+    wordCloud: document.getElementById("wordCloud"),
+    factList: document.getElementById("factList"),
+    file: document.getElementById("file")
+  };
+
+  let brain = emptyBrain();
+  let busy = false;
+  let curious = "";
+
+  function emptyBrain() {
+    const words = {};
+    SEED.forEach((w) => { words[w] = { source: "seed", n: 1, at: 0 }; });
+    return {
+      words,
+      facts: [],
+      books: [],
+      asked: {},
+      chat: [],
+      stats: { talks: 0, searches: 0, taught: 0 }
+    };
+  }
+
+  function learnedCount() {
+    return Object.keys(brain.words).filter((w) => {
+      const src = brain.words[w] && brain.words[w].source;
+      return src === "user" || src === "wiki";
+    }).length;
+  }
+
+  function stage() {
+    const n = learnedCount();
+    let s = STAGES[0];
+    for (const x of STAGES) if (n >= x.need) s = x;
+    return s;
+  }
+
+  function save() {
+    try { localStorage.setItem(SAVE, JSON.stringify(brain)); } catch (e) {}
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(SAVE);
+      if (!raw) return;
+      const b = JSON.parse(raw);
+      if (!b || !b.words) return;
+      brain = b;
+      SEED.forEach((w) => {
+        if (!brain.words[w]) brain.words[w] = { source: "seed", n: 1, at: 0 };
+      });
+      brain.facts = Array.isArray(brain.facts) ? brain.facts : [];
+      brain.books = Array.isArray(brain.books) ? brain.books : [];
+      brain.asked = brain.asked || {};
+      brain.chat = Array.isArray(brain.chat) ? brain.chat.slice(-120) : [];
+      brain.stats = brain.stats || { talks: 0, searches: 0, taught: 0 };
+    } catch (e) {}
+  }
+
+  function paintHead() {
+    const s = stage();
+    el.face.textContent = s.face;
+    el.stageLabel.textContent = s.name + "　" + s.talk + "　ことば" + learnedCount();
+    const next = STAGES[Math.min(s.id + 1, STAGES.length - 1)];
+    const span = Math.max(1, next.need - s.need);
+    const pct = s.id === 4 ? 100 : Math.min(100, ((learnedCount() - s.need) / span) * 100);
+    el.bar.style.width = pct + "%";
+  }
+
+  function addMsg(role, text, extraClass) {
+    const d = document.createElement("div");
+    d.className = "msg " + role + (extraClass ? " " + extraClass : "");
+    d.textContent = text;
+    el.log.appendChild(d);
+    el.log.scrollTop = el.log.scrollHeight;
+    if (role !== "sys") {
+      brain.chat.push({ role, text, at: Date.now() });
+      if (brain.chat.length > 120) brain.chat = brain.chat.slice(-120);
+    }
+  }
+
+  function known(w) {
+    return !!(w && brain.words[w]);
+  }
+
+  function learnWord(word, source) {
+    const w = normWord(word);
+    if (!w || w.length > 20) return false;
+    if (/^[、。．，,.!！?？]$/.test(w)) return false;
+    const was = known(w);
+    if (!brain.words[w]) brain.words[w] = { source: source || "user", n: 0, at: Date.now() };
+    brain.words[w].n += 1;
+    if (source && brain.words[w].source === "seed") {
+      /* keep seed */
+    } else if (source === "user") {
+      brain.words[w].source = "user";
+    } else if (!was) {
+      brain.words[w].source = source || "wiki";
+    }
+    return !was;
+  }
+
+  function normWord(w) {
+    return String(w || "").normalize("NFKC").replace(/\s+/g, "").trim();
+  }
+
+  function tokenize(text) {
+    const src = String(text || "").normalize("NFKC")
+      .replace(/[「」『』()（）]/g, " ")
+      .replace(/[、。．，,.!！?？]/g, " ")
+      .trim();
+    if (!src) return [];
+    const dict = Object.keys(brain.words).filter(Boolean).sort((a, b) => b.length - a.length);
+    const out = [];
+    src.split(/\s+/).forEach((chunk) => {
+      let i = 0;
+      while (i < chunk.length) {
+        let found = "";
+        for (let k = 0; k < dict.length; k++) {
+          const w = dict[k];
+          if (w && chunk.startsWith(w, i)) { found = w; break; }
+        }
+        if (found) {
+          out.push(found);
+          i += found.length;
+        } else {
+          let j = i + 1;
+          while (j < chunk.length) {
+            let hit = false;
+            for (let k = 0; k < dict.length; k++) {
+              if (chunk.startsWith(dict[k], j)) { hit = true; break; }
+            }
+            if (hit) break;
+            j++;
+          }
+          out.push(chunk.slice(i, j));
+          i = j;
+        }
+      }
+    });
+    return out.filter(Boolean);
+  }
+
+  function contentWords(tokens) {
+    return tokens.filter((t) => t.length >= 2 && !SEED.includes(t));
+  }
+
+  function say(parts) {
+    const s = stage();
+    const raw = Array.isArray(parts) ? parts : [parts];
+    const words = [];
+    raw.forEach((p) => {
+      const t = String(p || "").trim();
+      if (!t) return;
+      if (t.indexOf(" ") !== -1 || t.length > 12) tokenize(t).forEach((w) => words.push(w));
+      else words.push(normWord(t) || t);
+    });
+    const kept = [];
+    words.forEach((w) => {
+      const n = normWord(w);
+      if (!n || n === "。") return;
+      if (known(n) || s.id >= 3) kept.push(n);
+    });
+    if (!kept.length) return s.id <= 1 ? "なに" : "わからない";
+    if (s.id <= 1) return kept.slice(0, 6).join(" ");
+    if (s.id === 2) return kept.slice(0, 12).join(" ");
+    return kept.join(s.id >= 4 ? "" : " ");
+  }
+
+  function addFact(s, rel, o, source, raw) {
+    const sub = normWord(s);
+    const obj = String(o || "").replace(/\s+/g, " ").trim();
+    if (!sub || !obj) return;
+    learnWord(sub, source);
+    tokenize(obj).forEach((w) => learnWord(w, source));
+    const i = brain.facts.findIndex((f) => f.s === sub && f.rel === rel);
+    const rec = { s: sub, rel: rel || "は", o: obj, source, raw: raw || "", at: Date.now(), trust: source === "user" ? 3 : 1 };
+    if (i >= 0) {
+      if (source === "user" || brain.facts[i].trust <= rec.trust) brain.facts[i] = rec;
+    } else {
+      brain.facts.unshift(rec);
+      if (brain.facts.length > 400) brain.facts.pop();
+    }
+  }
+
+  function factsAbout(word) {
+    const w = normWord(word);
+    return brain.facts.filter((f) => f.s === w || f.o.indexOf(w) !== -1);
+  }
+
+  function parseTeach(text, tokens) {
+    const raw = String(text || "").normalize("NFKC").replace(/[。．.！!？?]/g, "").trim();
+    const m = raw.match(/^(.+?)(?:とは|って|は)(.+)$/);
+    if (!m) return null;
+    const left = normWord(m[1]);
+    const right = m[2].replace(/^(とは|って|は)/, "").replace(/(だよ|だね|です|だ|よ|ね)$/g, "").trim();
+    if (!left || left.length > 20 || !right || SEED.includes(left) && left.length <= 2) return null;
+    if (right === "なに" || right === "だれ" || right === "どこ") return null;
+    return { s: left, o: right };
+  }
+
+  function looksQuestion(text, tokens) {
+    return /[?？]$/.test(text) || tokens.includes("なに") || tokens.includes("だれ") ||
+      tokens.includes("どこ") || tokens.includes("なぜ") || tokens.includes("どうして") ||
+      /おしえて$/.test(text);
+  }
+
+  function wantSearch(text, tokens) {
+    return tokens.includes("さがす") || tokens.includes("さがして") || tokens.includes("しらべて");
+  }
+
+  function searchQuery(text, tokens) {
+    const t = String(text || "").replace(/を?さがして|さがして|さがす|しらべて|を?おしえて|ってなに|とはなに|はなに|なに/g, " ").trim();
+    const c = contentWords(tokenize(t));
+    if (c.length) return c.join("");
+    if (curious) return curious;
+    const rest = t.replace(/\s+/g, "");
+    return rest || "";
+  }
+
+  function pickUnknown(tokens) {
+    const c = contentWords(tokens).filter((w) => brain.words[w] && brain.words[w].source === "seed" ? false : !brain.facts.some((f) => f.s === w));
+    const fresh = tokens.filter((w) => w.length >= 2 && !known(w));
+    return (fresh[0] || c[0] || "");
+  }
+
+  async function wikiFind(q) {
+    const searchUrl = "https://ja.wikipedia.org/w/api.php?action=query&list=search&utf8=1&format=json&origin=*&srlimit=5&srsearch=" + encodeURIComponent(q);
+    const data = await fetch(searchUrl).then((r) => r.json());
+    const hits = (data && data.query && data.query.search) || [];
+    for (let i = 0; i < hits.length; i++) {
+      const hit = hits[i];
+      if (/曖昧さ回避/.test(hit.snippet || "")) continue;
+      const sumUrl = "https://ja.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(hit.title);
+      const sum = await fetch(sumUrl, { headers: { Accept: "application/json" } }).then((r) => r.json());
+      if (!sum || sum.type === "disambiguation") continue;
+      const extract = strip(sum.extract || sum.description || "");
+      if (!extract) continue;
+      return { title: sum.title || hit.title, extract, url: (sum.content_urls && sum.content_urls.desktop && sum.content_urls.desktop.page) || "" };
+    }
+    const dictUrl = "https://ja.wiktionary.org/w/api.php?action=query&format=json&origin=*&prop=extracts&explaintext=1&exsentences=2&redirects=1&titles=" + encodeURIComponent(q);
+    const dict = await fetch(dictUrl).then((r) => r.json()).catch(function () { return null; });
+    const pages = dict && dict.query && dict.query.pages;
+    if (pages) {
+      const page = Object.keys(pages).map(function (id) { return pages[id]; }).find(function (p) { return p && p.extract; });
+      if (page && page.pageid !== undefined) {
+        const extract = strip(page.extract).split("\n").filter(Boolean)[0] || "";
+        if (extract && extract.length < 400) return { title: page.title || q, extract, url: "" };
+      }
+    }
+    return null;
+  }
+
+  function strip(s) {
+    return String(s || "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/（.*?）/g, "")
+      .replace(/\(.*?\)/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function firstSentence(s) {
+    const part = String(s || "").split(/。/)[0] || "";
+    return part.slice(0, 80);
+  }
+
+  function learnFromBook(q, book) {
+    const title = normWord(book.title);
+    const sent = firstSentence(book.extract);
+    learnWord(title, "wiki");
+    learnWord(q, "wiki");
+    addFact(q, "は", sent || title, "wiki", book.extract);
+    if (title && title !== normWord(q)) addFact(title, "は", sent, "wiki", book.extract);
+    const extras = tokenize(sent).filter((w) => w.length >= 2 && !SEED.includes(w) && w !== title);
+    extras.slice(0, stage().id <= 1 ? 2 : 6).forEach((w) => learnWord(w, "wiki"));
+    brain.books.unshift({ title: book.title, extract: sent, url: book.url, at: Date.now() });
+    if (brain.books.length > 80) brain.books.pop();
+    brain.asked[normWord(q)] = Date.now();
+    const next = extras.find((w) => !factsAbout(w).length);
+    return { sent, next: next || "" };
+  }
+
+  function answerAbout(word) {
+    const fs = factsAbout(word);
+    if (!fs.length) return "";
+    fs.sort((a, b) => b.trust - a.trust);
+    const top = fs[0];
+    const s = stage();
+    if (s.id === 0) return say(["おぼえた", top.s]);
+    if (s.id === 1) return say([top.s, "は", ...tokenize(top.o).slice(0, 4)]);
+    if (s.id === 2) return say([top.s, "は", ...tokenize(top.o).slice(0, 8), top.source === "user" ? "あなた" : "みた"]);
+    const bias = top.source === "user" ? "あなた が いった" : "ほん で みた";
+    return (s.id >= 4 ? top.s + "は" + top.o + "。" + bias : say([top.s, "は", top.o, "。", ...bias.split(" ")]));
+  }
+
+  async function think(text) {
+    const tokens = tokenize(text);
+    brain.stats.talks += 1;
+    tokens.forEach((w) => { if (known(w)) brain.words[w].n += 1; });
+
+    const teach = parseTeach(text, tokens);
+    if (teach) {
+      addFact(teach.s, "は", teach.o, "user", text);
+      brain.stats.taught += 1;
+      curious = "";
+      const s = stage();
+      if (s.id === 0) return say(["おぼえた", teach.s]);
+      if (s.id === 1) return say(["おぼえた", teach.s, "は", ...tokenize(teach.o).slice(0, 4)]);
+      return say(["おぼえた", "。", teach.s, "は", teach.o, "。", "ありがとう"]);
+    }
+
+    if (/^(ちがう|ちがいます|だめ|違う)$/.test(text.trim()) && brain.facts[0]) {
+      brain.facts[0].trust = 0;
+      return say(["ごめん", "おしえて"]);
+    }
+    if (/^(そう|あってる|せいかい)$/.test(text.trim()) && brain.facts[0]) {
+      brain.facts[0].trust += 1;
+      return say(["よかった"]);
+    }
+
+    if (wantSearch(text, tokens) || (stage().id >= 2 && pickUnknown(tokens) && looksQuestion(text, tokens))) {
+      const q = searchQuery(text, tokens) || pickUnknown(tokens) || curious;
+      if (!q || (SEED.includes(q) && q.length <= 4)) return say(["なに", "さがす"]);
+      return await searchAndLearn(q);
+    }
+
+    if (looksQuestion(text, tokens)) {
+      const q = searchQuery(text, tokens) || curious;
+      if (q) {
+        const a = answerAbout(q);
+        if (a) return a;
+        if (stage().id >= 2) return await searchAndLearn(q);
+        curious = q;
+        learnWord(q, "hear");
+        return say([q, "なに"]);
+      }
+      return say(["なに"]);
+    }
+
+    const unknown = pickUnknown(tokens);
+    if (unknown && !factsAbout(unknown).length) {
+      const a = answerAbout(unknown);
+      if (a) return a;
+      curious = unknown;
+      learnWord(unknown, "hear");
+      if (stage().id >= 3) return await searchAndLearn(unknown);
+      return say([unknown, "なに"]);
+    }
+
+    const about = contentWords(tokens)[0];
+    if (about) {
+      const a = answerAbout(about);
+      if (a) return a;
+    }
+
+    if (tokens.includes("ありがとう")) return say(["よい"]);
+    if (!tokens.length) return say(["なに"]);
+    const s = stage();
+    if (s.id === 0) return say(["わからない", "おしえて"]);
+    if (s.id === 1) return say(["すこし", "わかる", "おしえて"]);
+    return say(["その", "こと", "まだ", "すくない", "さがして", "も", "よい"]);
+  }
+
+  async function searchAndLearn(q) {
+    addMsg("me", "さがす　" + q, "search");
+    brain.stats.searches += 1;
+    try {
+      const book = await wikiFind(q);
+      if (!book) {
+        curious = q;
+        return say(["ない", q, "おしえて"]);
+      }
+      const got = learnFromBook(q, book);
+      curious = got.next || "";
+      const s = stage();
+      if (s.id <= 1) return say(["みた", q, "おぼえた", got.next ? got.next : "", got.next ? "なに" : ""]);
+      if (s.id === 2) return say(["みた", q, "は", ...tokenize(got.sent).slice(0, 8)]);
+      const more = got.next ? "　" + got.next + " は なに" : "";
+      return (s.id >= 4 ? q + "。 " + got.sent + "。" + more : say(["みた", "。", q, "は", got.sent]) + (got.next ? " " + say([got.next, "なに"]) : ""));
+    } catch (e) {
+      return say(["さがす", "だめ", "おしえて"]);
+    }
+  }
+
+  function renderHistory() {
+    el.log.innerHTML = "";
+    if (!brain.chat.length) {
+      addMsg("sys", "このこは 最初 なんにも しらない。やさしい ことば で おしえて。しらない ときは さがす。");
+      addMsg("me", "なに");
+      brain.chat.pop();
+      return;
+    }
+    brain.chat.forEach((m) => {
+      const d = document.createElement("div");
+      d.className = "msg " + m.role;
+      d.textContent = m.text;
+      el.log.appendChild(d);
+    });
+    el.log.scrollTop = el.log.scrollHeight;
+  }
+
+  function openBrain() {
+    const learned = Object.keys(brain.words).filter((w) => {
+      const src = brain.words[w].source;
+      return src === "user" || src === "wiki";
+    });
+    el.brainSummary.textContent =
+      "ことば " + learned.length + "　おぼえたこと " + brain.facts.length +
+      "　さがした " + brain.stats.searches + "　おしえてもらった " + brain.stats.taught;
+    el.wordCloud.innerHTML = "";
+    learned.slice(-80).reverse().forEach((w) => {
+      const s = document.createElement("span");
+      s.textContent = w;
+      el.wordCloud.appendChild(s);
+    });
+    el.factList.innerHTML = "";
+    brain.facts.slice(0, 40).forEach((f) => {
+      const d = document.createElement("div");
+      d.className = "fact" + (f.source === "user" ? " user" : "");
+      const b = document.createElement("b");
+      b.textContent = f.source === "user" ? "あなた" : "ほん";
+      d.appendChild(b);
+      d.appendChild(document.createTextNode("　" + f.s + " は " + f.o));
+      el.factList.appendChild(d);
+    });
+    el.panel.classList.add("on");
+  }
+
+  async function onSubmit(ev) {
+    ev.preventDefault();
+    if (busy) return;
+    const text = el.input.value.replace(/\s+/g, " ").trim();
+    if (!text) return;
+    el.input.value = "";
+    addMsg("you", text);
+    busy = true;
+    el.go.disabled = true;
+    try {
+      const reply = await think(text);
+      addMsg("me", reply);
+      paintHead();
+      save();
+    } finally {
+      busy = false;
+      el.go.disabled = false;
+      el.input.focus();
+    }
+  }
+
+  document.getElementById("btnBrain").onclick = openBrain;
+  document.getElementById("btnClose").onclick = () => el.panel.classList.remove("on");
+  el.panel.addEventListener("click", (e) => { if (e.target === el.panel) el.panel.classList.remove("on"); });
+  document.querySelectorAll(".chip").forEach((b) => {
+    b.onclick = () => {
+      el.input.value = (el.input.value + " " + b.getAttribute("data-fill")).trim();
+      el.input.focus();
+    };
+  });
+  document.getElementById("btnReset").onclick = () => {
+    if (!confirm("うまれなおす？ おぼえた こと 全部 きえる。")) return;
+    brain = emptyBrain();
+    save();
+    renderHistory();
+    paintHead();
+    el.panel.classList.remove("on");
+  };
+  document.getElementById("btnExport").onclick = () => {
+    const blob = new Blob([JSON.stringify(brain)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tane-atama.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  document.getElementById("btnImport").onclick = () => el.file.click();
+  el.file.onchange = () => {
+    const f = el.file.files && el.file.files[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const b = JSON.parse(String(r.result || ""));
+        if (!b.words) throw new Error("no");
+        brain = b;
+        SEED.forEach((w) => {
+          if (!brain.words[w]) brain.words[w] = { source: "seed", n: 1, at: 0 };
+        });
+        save();
+        renderHistory();
+        paintHead();
+        el.panel.classList.remove("on");
+      } catch (e) {
+        alert("はいれなかった");
+      }
+    };
+    r.readAsText(f);
+    el.file.value = "";
+  };
+  el.form.addEventListener("submit", onSubmit);
+
+  load();
+  paintHead();
+  renderHistory();
+})();
+</script>
+</body>
+</html>
