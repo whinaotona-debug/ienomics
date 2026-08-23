@@ -1,61 +1,6 @@
 {
-  "updatedAt": "2026-08-23T00:53:35.642Z",
+  "updatedAt": "2026-08-23T01:00:00.000Z",
   "source": "GDELT Project",
   "sourceUrl": "https://www.gdeltproject.org/",
-  "items": [
-    {
-      "about": "日経平均",
-      "title": "株価値上がり長期金利低下で幅広い銘柄に買い注文",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260820de45236",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "日経平均",
-      "title": "株価一時2300円超値下がり企業業績への懸念で",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260819de44933",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "日経平均",
-      "title": "株価大きく値下がり半導体関連の銘柄を中心に売り注文",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260818de44703",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "日経平均",
-      "title": "株価値上がりも上昇幅は限定的",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260817de44497",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "日経平均",
-      "title": "株価小幅な値動き長期金利上昇企業業績懸念も金融株買われる",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260821de45466",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "S&P500",
-      "title": "NYダウ700ドル超下落米長期金利が再び上昇で",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260821de45439",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "S&P500",
-      "title": "ネット証券各社米取引時間拡大受け米国株売買対応広げる方針",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260817de44650",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "原油",
-      "title": "円相場値下がり原油先物価格の上昇受けドル買いの動き",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260818de44849",
-      "source": "news.web.nhk"
-    },
-    {
-      "about": "原油",
-      "title": "経産省石油化学プラントの脱中東ナフサ依存を支援へ",
-      "url": "https://news.web.nhk/newsweb/na/nd-20260820de45329",
-      "source": "news.web.nhk"
-    }
-  ]
+  "items": []
 }

@@ -1,6 +1,6 @@
 /**
  * GDELT DOC 2.0 から各銘柄の記事見出しとURLを取る。
- * 失敗時は公開RSS（NHK・Yahoo）で穴埋めする。本文は保存しない。
+ * 本文は保存しない。NHK・Yahooなどの媒体RSSは使わない。
  * 利用時は https://www.gdeltproject.org/ への出典が必要。
  */
 import { writeFileSync } from 'fs';
@@ -39,12 +39,6 @@ const TOPICS = [
   }
 ];
 
-const RSS_FEEDS = [
-  'https://www.nhk.or.jp/rss/news/cat5.xml',
-  'https://news.yahoo.co.jp/rss/topics/business.xml',
-  'https://news.yahoo.co.jp/rss/topics/world.xml'
-];
-
 const SKIP_HARD = /レイプ|性的|自殺/;
 const SKIP_SOFT = /逮捕|疑惑/;
 const BOOST_EASY = /なぜ|とは|解説|しくみ|仕組み|わかり|上が|下が|円安|円高|高い|安い|初めて/;
@@ -71,18 +65,6 @@ function cleanTitle(raw) {
   t = t.replace(/\s*[|｜]\s*[^|｜]+$/, '');
   t = t.replace(/\s+[-–—]\s*(日経|ロイター|朝日|毎日|読売|共同|時事).*$/, '');
   return t.slice(0, 160);
-}
-
-function decodeXml(s) {
-  return String(s || '')
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
 }
 
 function titleLooksLikeSiteName(title, domain) {
@@ -164,40 +146,6 @@ function pickTop5(topic, list) {
   return out.slice(0, 5);
 }
 
-function parseRssItems(xml) {
-  const items = [];
-  const chunks = String(xml || '').split(/<item[\s>]/i).slice(1);
-  for (const chunk of chunks) {
-    const body = chunk.split(/<\/item>/i)[0] || '';
-    const title = decodeXml((body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').trim();
-    const link = decodeXml((body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '').trim();
-    if (title && isHttpUrl(link)) items.push({ title: cleanTitle(title), url: link });
-  }
-  return items;
-}
-
-async function fetchRssPool() {
-  const pool = [];
-  for (const href of RSS_FEEDS) {
-    try {
-      const res = await fetch(href, {
-        headers: { 'User-Agent': 'ienomics-news', Accept: 'application/rss+xml, application/xml, text/xml' },
-        signal: AbortSignal.timeout(20000)
-      });
-      if (!res.ok) continue;
-      const xml = await res.text();
-      for (const item of parseRssItems(xml)) {
-        let domain = '';
-        try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
-        pool.push({ ...item, domain, language: 'Japanese', sourcecountry: 'Japan', seendate: '' });
-      }
-    } catch (e) {
-      console.warn(`RSS ${href} ${e?.message || e}`);
-    }
-  }
-  return pool;
-}
-
 async function searchTopic(topic) {
   const url = new URL('https://api.gdeltproject.org/api/v2/doc/doc');
   url.searchParams.set('query', topic.query);
@@ -271,9 +219,6 @@ function toOutput(topic, row) {
 }
 
 async function main() {
-  const rssPool = await fetchRssPool();
-  console.log(`RSS ${rssPool.length}件`);
-
   await sleep(GAP_MS);
   const items = [];
   for (let i = 0; i < TOPICS.length; i++) {
@@ -284,16 +229,6 @@ async function main() {
       found = await searchTopic(topic);
     } catch (e) {
       console.warn(String(e?.message || e));
-    }
-
-    const seen = new Set(found.map(r => r.url.replace(/[?#].*$/, '')));
-    for (const r of rssPool) {
-      if (!keepForTopic(topic, r.title)) continue;
-      const key = r.url.replace(/[?#].*$/, '');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const row = { ...r, score: scoreArticle(topic, r) };
-      found.push(row);
     }
 
     const top = pickTop5(topic, found);
