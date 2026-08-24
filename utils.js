@@ -1,4 +1,4 @@
-import { state } from './state.js?v=196';
+import { state } from './state.js?v=197';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -267,6 +267,17 @@ function lastDayOfMonth(year, month) {
 export function japanTodayKey(date = new Date()) {
   const j = japanParts(date);
   return `${j.year}-${j.month}-${j.day}`;
+}
+
+/** 日本時間で、date の前日の日付キー */
+export function japanYesterdayKey(date = new Date()) {
+  return japanTodayKey(new Date(japanDayStartMs(date) - 1));
+}
+
+function msFromJapanDayKey(dayKey) {
+  const [y, m, d] = String(dayKey || '').split('-').map(Number);
+  if (!y || !m || !d) return japanDayStartMs();
+  return new Date(`${y}-${pad2(m)}-${pad2(d)}T00:00:00+09:00`).getTime();
 }
 
 export function japanDayStartMs(date = new Date()) {
@@ -872,6 +883,7 @@ function firstInvestMs(investments, logs, name = null) {
     consider(inv.createdAt);
   }
   for (const log of logs || []) {
+    if (log.type === 'eod') continue;
     if (name && log.name !== name) continue;
     consider(log.at);
   }
@@ -979,13 +991,29 @@ export function getChartMarketNames(investments, logs) {
   return MARKET_ORDER.filter(n => names.has(n));
 }
 
+function isTradeLog(log) {
+  const t = log?.type;
+  return t === 'buy' || t === 'sell';
+}
+
+function eodLogForDay(logs, name, dayMs) {
+  const key = japanTodayKey(new Date(dayMs));
+  let best = null;
+  for (const log of logs || []) {
+    if (log.type !== 'eod' || log.name !== name) continue;
+    if (String(log.dayKey || '') !== key) continue;
+    if (!best || (Number(log.at) || 0) > (Number(best.at) || 0)) best = log;
+  }
+  return best;
+}
+
 /** ある銘柄について、ある日までの売買を再生して元本と口数を出す */
 function positionFromLogs(logs, name, dayMs) {
   const dayStart = japanDayStartMs(new Date(dayMs));
   let principal = 0;
   let shares = 0;
   const events = (logs || [])
-    .filter(l => l.name === name)
+    .filter(l => l.name === name && isTradeLog(l))
     .sort((a, b) => (a.at || 0) - (b.at || 0));
   for (const log of events) {
     const at = Number(log.at) || 0;
@@ -1026,10 +1054,46 @@ function positionFromInvestments(investments, name, dayMs) {
 export const CHART_TOTAL = '__total__';
 
 function positionAtDay(list, logList, name, ms) {
-  const hasInv = list.some(inv => inv.name === name);
-  if (hasInv) return positionFromInvestments(list, name, ms);
-  if (logList.some(l => l.name === name)) return positionFromLogs(logList, name, ms);
+  const todayStart = japanDayStartMs();
+  const dayStart = japanDayStartMs(new Date(ms));
+  // 過ぎた日は 0:00 確定ログを優先。今日の追加購入で昨日以前の元本を動かさない
+  if (dayStart < todayStart) {
+    const eod = eodLogForDay(logList, name, ms);
+    if (eod) {
+      return {
+        principal: Number(eod.investedPoints) || Number(eod.principal) || 0,
+        shares: Number(eod.shares) || 0
+      };
+    }
+  }
+  const hasTrades = logList.some(l => l.name === name && isTradeLog(l));
+  if (hasTrades) return positionFromLogs(logList, name, ms);
+  if (list.some(inv => inv.name === name)) return positionFromInvestments(list, name, ms);
   return { principal: 0, shares: 0 };
+}
+
+/** その日の終わり時点の銘柄別スナップショット（確定ログ用） */
+export function buildInvestmentEodRows(investments, logs, dayKey) {
+  const start = msFromJapanDayKey(dayKey);
+  const end = start + 86400000 - 1;
+  const names = getChartMarketNames(investments, logs);
+  const rows = [];
+  for (const name of names) {
+    const hasTrades = (logs || []).some(l => l.name === name && isTradeLog(l));
+    const pos = hasTrades
+      ? positionFromLogs(logs, name, end)
+      : positionFromInvestments(investments, name, end);
+    if (!(pos.principal > 0 || pos.shares > 0)) continue;
+    const price = sheetRateAt(name, end) ?? 1;
+    rows.push({
+      name,
+      investedPoints: pos.principal,
+      shares: pos.shares,
+      assets: pos.shares * price,
+      at: end
+    });
+  }
+  return rows;
 }
 
 /**

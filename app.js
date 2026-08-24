@@ -1,10 +1,10 @@
-import { state } from './state.js?v=196';
-import { render } from './ui.js?v=196';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=196';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=196';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=196';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=196';
-import { db, auth } from './firebase.js?v=196';
+import { state } from './state.js?v=197';
+import { render } from './ui.js?v=197';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=197';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=197';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=197';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=197';
+import { db, auth } from './firebase.js?v=197';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -212,6 +212,7 @@ function startDeadlineWatcher() {
   cleanupExpiredDeadlineTasks();
   checkAndGenerateRepeatedTasks();
   scheduleMidnightTick();
+  startEodLogTimer();
   deadlineTimer = setInterval(() => {
     checkDeadlineReminders();
     processScheduledPayments();
@@ -230,6 +231,7 @@ function stopDeadlineWatcher() {
     clearTimeout(midnightTimer);
     midnightTimer = null;
   }
+  stopEodLogTimer();
 }
 
 /** 次の日本時間0:00（少し過ぎた直後）までのミリ秒 */
@@ -248,6 +250,7 @@ function scheduleMidnightTick() {
     watchedDayKey = todayKeyString();
     const created = await checkAndGenerateRepeatedTasks();
     if (created > 0) showToast(`今日の定期のお仕事を${created}件追加しました`);
+    await writeInvestmentEodLogs(japanYesterdayKey(), true);
     scheduleMidnightTick();
   }, msUntilNextMidnight());
 }
@@ -271,6 +274,7 @@ if (typeof document !== 'undefined') {
     if (document.visibilityState === 'visible' && state.familyCode) {
       ensureTodayGeneration();
       scheduleMidnightTick();
+      catchupInvestmentEodLogs();
     }
   });
 }
@@ -1284,7 +1288,7 @@ async function backfillInvestmentBuyLogs() {
     const name = inv.name;
     if (!name) continue;
     const net = logs
-      .filter(l => l.name === name)
+      .filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell'))
       .reduce((sum, l) => {
         const pts = Number(l.investedPoints) || 0;
         return sum + (l.type === 'sell' ? -pts : pts);
@@ -1293,12 +1297,13 @@ async function backfillInvestmentBuyLogs() {
     if (held > 0 && net + 0.5 < held) {
       const gap = held - Math.max(0, net);
       const rate = Number(inv.buyRate) || getCurrentMarketRates()[name] || 1;
+      const hasTrades = logs.some(l => l.name === name && (l.type === 'buy' || l.type === 'sell'));
       missing.push({
         name,
         investedPoints: gap,
         shares: rate > 0 ? gap / rate : 0,
         rate,
-        at: Number(inv.createdAt) || Date.now()
+        at: hasTrades ? Date.now() : (Number(inv.createdAt) || Date.now())
       });
     }
   }
@@ -1322,6 +1327,66 @@ async function backfillInvestmentBuyLogs() {
     console.error('[investmentLogs backfill]', e);
   } finally {
     investmentLogBackfillBusy = false;
+  }
+}
+
+let investmentEodBusy = false;
+let eodLogTimer = null;
+
+function eodLogDocId(familyCode, name, dayKey) {
+  const safe = encodeURIComponent(String(name || '')).replace(/%/g, '');
+  return `eod_${familyCode}_${safe}_${dayKey}`;
+}
+
+/** 指定した日本日付の終わりの株ログ。finalized ならその日はもう動かさない */
+async function writeInvestmentEodLogs(dayKey, finalized) {
+  if (!state.familyCode || !dayKey || investmentEodBusy) return;
+  const logs = state.investmentLogs || [];
+  if (finalized && logs.some(l => l.type === 'eod' && l.dayKey === dayKey && l.finalized)) return;
+
+  const rows = buildInvestmentEodRows(state.investments, logs, dayKey);
+  if (!rows.length && finalized) {
+    // 持っていなくても、その日を確定した印を残す（翌日の追加で昨日が塗り替わらない）
+    return;
+  }
+  if (!rows.length) return;
+
+  investmentEodBusy = true;
+  try {
+    await Promise.all(rows.map(row => setDoc(doc(db, 'investmentLogs', eodLogDocId(state.familyCode, row.name, dayKey)), {
+      familyCode: state.familyCode,
+      name: row.name,
+      type: 'eod',
+      dayKey,
+      investedPoints: row.investedPoints,
+      shares: row.shares,
+      assets: Math.round(row.assets),
+      at: row.at,
+      finalized: !!finalized
+    }, { merge: true })));
+  } catch (e) {
+    console.warn('[investmentLogs eod]', e);
+  } finally {
+    investmentEodBusy = false;
+  }
+}
+
+async function catchupInvestmentEodLogs() {
+  if (!state.familyCode) return;
+  await writeInvestmentEodLogs(japanYesterdayKey(), true);
+  await writeInvestmentEodLogs(japanTodayKey(), false);
+}
+
+function startEodLogTimer() {
+  stopEodLogTimer();
+  catchupInvestmentEodLogs();
+  eodLogTimer = setInterval(() => catchupInvestmentEodLogs(), 24 * 60 * 60 * 1000);
+}
+
+function stopEodLogTimer() {
+  if (eodLogTimer) {
+    clearInterval(eodLogTimer);
+    eodLogTimer = null;
   }
 }
 
@@ -2159,6 +2224,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=196').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=197').catch(err => console.warn('SW登録失敗:', err));
   });
 }

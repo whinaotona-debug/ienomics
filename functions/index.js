@@ -398,9 +398,99 @@ async function runGenerateRepeatedTasks() {
 }
 
 // 0:00ちょうど（日本時間）。アプリを落としていなくても、サーバー側で今日分が出る。
+function replayInvestmentPosition(logs, name, untilMs) {
+  let principal = 0;
+  let shares = 0;
+  const events = (logs || [])
+    .filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell'))
+    .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+  for (const log of events) {
+    const at = Number(log.at) || 0;
+    if (!at || at > untilMs) continue;
+    const pts = Number(log.investedPoints) || 0;
+    const sh = Number(log.shares) || 0;
+    if (log.type === 'buy') {
+      principal += pts;
+      shares += sh;
+    } else {
+      principal = Math.max(0, principal - pts);
+      shares = Math.max(0, shares - sh);
+    }
+  }
+  return { principal, shares };
+}
+
+function eodLogDocId(familyCode, name, dayKey) {
+  const safe = encodeURIComponent(String(name || '')).replace(/%/g, '');
+  return `eod_${familyCode}_${safe}_${dayKey}`;
+}
+
+/** 日本時間 0:00 に、前日の株元本・口数を確定ログとして残す */
+async function runSnapshotInvestmentEod() {
+  const todayStart = japanDeadlineMs(0, 0, new Date());
+  const end = todayStart - 1;
+  const yesterday = japanTodayKey(new Date(end));
+  let invSnap;
+  let logSnap;
+  try {
+    [invSnap, logSnap] = await Promise.all([
+      db.collection('investments').get(),
+      db.collection('investmentLogs').get()
+    ]);
+  } catch (e) {
+    console.warn('[snapshotInvestmentEod]', e?.message || e);
+    return;
+  }
+
+  const byFamily = new Map();
+  const add = (code, key, row) => {
+    if (!code) return;
+    if (!byFamily.has(code)) byFamily.set(code, { inv: [], logs: [] });
+    byFamily.get(code)[key].push(row);
+  };
+  for (const d of invSnap.docs) add(d.get('familyCode'), 'inv', { id: d.id, ...d.data() });
+  for (const d of logSnap.docs) add(d.get('familyCode'), 'logs', { id: d.id, ...d.data() });
+
+  let wrote = 0;
+  for (const [code, bag] of byFamily) {
+    const names = new Set();
+    for (const inv of bag.inv) if (inv.name) names.add(inv.name);
+    for (const log of bag.logs) {
+      if (log.name && (log.type === 'buy' || log.type === 'sell')) names.add(log.name);
+    }
+    for (const name of names) {
+      const already = bag.logs.some(l => l.type === 'eod' && l.dayKey === yesterday && l.name === name && l.finalized);
+      if (already) continue;
+      const pos = replayInvestmentPosition(bag.logs, name, end);
+      if (!(pos.principal > 0 || pos.shares > 0)) continue;
+      await db.collection('investmentLogs').doc(eodLogDocId(code, name, yesterday)).set({
+        familyCode: code,
+        name,
+        type: 'eod',
+        dayKey: yesterday,
+        investedPoints: pos.principal,
+        shares: pos.shares,
+        at: end,
+        finalized: true
+      }, { merge: true });
+      wrote += 1;
+    }
+  }
+  if (wrote) console.log(`[snapshotInvestmentEod] ${wrote}件 ${yesterday}`);
+}
+
+// 0:00ちょうど（日本時間）。アプリを落としていなくても、サーバー側で今日分が出る。
 exports.generateRepeatedTasks = onSchedule(
   { schedule: '0 0 * * *', timeZone: 'Asia/Tokyo' },
-  runGenerateRepeatedTasks
+  async () => {
+    await runGenerateRepeatedTasks();
+    await runSnapshotInvestmentEod();
+  }
+);
+
+exports.snapshotInvestmentEod = onSchedule(
+  { schedule: '0 0 * * *', timeZone: 'Asia/Tokyo' },
+  runSnapshotInvestmentEod
 );
 
 // 取りこぼし防止。0:00に失敗しても、最大15分以内に追いつく。
@@ -409,6 +499,7 @@ exports.generateRepeatedTasksCatchup = onSchedule(
   async () => {
     await runGenerateRepeatedTasks();
     await runCleanupExpiredTasks();
+    await runSnapshotInvestmentEod();
   }
 );
 
