@@ -1,4 +1,4 @@
-import { state } from './state.js?v=193';
+import { state } from './state.js?v=194';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -167,8 +167,9 @@ export function formatTimeLeft(deadlineTime) {
 export function getTemplateIdFromTask(task) {
   if (!task) return null;
   if (task.templateId) return task.templateId;
-  if (!task.generatedKey) return null;
-  const m = String(task.generatedKey).match(/^rep_(.+)_(\d{4}-\d{1,2}-\d{1,2})$/);
+  const key = task.generatedKey || task.generatedKey;
+  if (!key) return null;
+  const m = String(key).match(/^rep_(.+)_(\d{4}-\d{1,2}-\d{1,2})$/);
   return m ? m[1] : null;
 }
 
@@ -246,6 +247,7 @@ export function japanParts(date = new Date()) {
     hourCycle: 'h23'
   }).formatToParts(date);
   const get = (type) => parts.find(p => p.type === type)?.value;
+  const weekday = WEEKDAY_EN[get('weekday')] ?? 0;
   return {
     year: Number(get('year')),
     month: Number(get('month')),
@@ -253,8 +255,13 @@ export function japanParts(date = new Date()) {
     hour: Number(get('hour')),
     minute: Number(get('minute')),
     second: Number(get('second')),
-    weekday: WEEKDAY_EN[get('weekday')] ?? 0
+    weekday,
+    weekday: weekday
   };
+}
+
+function lastDayOfMonth(year, month) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
 export function japanTodayKey(date = new Date()) {

@@ -1,14 +1,20 @@
-import { state } from './state.js?v=193';
-import { render } from './ui.js?v=193';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=193';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=193';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=193';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=193';
-import { db, auth } from './firebase.js?v=193';
+import { state } from './state.js?v=194';
+import { render } from './ui.js?v=194';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=194';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=194';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=194';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=194';
+import { db, auth } from './firebase.js?v=194';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html"; 
+const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
+function todayKeyString() {
+  return japanTodayKey();
+}
+function taskGeneratedKey(t) {
+  return t?.generatedKey || t?.generatedKey || '';
+} 
 let unsubscribes = [];
 
 /**
@@ -278,8 +284,8 @@ async function cleanupExpiredDeadlineTasks() {
   try {
     for (const t of targets) {
       try {
-        if (t.generatedKey) {
-          generatedToday[t.generatedKey] = true;
+        if (t.generatedKey || t.generatedKey) {
+          generatedToday[taskGeneratedKey(t)] = true;
           await updateDoc(doc(db, "tasks", t.id), {
             status: 'deleted',
             deletedAt: Date.now(),
@@ -318,7 +324,8 @@ function isScheduledPaymentDue(p, now, todayStr) {
     return (p.days || []).map(Number).includes(j.weekday);
   }
   if (p.interval === 'monthly') {
-    return (p.days || []).map(Number).includes(j.day);
+    const last = new Date(Date.UTC(j.year, j.month, 0)).getUTCDate();
+    return (p.days || []).map(Number).some(d => Math.min(d, last) === j.day);
   }
   return false;
 }
@@ -563,17 +570,14 @@ function loadParentChildren(parentUid) {
 let isGenerating = false;
 let isDeduping = false;
 
-function todayKeyString() {
-  return japanTodayKey();
-}
-
 async function dedupeRepeatedTasks() {
   if (state.role !== 'parent' || isDeduping || !state.familyCode) return;
   const groups = {};
   for (const t of state.tasks) {
-    if (!t.generatedKey || t.status === 'deleted') continue;
-    if (!groups[t.generatedKey]) groups[t.generatedKey] = [];
-    groups[t.generatedKey].push(t);
+    if (!taskGeneratedKey(t) || t.status === 'deleted') continue;
+    const gk = taskGeneratedKey(t);
+    if (!groups[gk]) groups[gk] = [];
+    groups[gk].push(t);
   }
   const extras = [];
   for (const key of Object.keys(groups)) {
@@ -605,7 +609,10 @@ function shouldGenerateTemplateToday(temp, now = new Date()) {
   const days = normalizeTemplateDays(temp.days);
   const j = japanParts(now);
   if (temp.type === 'weekly') return days.includes(j.weekday);
-  if (temp.type === 'monthly') return days.includes(j.day);
+  if (temp.type === 'monthly') {
+    const last = new Date(Date.UTC(j.year, j.month, 0)).getUTCDate();
+    return days.some(d => Math.min(d, last) === j.day);
+  }
   return false;
 }
 
@@ -626,7 +633,7 @@ async function checkAndGenerateRepeatedTasks() {
 
     // 削除済みも含めてキーがあれば「今日は処理済み」（論理削除で再発注を防ぐ）
     const existingKeys = new Set(
-      state.tasks.map(t => t.generatedKey).filter(Boolean)
+      state.tasks.map(t => taskGeneratedKey(t)).filter(Boolean)
     );
 
     for (const temp of state.taskTemplates) {
@@ -778,7 +785,7 @@ function setupListeners() {
               );
             }
             // 定期は受注なしで始まる → 子供へ
-            if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey)) {
+            if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey || t.generatedKey)) {
               localNotify(
                 "今日の定期のお仕事",
                 `「${t.title}」（${t.points}円）が始まりました！`
@@ -1720,6 +1727,7 @@ window.openBalloon = async (id) => {
       const data = gSnap.data() || {};
       if (data.status === 'received') return;
       const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) return;
       const pts = famSnap.data().points || 0;
       granted = amount;
       if (granted > 0) tx.update(famRef, { points: pts + granted });
@@ -1853,9 +1861,9 @@ window.deleteTask = async (id) => {
   if (!ok) return;
   await guard(`deleteTask:${id}`, async () => {
     const task = state.tasks.find(t => t.id === id);
-    if (task?.generatedKey) {
-      // 繰り返し発注分は論理削除（ドキュメントを残して今日の再発注を防ぐ）
-      generatedToday[task.generatedKey] = true;
+    const gk = taskGeneratedKey(task);
+    if (gk) {
+      generatedToday[gk] = true;
       await updateDoc(doc(db, "tasks", id), { status: 'deleted', deletedAt: Date.now() });
     } else {
       await deleteDoc(doc(db, "tasks", id));
@@ -2144,6 +2152,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=193').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=194').catch(err => console.warn('SW登録失敗:', err));
   });
 }

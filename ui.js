@@ -1,7 +1,7 @@
-import { state } from './state.js?v=193';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=193';
-import { refreshTutorial } from './tutorial.js?v=193';
-import { auth } from './firebase.js?v=193';
+import { state } from './state.js?v=194';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=194';
+import { refreshTutorial } from './tutorial.js?v=194';
+import { auth } from './firebase.js?v=194';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -435,7 +435,7 @@ function buildInboxItems() {
         action: `setView('exchange')`
       });
     });
-    (state.tasks || []).filter(t => t.status === 'proposed').forEach(t => {
+    (state.tasks || []).filter(t => t.status === 'proposed' && !shouldSweepExpiredTask(t)).forEach(t => {
       items.push({
         id: `prop-${t.id}`,
         tone: 'accent',
@@ -464,7 +464,7 @@ function buildInboxItems() {
         action: `openBalloon('${esc(b.id)}')`
       });
     });
-    (state.tasks || []).filter(t => t.status === 'open').forEach(t => {
+    (state.tasks || []).filter(t => t.status === 'open' && !shouldSweepExpiredTask(t)).forEach(t => {
       items.push({
         id: `open-${t.id}`,
         tone: 'accent',
@@ -1731,6 +1731,7 @@ function buildCalendarDayMap(year, month) {
 
       const dayDate = new Date(`${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T12:00:00+09:00`);
       const deadline = japanDeadlineMs(hours, minutes, dayDate);
+      if (deadline < japanDayStartMs()) continue;
       add(day, {
         id: `plan-${temp.id}-${day}`,
         title: temp.title || 'お仕事',

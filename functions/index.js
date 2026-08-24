@@ -40,13 +40,15 @@ function japanParts(date = new Date()) {
     hourCycle: 'h23'
   }).formatToParts(date);
   const get = (type) => parts.find(p => p.type === type)?.value;
+  const weekday = WEEKDAY_EN[get('weekday')] ?? 0;
   return {
     year: Number(get('year')),
     month: Number(get('month')),
     day: Number(get('day')),
     hour: Number(get('hour')),
     minute: Number(get('minute')),
-    weekday: WEEKDAY_EN[get('weekday')] ?? 0
+    weekday,
+    weekday: weekday
   };
 }
 
@@ -307,10 +309,12 @@ exports.onFamilyDeleted = onDocumentDeleted('families/{code}', async (event) => 
 async function runCleanupExpiredTasks() {
   const now = Date.now();
   const startToday = japanDeadlineMs(0, 0, new Date(now));
+  const endToday = japanDeadlineMs(23, 59, new Date(now));
+  const cutoff = now >= endToday ? now : startToday;
   const removable = new Set(['open', 'accepted', 'proposed', 'rejected', 'proposal_rejected']);
   let swept = 0;
   try {
-    const snap = await db.collection('tasks').where('deadline', '<', startToday).limit(300).get();
+    const snap = await db.collection('tasks').where('deadline', '<', cutoff).limit(300).get();
     for (const d of snap.docs) {
       const t = d.data() || {};
       if (!removable.has(t.status)) continue;
@@ -347,7 +351,10 @@ async function runGenerateRepeatedTasks() {
 
     let due = false;
     if (temp.type === 'weekly') due = days.includes(j.weekday);
-    else if (temp.type === 'monthly') due = days.includes(j.day);
+    else if (temp.type === 'monthly') {
+      const last = new Date(Date.UTC(j.year, j.month, 0)).getUTCDate();
+      due = days.some(d => Math.min(d, last) === j.day);
+    }
     if (!due) continue;
 
     const timeParts = String(temp.time || '').trim();
