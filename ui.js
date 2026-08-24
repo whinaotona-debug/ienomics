@@ -1,7 +1,7 @@
-import { state } from './state.js?v=194';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=194';
-import { refreshTutorial } from './tutorial.js?v=194';
-import { auth } from './firebase.js?v=194';
+import { state } from './state.js?v=195';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=195';
+import { refreshTutorial } from './tutorial.js?v=195';
+import { auth } from './firebase.js?v=195';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1266,11 +1266,11 @@ function renderSettings() {
     ${isChild ? '' : `
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
         <p class="text-[10px] font-bold text-slate-500 tracking-wide mb-1"><span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName || 'こども')}の</span>${rb('運用上限','うんようじょうげん')}</span></p>
-        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">運用全体がこの金額に達したら、値上がりしてもこれ以上増えません。空欄または 0 で制限なし。</p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">運用全体がこの金額に達したら、値上がりしてもこれ以上増えません。初期値は 10000円。0 で制限なし。</p>
         <div class="flex gap-2 items-center">
           <input type="number" id="stock-cap-input" inputmode="numeric" min="0" step="1"
-                 value="${Number(state.stockCap) > 0 ? Number(state.stockCap) : ''}"
-                 placeholder="例: 10000"
+                 value="${state.stockCap == null ? 0 : Number(state.stockCap)}"
+                 placeholder="10000"
                  class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
           <span class="text-xs font-bold text-slate-400 shrink-0">円</span>
           <button type="button" onclick="saveStockCap()" class="solid-btn primary-btn px-4 py-3 text-xs font-bold shrink-0">保存</button>

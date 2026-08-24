@@ -1,14 +1,21 @@
-import { state } from './state.js?v=194';
-import { render } from './ui.js?v=194';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=194';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=194';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=194';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=194';
-import { db, auth } from './firebase.js?v=194';
+import { state } from './state.js?v=195';
+import { render } from './ui.js?v=195';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=195';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=195';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=195';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=195';
+import { db, auth } from './firebase.js?v=195';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
-const APP_URL = "https://whinaotona-debug.github.io/ienomics/index.html";
+const DEFAULT_STOCK_CAP = 10000;
+function parseFamilyStockCap(data) {
+  if (!data || data.stockCap == null || data.stockCap === '') return DEFAULT_STOCK_CAP;
+  const n = Number(data.stockCap);
+  if (!Number.isFinite(n) || n < 0) return DEFAULT_STOCK_CAP;
+  if (n === 0) return null;
+  return n;
+}
 function todayKeyString() {
   return japanTodayKey();
 }
@@ -536,7 +543,7 @@ function applyActiveChild() {
   if (!active) return false;
   state.childName = active.childName;
   state.points = active.points || 0;
-  state.stockCap = Number(active.stockCap) > 0 ? Number(active.stockCap) : null;
+  state.stockCap = parseFamilyStockCap(active);
   state.childLinked = active.childLinked !== false;
   return true;
 }
@@ -744,7 +751,7 @@ function setupListeners() {
     if (d.exists()) { 
       const data = d.data();
       state.points = data.points || 0;
-      state.stockCap = Number(data.stockCap) > 0 ? Number(data.stockCap) : null;
+      state.stockCap = parseFamilyStockCap(data);
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
       applyMarketSheetUrl(data.marketSheetUrl || '');
@@ -1165,7 +1172,7 @@ window.saveNewPassword = async () => {
       childUids: [],
       childName: childName,
       points: 0,
-      stockCap: 10000,
+      stockCap: DEFAULT_STOCK_CAP,
       childLinked: false,
       createdAt: Date.now()
     });
@@ -1665,7 +1672,7 @@ window.saveStockCap = async () => {
   const el = document.getElementById('stock-cap-input');
   if (!el) return;
   const raw = String(el.value || '').trim();
-  let cap = null;
+  let cap = DEFAULT_STOCK_CAP;
   if (raw !== '') {
     cap = parseInt(raw, 10);
     if (!Number.isFinite(cap) || cap < 0) return showAlert('上限は 0 以上の整数で入力してください');
@@ -1760,7 +1767,7 @@ window.addNewChild = async () => {
       childUids: [],
       childName: name,
       points: 0,
-      stockCap: 10000,
+      stockCap: DEFAULT_STOCK_CAP,
       childLinked: false,
       createdAt: Date.now()
     });
@@ -2152,6 +2159,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=194').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=195').catch(err => console.warn('SW登録失敗:', err));
   });
 }

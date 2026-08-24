@@ -25,7 +25,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Block Blast">
   <meta name="theme-color" content="#07122c">
-  <meta name="blast-rev" content="193">
+  <meta name="blast-rev" content="195">
   <title>Block Blast</title>
   <link rel="icon" type="image/svg+xml" href="blockblast-favicon.svg">
   <link rel="icon" type="image/png" href="blockblast-icon.png">
@@ -397,6 +397,36 @@
       justify-content: center;
       z-index: 55;
       padding: 20px;
+    }
+    #cdown {
+      position: absolute; inset: 0;
+      z-index: 52;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5,12,32,.62);
+      pointer-events: auto;
+    }
+    #cdown.show { display: flex; }
+    #cdown b {
+      font-family: Fredoka, sans-serif;
+      font-size: clamp(72px, 22vw, 120px);
+      line-height: 1;
+      color: #ffd24a;
+      text-shadow: 0 6px 0 #b06d00, 0 14px 24px rgba(0,0,0,.45);
+    }
+    #cdown b.pop { animation: cdPop .18s ease-out; }
+    #cdown span {
+      margin-top: 10px;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 800;
+      text-shadow: 0 2px 0 #1a2c5c;
+    }
+    @keyframes cdPop {
+      from { transform: scale(1.45); opacity: .3; }
+      to { transform: scale(1); opacity: 1; }
     }
     .modal {
       width: min(360px, 100%);
@@ -1085,6 +1115,10 @@
       <button class="play" id="btnMatchCancel" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">とじる</button>
     </div>
   </div>
+  <div id="cdown">
+    <b id="cdownNum">3</b>
+    <span id="cdownSub"></span>
+  </div>
   <div id="toast"></div>
 
 <script>
@@ -1325,6 +1359,9 @@
     matchExtra: document.getElementById("matchExtra"),
     matchName: document.getElementById("matchName"),
     matchCode: document.getElementById("matchCode"),
+    cdown: document.getElementById("cdown"),
+    cdownNum: document.getElementById("cdownNum"),
+    cdownSub: document.getElementById("cdownSub"),
     modeClock: document.getElementById("modeClock"),
     floatScore: document.getElementById("floatScore"),
     flash: document.getElementById("flash"),
@@ -1859,6 +1896,8 @@
     state.vsSize = 0;
     state.endAt = 0;
     stopModeClock();
+    hideCountdown();
+    state.locked = false;
     el.app.classList.remove("strict", "vs");
     state.auto = false;
     state.busy = false;
@@ -1886,6 +1925,7 @@
     el.app.classList.add("show");
     applyModeHud();
     newGame();
+    if (state.mode) startLocalCountdown();
   }
   const cellsDom = [];
   if (el.board) {
@@ -1917,7 +1957,8 @@
     vsCode: "",
     roomId: null,
     endAt: 0,
-    clockStart: 0
+    clockStart: 0,
+    locked: false
   };
   try {
     applyTheme();
@@ -1997,6 +2038,14 @@
     deal() {
       this.stopAll();
       [640, 800, 980].forEach((f, i) => this.tone(f, 0.08, "sine", 0.04, i * 0.06));
+    },
+    count() {
+      this.tone(880, 0.09, "square", 0.06);
+      this.tone(1320, 0.08, "sine", 0.04, 0.02);
+    },
+    go() {
+      this.stopAll();
+      [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.18, "triangle", 0.08, i * 0.04));
     }
   };
 
@@ -2554,7 +2603,7 @@
 
   function commit(slot, r, c, animate) {
     const piece = state.tray[slot];
-    if (!piece || state.over) return false;
+    if (!piece || state.over || state.locked) return false;
     if (!canPlace(state.occ, piece.shape.cells, r, c)) return false;
 
     const res = applyPlace(state.occ, piece.shape.cells, r, c);
@@ -2729,39 +2778,114 @@
     renderHUD();
     renderCoins();
     applyModeHud();
-    if (state.mode === "min1") {
-      state.clockStart = Date.now();
-      state.endAt = state.clockStart + 60000;
-      startModeClock();
-      el.aiLine.textContent = "1分チャレンジ。ヒントとAIは使えない";
-    } else if (state.mode === "min2") {
-      state.clockStart = Date.now();
-      state.endAt = state.clockStart + 120000;
-      startModeClock();
-      el.aiLine.textContent = "2分チャレンジ。ヒントとAIは使えない";
-    } else if (state.mode === "race10k") {
-      state.clockStart = Date.now();
-      state.endAt = 0;
-      startModeClock();
-      el.aiLine.textContent = "1万点までのタイム。ヒントとAIは使えない";
-    } else if (state.mode === "combo10") {
-      state.clockStart = Date.now();
-      state.endAt = 0;
-      startModeClock();
-      el.aiLine.textContent = "コンボを10までつなごう。ヒントとAIは使えない";
-    } else if (state.mode === "allclear") {
-      state.clockStart = Date.now();
-      state.endAt = 0;
-      startModeClock();
-      el.aiLine.textContent = "1回全消しするまでの速さ。ヒントとAIは使えない";
-    } else if (state.mode === "vs") {
-      startModeClock();
-      el.aiLine.textContent = "5分勝負。ヒントとAIは使えない";
+    stopModeClock();
+    if (state.mode) {
+      state.locked = true;
+      if (el.modeClock) {
+        el.modeClock.classList.add("on");
+        el.modeClock.classList.remove("warn");
+        el.modeClock.textContent = clockPreview();
+      }
+      el.aiLine.textContent = modeLabel() + "。カウントダウンのあとスタート";
     } else {
-      stopModeClock();
+      state.locked = false;
       el.aiLine.textContent = "3つのブロックを盤面に置いて、行と列を消そう";
     }
     BGM.start();
+  }
+
+  function modeLabel() {
+    return ({
+      min1: "1分チャレンジ",
+      min2: "2分チャレンジ",
+      race10k: "1万点チャレンジ",
+      combo10: "コンボ10",
+      allclear: "全消しチャレンジ",
+      vs: "5分勝負"
+    })[state.mode] || "";
+  }
+  function clockPreview() {
+    if (state.mode === "min1") return "1:00";
+    if (state.mode === "min2") return "2:00";
+    if (state.mode === "vs") return "5:00";
+    if (timedRaceMode()) return fmtRace(0);
+    return "";
+  }
+  function armModeClock() {
+    const now = Date.now();
+    if (state.mode === "min1") {
+      state.clockStart = now;
+      state.endAt = now + 60000;
+    } else if (state.mode === "min2") {
+      state.clockStart = now;
+      state.endAt = now + 120000;
+    } else if (timedRaceMode()) {
+      state.clockStart = now;
+      state.endAt = 0;
+    }
+    el.aiLine.textContent = modeLabel() + "。ヒントとAIは使えない";
+    startModeClock();
+  }
+  function hideCountdown() {
+    if (cdTimer) { clearTimeout(cdTimer); cdTimer = 0; }
+    if (el.cdown) el.cdown.classList.remove("show");
+  }
+  function showCount(n, label) {
+    if (!el.cdown) return;
+    el.cdown.classList.add("show");
+    if (el.cdownSub) el.cdownSub.textContent = label || modeLabel();
+    if (el.cdownNum) {
+      el.cdownNum.textContent = n;
+      el.cdownNum.classList.remove("pop");
+      void el.cdownNum.offsetWidth;
+      el.cdownNum.classList.add("pop");
+    }
+  }
+  function startLocalCountdown() {
+    hideCountdown();
+    state.locked = true;
+    SFX.ensure();
+    const seq = ["3", "2", "1", "GO"];
+    let i = 0;
+    const step = () => {
+      const n = seq[i++];
+      showCount(n);
+      if (n === "GO") {
+        SFX.go();
+        state.locked = false;
+        armModeClock();
+        cdTimer = setTimeout(hideCountdown, 450);
+        return;
+      }
+      SFX.count();
+      cdTimer = setTimeout(step, 700);
+    };
+    step();
+  }
+  function startVsCountdown(goAt) {
+    hideCountdown();
+    state.locked = true;
+    SFX.ensure();
+    let last = "";
+    const tick = () => {
+      const left = goAt - Date.now();
+      if (left <= 0) {
+        showCount("GO", "5分勝負");
+        SFX.go();
+        state.locked = false;
+        armModeClock();
+        cdTimer = setTimeout(hideCountdown, 450);
+        return;
+      }
+      const n = String(Math.max(1, Math.ceil(left / 1000)));
+      if (n !== last) {
+        last = n;
+        showCount(n, "5分勝負");
+        SFX.count();
+      }
+      cdTimer = setTimeout(tick, 50);
+    };
+    tick();
   }
 
   function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -2804,6 +2928,11 @@
   function paintModeClock() {
     if (!el.modeClock || !state.mode) return;
     el.modeClock.classList.add("on");
+    if (state.locked) {
+      el.modeClock.textContent = clockPreview();
+      el.modeClock.classList.remove("warn");
+      return;
+    }
     if (timedRaceMode()) {
       const t = (state.over ? (state.endAt || Date.now()) : Date.now()) - state.clockStart;
       el.modeClock.textContent = fmtRace(t);
@@ -3205,7 +3334,7 @@
       const nn = Object.keys(players).length;
       const patch = { players };
       if (nn >= d.size) {
-        const goAt = Date.now() + 3200;
+        const goAt = Date.now() + 3000;
         patch.status = "play";
         patch.goAt = goAt;
         patch.endAt = goAt + 5 * 60 * 1000;
@@ -3310,9 +3439,7 @@
     });
   }
   function beginVsPlay(d) {
-    if (state.mode === "vs" && el.app.classList.contains("show")) return;
-    if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
-    cdGoAt = 0;
+    const first = !(state.mode === "vs" && el.app.classList.contains("show"));
     el.match.style.display = "none";
     state.mode = "vs";
     state.endAt = d.endAt;
@@ -3320,13 +3447,16 @@
     el.home.classList.remove("show");
     el.app.classList.add("show");
     applyModeHud();
-    newGame();
+    if (first) {
+      newGame();
+      startVsCountdown(d.goAt || Date.now());
+    }
   }
   function applyRoom(d) {
     if (!d) return;
     const ps = vsPlayers(d);
     if (d.status === "wait") {
-      if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
+      hideCountdown();
       cdGoAt = 0;
       showMatchForm(false);
       el.matchTitle.textContent = "まってる";
@@ -3340,42 +3470,17 @@
       el.match.style.display = "flex";
       return;
     }
-    if (d.goAt && Date.now() < d.goAt) {
-      showMatchForm(false);
-      const copy = document.getElementById("btnMatchCopy");
-      if (copy) copy.style.display = "none";
-      const cancel = document.getElementById("btnMatchCancel");
-      if (cancel) cancel.textContent = "キャンセル";
-      el.matchTitle.textContent = "まもなく";
-      el.matchText.textContent = "5分勝負スタート";
-      el.matchExtra.style.fontSize = "64px";
-      el.match.style.display = "flex";
-      if (cdGoAt !== d.goAt) {
-        cdGoAt = d.goAt;
-        const tick = () => {
-          const n = Math.ceil((cdGoAt - Date.now()) / 1000);
-          if (n <= 0) {
-            if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
-            beginVsPlay(d);
-            return;
-          }
-          el.matchExtra.textContent = String(n);
-        };
-        tick();
-        if (cdTimer) clearInterval(cdTimer);
-        cdTimer = setInterval(tick, 100);
+    if (d.goAt || d.status === "play") {
+      beginVsPlay(d);
+      if (!state.locked && !state.over) {
+        el.aiLine.textContent = ps.map(p => vsLabel(p) + " " + (p.score || 0)).join("  /  ");
       }
-      return;
+      if (el.endBoard && (state.over || vsShown)) {
+        el.endBoard.style.display = "block";
+        el.endBoard.innerHTML = vsBoardHtml(d, !vsAllDone(d));
+      }
+      if (vsAllDone(d) && !vsShown) showVsResult(d);
     }
-    if (d.goAt && !el.app.classList.contains("show")) beginVsPlay(d);
-    if (state.mode === "vs" && el.app.classList.contains("show") && !state.over) {
-      el.aiLine.textContent = ps.map(p => vsLabel(p) + " " + (p.score || 0)).join("  /  ");
-    }
-    if (el.endBoard && (state.over || vsShown)) {
-      el.endBoard.style.display = "block";
-      el.endBoard.innerHTML = vsBoardHtml(d, !vsAllDone(d));
-    }
-    if (vsAllDone(d) && !vsShown) showVsResult(d);
   }
   function watchRoom(roomId) {
     stopRoomPoll();
@@ -3698,7 +3803,7 @@
   }
 
   function onDown(e) {
-    if (state.busy || state.over) return;
+    if (state.busy || state.over || state.locked) return;
     const slotEl = e.target.closest(".slot");
     if (!slotEl) return;
     const slot = Number(slotEl.dataset.slot);
@@ -3815,6 +3920,7 @@
     if (state.mode === "vs") return;
     SFX.ensure();
     newGame();
+    if (state.mode) startLocalCountdown();
   });
   bind("btnAgain", () => {
     SFX.ensure();
