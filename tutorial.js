@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=197';
+import { esc } from './utils.js?v=198';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -71,7 +71,17 @@ const PARENT_STEPS = [
   {
     target: 'inbox',
     title: 'お知らせ',
-    body: '見積り・完了報告・換金申請など、お子さまからの連絡がここに集まります。'
+    body: '見積り・完了報告・換金申請・こづかいのお願いなど、お子さまからの連絡がここに集まります。'
+  },
+  {
+    target: 'nav-tickets',
+    title: 'チケット',
+    body: 'ごほうびチケットの登録と、使ったあとの処理は下のバーから開けます。'
+  },
+  {
+    target: 'nav-home',
+    title: 'ホーム',
+    body: 'まんなかの丸がホームです。いつでもここに戻ってこられます。'
   },
   {
     target: 'nav-mid',
@@ -137,9 +147,19 @@ const CHILD_STEPS = [
     body: 'あたらしい おしごとや ギフトが とどくと ここに でます。ギフトは タップすると うけとれます。'
   },
   {
-    target: 'nav-mid',
+    target: 'nav-tickets',
     title: 'チケット',
     body: '「ゲーム1じかん」などを 円で かえます。したのバーから ひらけます。'
+  },
+  {
+    target: 'nav-home',
+    title: 'ホーム',
+    body: 'まんなかの まるが ホーム。いつでも ここにもどれるよ。'
+  },
+  {
+    target: 'nav-wish',
+    title: 'おねがい',
+    body: 'いくらくれと、なぜひつようかを かいて、おうちの人におくれるよ。'
   },
   {
     target: 'nav-history',

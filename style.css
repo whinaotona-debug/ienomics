@@ -140,9 +140,10 @@ html, body {
 #bottom-nav {
   background: transparent !important;
   border-top: none !important;
-  padding: 0 10px 10px !important;
+  padding: 18px 10px 10px !important;
   height: auto !important;
-  min-height: 78px;
+  min-height: 88px;
+  overflow: visible;
 }
 
 .ie-nav-shell {
@@ -158,6 +159,7 @@ html, body {
   border-radius: 22px;
   box-shadow: var(--ie-shadow);
   padding: 6px 4px;
+  overflow: visible;
 }
 
 .nav-tab {
@@ -213,6 +215,37 @@ body.furigana-on .nav-tab span {
 }
 .nav-tab:active {
   transform: scale(0.96);
+}
+
+.nav-tab-home {
+  flex: 0 0 62px;
+  width: 62px;
+  height: 62px;
+  margin-top: -22px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4ec4b4 0%, #2a8f82 100%);
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(42, 143, 130, 0.38);
+  gap: 1px;
+  padding: 4px 0 6px;
+}
+.nav-tab-home svg {
+  width: 26px;
+  height: 26px;
+  stroke-width: 2;
+}
+.nav-tab-home span {
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+.nav-tab-home.active {
+  color: #fff;
+  background: linear-gradient(180deg, #5ad4c4 0%, #1f7a70 100%);
+  box-shadow: 0 10px 22px rgba(31, 122, 112, 0.45);
+}
+.nav-tab-home:active {
+  transform: translateY(-2px) scale(0.96);
 }
 
 /* —— 緑カードの上：ブランドバー —— */

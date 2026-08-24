@@ -1,7 +1,7 @@
-import { state } from './state.js?v=197';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=197';
-import { refreshTutorial } from './tutorial.js?v=197';
-import { auth } from './firebase.js?v=197';
+import { state } from './state.js?v=198';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=198';
+import { refreshTutorial } from './tutorial.js?v=198';
+import { auth } from './firebase.js?v=198';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -149,15 +149,16 @@ export function render() {
   }
 
   bottomNav.classList.remove('hidden');
-  const midTab = state.role === 'parent'
-    ? `<button onclick="setView('balloonSend')" data-tour="nav-mid" aria-current="${state.view==='balloonSend'?'page':'false'}" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
-    : `<button onclick="setView('tickets')" data-tour="nav-mid" aria-current="${state.view==='tickets'?'page':'false'}" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>`;
+  const rightTab = state.role === 'parent'
+    ? `<button type="button" onclick="setView('balloonSend')" data-tour="nav-mid" aria-current="${state.view==='balloonSend'?'page':'false'}" class="nav-tab ${state.view==='balloonSend'?'active':''}">${getIcon('gift')}<span>ギフト</span></button>`
+    : `<button type="button" onclick="setView('wish')" data-tour="nav-wish" aria-current="${state.view==='wish'?'page':'false'}" class="nav-tab ${state.view==='wish'?'active':''}">${getIcon('wish')}<span>おねがい</span></button>`;
   bottomNav.innerHTML = `
     <div class="ie-nav-shell" role="tablist" aria-label="メインメニュー">
-      <button onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab ${state.view==='home'?'active':''}">${getIcon('home')}<span>ホーム</span></button>
-      ${midTab}
-      <button onclick="setView('history')" data-tour="nav-history" aria-current="${state.view==='history'?'page':'false'}" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
-      <button onclick="setView('settings')" data-tour="nav-settings" aria-current="${state.view==='settings'?'page':'false'}" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
+      <button type="button" onclick="setView('history')" data-tour="nav-history" aria-current="${state.view==='history'?'page':'false'}" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
+      <button type="button" onclick="setView('tickets')" data-tour="nav-tickets" aria-current="${state.view==='tickets'?'page':'false'}" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>
+      <button type="button" onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab nav-tab-home ${state.view==='home'?'active':''}" aria-label="ホーム">${getIcon('home')}<span>ホーム</span></button>
+      ${rightTab}
+      <button type="button" onclick="setView('settings')" data-tour="nav-settings" aria-current="${state.view==='settings'?'page':'false'}" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
     </div>
   `;
 
@@ -179,6 +180,7 @@ export function render() {
       else if(state.view === 'calendar') content = renderCalendar();
       else if(state.view === 'balloonSend') content = renderBalloonSend();
       else if(state.view === 'tickets') content = renderTickets();
+      else if(state.view === 'wish') content = renderWish();
       else if(state.view === 'news') content = renderNews();
       else if(state.view === 'history') content = renderHistory();
       else if(state.view === 'settings') content = renderSettings();
@@ -426,6 +428,15 @@ function renderHeader() {
 function buildInboxItems() {
   const items = [];
   if (state.role === 'parent') {
+    (state.wishes || []).filter(w => w.status === 'pending').forEach(w => {
+      items.push({
+        id: `wish-${w.id}`,
+        tone: 'warm',
+        title: 'こづかいのお願いが届きました',
+        body: `${Number(w.points) || 0}円${w.reason ? ` · ${w.reason}` : ''}`,
+        action: `setView('wish')`
+      });
+    });
     (state.exchanges || []).filter(e => e.status === 'pending').forEach(e => {
       items.push({
         id: `ex-${e.id}`,
@@ -1280,15 +1291,6 @@ function renderSettings() {
 
     ${pushRow}
 
-    <button onclick="setView('tickets')" class="ie-guide-btn w-full mb-4" aria-label="チケット">
-      <span class="ie-guide-icon text-[#c9483c]">${getIcon('ticket')}</span>
-      <span class="ie-guide-text">
-        <span class="ie-guide-title">チケット</span>
-        <span class="ie-guide-sub">${isChild ? '円で かえる ごほうび' : 'ごほうびチケットの登録と使用済み処理'}</span>
-      </span>
-      <span class="ie-guide-arrow" aria-hidden="true">›</span>
-    </button>
-
     ${isChild ? '' : `
       <button onclick="addNewChild()" class="ie-guide-btn w-full mb-4" aria-label="お子さまを追加する">
         <span class="ie-guide-icon">${getIcon('childAdd')}</span>
@@ -1524,6 +1526,67 @@ function renderNews() {
   `;
 }
 
+function renderWish() {
+  const list = (state.wishes || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const pending = list.filter(w => w.status === 'pending');
+  const others = list.filter(w => w.status !== 'pending');
+
+  const statusText = (w) => {
+    if (w.status === 'pending') return 'まち';
+    if (w.status === 'approved') return 'OK';
+    return 'だめ';
+  };
+
+  if (state.role === 'parent') {
+    const card = (w) => `
+      <div class="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+        <p class="font-black text-lg text-slate-800">${Number(w.points) || 0}円</p>
+        <p class="text-[12px] font-bold text-slate-600 mt-1 leading-relaxed ie-wrap-text">${esc(w.reason || '')}</p>
+        <p class="text-[10px] font-bold text-slate-400 mt-2">${esc(w.childName || 'こども')}</p>
+        ${w.status === 'pending' ? `<div class="flex gap-3 mt-4">
+          <button onclick="approveWish('${esc(w.id)}', ${Number(w.points) || 0})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">わたす</button>
+          <button onclick="rejectWish('${esc(w.id)}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">ことわる</button>
+        </div>` : `<p class="text-[10px] font-bold text-slate-400 mt-3">${statusText(w)}</p>`}
+      </div>`;
+    return `
+      <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+        <div class="w-4 h-4 text-[#c47a20]">${getIcon('wish')}</div>こづかいのお願い
+      </h2>
+      <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">お子さまが「いくらくれ」と理由を書いて送ってきます。よければ円をわたせます。</p>
+      <div class="space-y-3">${pending.length ? pending.map(card).join('') : `<p class="text-[11px] font-bold text-slate-400 text-center py-8">いま届いているお願いはありません</p>`}</div>
+      ${others.length ? `<p class="text-[9px] font-bold text-slate-400 mt-6 mb-2 tracking-wider">これまでのお願い</p><div class="space-y-2">${others.slice(0, 12).map(card).join('')}</div>` : ''}
+    `;
+  }
+
+  const row = (w) => `
+    <div class="p-3 rounded-xl border border-slate-100 bg-white flex justify-between gap-2">
+      <div class="min-w-0">
+        <p class="font-bold text-sm text-slate-800">${Number(w.points) || 0}円</p>
+        <p class="text-[11px] font-bold text-slate-500 mt-0.5 ie-wrap-text">${esc(w.reason || '')}</p>
+      </div>
+      <span class="text-[10px] font-black shrink-0 ${w.status === 'approved' ? 'text-[#2f8f82]' : w.status === 'rejected' ? 'text-rose-500' : 'text-amber-600'}">${statusText(w)}</span>
+    </div>`;
+
+  return `
+    <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
+      <div class="w-4 h-4 text-[#c47a20]">${getIcon('wish')}</div>${rb('おねがい','お願い')}
+    </h2>
+    <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">いくらの円がほしいかと、なぜ必要かを書いて、おうちの人におくってね。</p>
+    <div class="ie-field-stack mb-6">
+      <label>ほしい円</label>
+      <div class="ie-field-row">
+        <input type="number" id="wish-points" inputmode="numeric" placeholder="例: 500" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none" />
+        <span class="ie-unit">円</span>
+      </div>
+      <label>なぜ ひつよう？</label>
+      <textarea id="wish-reason" placeholder="例: 本を買いたい" class="w-full p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm h-24 resize-none focus:outline-none"></textarea>
+      <button onclick="sendWish()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mt-1">おうちの人におくる</button>
+    </div>
+    <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">おくったお願い</p>
+    <div class="space-y-2">${list.length ? list.map(row).join('') : `<p class="text-[11px] font-bold text-slate-400 text-center py-6">まだおくりません</p>`}</div>
+  `;
+}
+
 function renderTickets() {
   const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true);
   const parentForm = state.role === 'parent' ? `
@@ -1578,7 +1641,8 @@ function renderHistory() {
     exchanges: state.exchanges,
     paymentLogs: state.paymentLogs,
     banks: state.banks,
-    balloons: state.balloons
+    balloons: state.balloons,
+    wishes: state.wishes
   });
   const earnedTotal = byDay.reduce((s, g) => s + g.earned + g.gifted, 0);
   const spentTotal = byDay.reduce((s, g) => s + g.spent, 0);

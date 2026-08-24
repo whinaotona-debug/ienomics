@@ -42,6 +42,7 @@ export const state = {
   tasks: [],
   taskTemplates: [],
   tickets: [],
+  wishes: [],
   investments: [],
   investmentLogs: [], // 株の売買ログ（売っても残る。グラフ用）
   exchanges: [],

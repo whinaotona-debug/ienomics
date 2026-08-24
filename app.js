@@ -1,10 +1,10 @@
-import { state } from './state.js?v=197';
-import { render } from './ui.js?v=197';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=197';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=197';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=197';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=197';
-import { db, auth } from './firebase.js?v=197';
+import { state } from './state.js?v=198';
+import { render } from './ui.js?v=198';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=198';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=198';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=198';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=198';
+import { db, auth } from './firebase.js?v=198';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -873,7 +873,7 @@ function setupListeners() {
     });
     unsubscribes.push(unsub);
   };
-  w("tasks", "tasks"); w("tickets", "tickets"); w("investments", "investments"); w("investmentLogs", "investmentLogs"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
+  w("tasks", "tasks"); w("tickets", "tickets"); w("wishes", "wishes"); w("investments", "investments"); w("investmentLogs", "investmentLogs"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
 }
 
 window.setView = (viewName) => {
@@ -1522,6 +1522,56 @@ window.investCustom = async (n) => {
   }, { busyLabel: '購入しています...' });
 };
 
+window.sendWish = async () => {
+  const a = parseInt(document.getElementById('wish-points')?.value, 10);
+  const reason = (document.getElementById('wish-reason')?.value || '').trim();
+  if (!a || a <= 0) return showAlert('ほしい円を入れてね');
+  if (!reason) return showAlert('なぜ必要かを書いてね');
+  await guard('sendWish', async () => {
+    await addDoc(collection(db, 'wishes'), {
+      familyCode: state.familyCode,
+      points: a,
+      reason,
+      childName: state.childName || '',
+      status: 'pending',
+      createdAt: Date.now()
+    });
+    setView('home');
+    showToast('おねがいをおくったよ');
+  }, { busyLabel: 'おくっています...' });
+};
+
+window.approveWish = async (id, p) => {
+  const amount = Number(p) || 0;
+  if (amount <= 0) return;
+  const ok = await showConfirm(
+    `${amount}円をお子さまの口座に足します。`,
+    { title: 'こづかいをわたしますか？', okLabel: 'わたす' }
+  );
+  if (!ok) return;
+  await guard(`approveWish:${id}`, async () => {
+    const wishRef = doc(db, 'wishes', id);
+    const famRef = doc(db, 'families', state.familyCode);
+    await runTransaction(db, async (tx) => {
+      const wSnap = await tx.get(wishRef);
+      if (!wSnap.exists() || wSnap.data().status !== 'pending') throw new Error('このお願いはすでに処理されています');
+      const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+      const pts = famSnap.data().points || 0;
+      tx.update(famRef, { points: pts + amount });
+      tx.update(wishRef, { status: 'approved', approvedAt: Date.now() });
+    });
+    showToast('こづかいを渡しました');
+  }, { busyLabel: 'わたしています...' });
+};
+
+window.rejectWish = async (id) => {
+  const ok = await showConfirm('お子さまに届きます。', { title: 'このお願いをことわりますか？', okLabel: 'ことわる' });
+  if (!ok) return;
+  await guard(`rejectWish:${id}`, () => updateDoc(doc(db, 'wishes', id), { status: 'rejected', rejectedAt: Date.now() }));
+  showToast('ことわりました');
+};
+
 window.requestExchange = async () => {
   if (state.points < 0) return showAlert("残高がマイナスのため、換金申請はできません。お手伝いでポイントを取り戻しましょう！");
   const a = parseInt(document.getElementById('exchange-amount').value);
@@ -1847,7 +1897,7 @@ window.addNewChild = async () => {
 // 同期IDにひもづくデータの置き場所。お子さまを削除するときはここを全部さらう。
 // pushTokens は一覧で引けない決まりにしてあるので、Cloud Functions 側で掃除する。
 const FAMILY_DATA_COLLECTIONS = [
-  'tasks', 'taskTemplates', 'tickets', 'exchanges', 'investments', 'investmentLogs',
+  'tasks', 'taskTemplates', 'tickets', 'wishes', 'exchanges', 'investments', 'investmentLogs',
   'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
 ];
 
@@ -2224,6 +2274,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=197').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=198').catch(err => console.warn('SW登録失敗:', err));
   });
 }

@@ -232,6 +232,32 @@ exports.onGiftCreated = onDocumentCreated('balloons/{giftId}', async (event) => 
   await notify(g.familyCode, 'child', 'ギフトが届きました', body, 'gift');
 });
 
+// ---- こづかいのお願いが来たとき ----
+exports.onWishCreated = onDocumentCreated('wishes/{wishId}', async (event) => {
+  const w = event.data?.data();
+  if (!w || !w.familyCode || w.status !== 'pending') return;
+  const name = await getChildName(w.familyCode);
+  await notify(
+    w.familyCode, 'parent',
+    'こづかいのお願いが届きました',
+    `${name}さんが ${Number(w.points) || 0}円 を希望しています`,
+    'wish'
+  );
+});
+
+exports.onWishUpdated = onDocumentUpdated('wishes/{wishId}', async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after || before.status === after.status) return;
+  const yen = Number(after.points) || 0;
+  if (after.status === 'approved') {
+    return notify(after.familyCode, 'child', 'お願いがとおりました！', `${yen}円 が口座に入りました`, 'wish-result');
+  }
+  if (after.status === 'rejected') {
+    return notify(after.familyCode, 'child', 'お願いは今回だめでした', `${yen}円 のお願い`, 'wish-result');
+  }
+});
+
 // ---- 換金の申請が来たとき ----
 exports.onExchangeCreated = onDocumentCreated('exchanges/{exchangeId}', async (event) => {
   const e = event.data?.data();
@@ -281,7 +307,7 @@ exports.onPaymentCharged = onDocumentCreated('paymentLogs/{logId}', async (event
 exports.onFamilyDeleted = onDocumentDeleted('families/{code}', async (event) => {
   const code = event.params.code;
   const collections = [
-    'pushTokens', 'tasks', 'taskTemplates', 'tickets', 'exchanges',
+    'pushTokens', 'tasks', 'taskTemplates', 'tickets', 'wishes', 'exchanges',
     'investments', 'investmentLogs', 'banks', 'balloons', 'scheduledPayments', 'paymentLogs'
   ];
 
