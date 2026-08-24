@@ -4,7 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { groqLabelTitles } from './groq-sort.mjs';
+import { groqLabelTitles, groqWriteKidsNews } from './groq-sort.mjs';
 import { sortTopic } from './tane-sort.mjs';
 
 const OUT = new URL('../news.json', import.meta.url);
@@ -213,13 +213,19 @@ async function main() {
     return { url: FALLBACK_URLS[about][0], source: '公式発表' };
   };
 
-  const items = ['日経平均', 'S&P500', '金', '原油'].map(about => {
-    const written = composeExplain(about, moves[about]);
+  const briefs = ['日経平均', 'S&P500', '金', '原油'].map(about => {
     const hit = pickOne(about);
+    return { about, pct: moves[about], headline: hit.title || '', hit };
+  });
+  const kids = await groqWriteKidsNews(briefs.map(({ about, pct, headline }) => ({ about, pct, headline })));
+
+  const items = briefs.map(({ about, hit }) => {
+    const written = composeExplain(about, moves[about]);
+    const article = kids?.[about];
     return {
       about,
-      title: written.title,
-      body: written.body,
+      title: article?.title || written.title,
+      body: article?.body || written.body,
       url: hit.url,
       source: hit.source
     };
