@@ -148,7 +148,7 @@ const KIDS_PAPER_PROMPT = [
   '記事の内容だけを書いてください。',
   '',
   'あいさつ、自己紹介、対象年齢、学年、「学びになる」「勉強になる」という注釈、出典、参考、リンク、まとめ、注意書き、AIであることの説明、元の文章の丸写しは書かない。',
-  '見出しは短く。本文はやさしい日本語で2段落か3段落。将来を断定しない。'
+  '見出しは短く。本文はやさしい日本語で5段落。各段落は3文以上。1本あたり500字以上。将来を断定しない。'
 ].join('\n');
 
 function looksLikeMeta(s) {
@@ -168,9 +168,9 @@ function parseKidsArticles(text) {
     const about = String(row?.about || '').trim();
     const title = String(row?.title || '').replace(/\s+/g, ' ').trim();
     const body = String(row?.body || '').trim();
-    if (!ABOUTS.includes(about) || !title || body.length < 40) continue;
+    if (!ABOUTS.includes(about) || !title || body.length < 200) continue;
     if (looksLikeMeta(title) || looksLikeMeta(body)) continue;
-    out[about] = { title: title.slice(0, 80), body: body.slice(0, 1800) };
+    out[about] = { title: title.slice(0, 80), body: body.slice(0, 4000) };
   }
   return Object.keys(out).length ? out : null;
 }
@@ -197,7 +197,7 @@ export async function groqWriteKidsNews(briefs) {
   const payload = {
     model: MODEL,
     temperature: 0.2,
-    max_tokens: 1800,
+    max_tokens: 4500,
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'kids_news', strict: true, schema: WRITE_SCHEMA }
@@ -269,7 +269,7 @@ const WEEKEND_PAPER_PROMPT = [
   '科学・自然・くらし・お金のしくみから、ためになって面白い話にする。',
   '前置きは不要です。記事の内容だけを書いてください。',
   'あいさつ、自己紹介、対象年齢、「学びになる」などの注釈、出典、まとめ、AIであることの説明は書かない。',
-  '見出しは短く。本文はやさしい日本語で2段落か3段落。将来を断定しない。怖い事件や戦争は書かない。'
+  '見出しは短く。本文はやさしい日本語で5段落。各段落は3文以上。1本あたり500字以上。将来を断定しない。怖い事件や戦争は書かない。'
 ].join('\n');
 
 function parseWeekendArticles(text) {
@@ -285,9 +285,9 @@ function parseWeekendArticles(text) {
     const about = String(row?.about || '').trim();
     const title = String(row?.title || '').replace(/\s+/g, ' ').trim();
     const body = String(row?.body || '').trim();
-    if (!WEEKEND_ABOUTS.includes(about) || !title || body.length < 40) continue;
+    if (!WEEKEND_ABOUTS.includes(about) || !title || body.length < 200) continue;
     if (looksLikeMeta(title) || looksLikeMeta(body)) continue;
-    if (!out[about]) out[about] = { title: title.slice(0, 80), body: body.slice(0, 1800) };
+    if (!out[about]) out[about] = { title: title.slice(0, 80), body: body.slice(0, 4000) };
   }
   return Object.keys(out).length ? out : null;
 }
@@ -307,7 +307,7 @@ export async function groqWriteWeekendKidsNews(picks) {
   const payload = {
     model: MODEL,
     temperature: 0.35,
-    max_tokens: 2000,
+    max_tokens: 4500,
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'weekend_kids_news', strict: true, schema: WEEKEND_SCHEMA }
