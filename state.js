@@ -38,6 +38,7 @@ export const state = {
   marketSheetError: '',
   marketNews: [], // { about, title, body, url, source } 解説文は自前。リンクは学びの参考にした発表。
   marketNewsUpdatedAt: '',
+  marketNewsKind: 'market',
   childLinked: true,
   tasks: [],
   taskTemplates: [],

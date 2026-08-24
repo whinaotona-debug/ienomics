@@ -95,3 +95,5 @@ export function sortTopic(title) {
   }
   return n > 0 ? best : "";
 }
+
+export const sortTopicByTitle = sortTopic;

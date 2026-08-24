@@ -239,3 +239,120 @@ export async function groqWriteKidsNews(briefs) {
     return null;
   }
 }
+
+const WEEKEND_ABOUTS = ['宇宙', '自然', 'くらし', 'お金'];
+
+const WEEKEND_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          about: { type: 'string', enum: WEEKEND_ABOUTS },
+          title: { type: 'string' },
+          body: { type: 'string' }
+        },
+        required: ['about', 'title', 'body'],
+        additionalProperties: false
+      }
+    }
+  },
+  required: ['items'],
+  additionalProperties: false
+};
+
+const WEEKEND_PAPER_PROMPT = [
+  'あなたは小中学生向けの子供新聞を作る人です。',
+  'きょうは株や為替の取引所が休みです。値動きの話は書かない。',
+  '科学・自然・くらし・お金のしくみから、ためになって面白い話にする。',
+  '前置きは不要です。記事の内容だけを書いてください。',
+  'あいさつ、自己紹介、対象年齢、「学びになる」などの注釈、出典、まとめ、AIであることの説明は書かない。',
+  '見出しは短く。本文はやさしい日本語で2段落か3段落。将来を断定しない。怖い事件や戦争は書かない。'
+].join('\n');
+
+function parseWeekendArticles(text) {
+  let json;
+  try {
+    json = JSON.parse(String(text || '').replace(/^```json\s*|\s*```$/g, '').trim());
+  } catch {
+    return null;
+  }
+  const rows = Array.isArray(json?.items) ? json.items : Array.isArray(json) ? json : [];
+  const out = {};
+  for (const row of rows) {
+    const about = String(row?.about || '').trim();
+    const title = String(row?.title || '').replace(/\s+/g, ' ').trim();
+    const body = String(row?.body || '').trim();
+    if (!WEEKEND_ABOUTS.includes(about) || !title || body.length < 40) continue;
+    if (looksLikeMeta(title) || looksLikeMeta(body)) continue;
+    if (!out[about]) out[about] = { title: title.slice(0, 80), body: body.slice(0, 1800) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * 土日用。株の値動きは使わず、拾った見出しから子供新聞を4本書く。
+ */
+export async function groqWriteWeekendKidsNews(picks) {
+  const key = groqKey();
+  if (!key || !picks?.length) return null;
+  const user = picks.map((p, i) => [
+    `${i + 1}.`,
+    p.title ? `見出し: ${p.title}` : '',
+    p.source ? `出どころ: ${p.source}` : ''
+  ].filter(Boolean).join('\n')).join('\n\n');
+
+  const payload = {
+    model: MODEL,
+    temperature: 0.35,
+    max_tokens: 2000,
+    response_format: {
+      type: 'json_schema',
+      json_schema: { name: 'weekend_kids_news', strict: true, schema: WEEKEND_SCHEMA }
+    },
+    messages: [
+      { role: 'system', content: WEEKEND_PAPER_PROMPT },
+      {
+        role: 'user',
+        content: `${user}\n\n宇宙・自然・くらし・お金の4欄について、子供新聞の見出しと本文を書いてください。JSONだけ返してください。`
+      }
+    ]
+  };
+
+  let last = '';
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(45000)
+      });
+      const body = await res.text();
+      if (res.status === 429) {
+        last = `${MODEL} 429`;
+        await sleep(retryWaitMs(res, body));
+        continue;
+      }
+      if (!res.ok) throw new Error(`${MODEL} ${res.status} ${body.slice(0, 180)}`);
+      const json = JSON.parse(body);
+      const parsed = parseWeekendArticles(json?.choices?.[0]?.message?.content || '');
+      if (!parsed) throw new Error(`${MODEL} 土日の本文が取れません`);
+      console.log(`Groq土日新聞 ${Object.keys(parsed).length}本 ${MODEL}`);
+      return parsed;
+    }
+    throw new Error(last || `${MODEL} 429`);
+  } catch (e) {
+    console.warn(String(e?.message || e));
+    return null;
+  }
+}
+
+export const writeKidsNews = groqWriteKidsNews;
+export const writeWeekendKidsNews = groqWriteWeekendKidsNews;
+export const labelTitles = groqLabelTitles;

@@ -4,8 +4,8 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { groqLabelTitles, groqWriteKidsNews } from './groq-sort.mjs';
-import { sortTopic } from './tane-sort.mjs';
+import { labelTitles, writeKidsNews, writeWeekendKidsNews } from './groq-sort.mjs';
+import { sortTopicByTitle } from './tane-sort.mjs';
 
 const OUT = new URL('../news.json', import.meta.url);
 const MARKET_CSV = new URL('../market.csv', import.meta.url);
@@ -28,6 +28,51 @@ const FEEDS = [
   { name: 'PC Watch', href: 'https://pc.watch.impress.co.jp/data/rss/1.0/pcw/feed.rdf' },
   { name: 'INTERNET Watch', href: 'https://internet.watch.impress.co.jp/data/rss/1.0/iw/feed.rdf' },
   { name: 'GIGAZINE', href: 'https://gigazine.net/news/rss_2.0/' }
+];
+
+const WEEKEND_FEEDS = [
+  { name: 'NASA', href: 'https://www.nasa.gov/rss/dyn/breaking_news.rss' },
+  { name: 'JAXA', href: 'https://www.jaxa.jp/rss/press.xml' },
+  { name: '国立天文台', href: 'https://www.nao.ac.jp/feed/' },
+  { name: '気象庁', href: 'https://www.jma.go.jp/bosai/forecast/rss.xml' },
+  { name: '環境省', href: 'https://www.env.go.jp/press/rss.xml' },
+  { name: 'GIGAZINE', href: 'https://gigazine.net/news/rss_2.0/' },
+  { name: 'Impress Watch', href: 'https://www.watch.impress.co.jp/data/rss/1.0/ipw/feed.rdf' },
+  { name: 'METI Journal', href: 'https://journal.meti.go.jp/feed/' }
+];
+
+const WEEKEND_SKIP = /株価|日経|ダウ|ナスダック|為替|円安|円高|決算|上場|戦争|爆撃|殺害|死亡事故|性被害/;
+const WEEKEND_LIKE = /宇宙|惑星|火星|月|衛星|ロケット|星|銀河|恐竜|化石|深海|火山|地震|天気|台風|オーロラ|動物|昆虫|発明|実験|発見|ロボット|電池|水|海|森|お金|銀行|貯金/;
+
+const WEEKEND_FALLBACK = [
+  {
+    about: '宇宙',
+    title: 'なぜ夜空の星は、昼間見えないのか',
+    body: '星は昼も出ている。太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうだけだ。月のない暗い場所へ行くと、同じ目でも星の数がぐっと増えて見える。\n\n宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがある。まぶしい太陽を隠せば、背景はほぼ真っ黒だからだ。空が青いのも、空気が青い光を散らすせいだ。\n\n双眼鏡で月のクレーターを探すと、「光と影」だけで立体に見える。値動きは休みでも、空の観察はいつでもできる。',
+    url: 'https://www.nao.ac.jp/faq/',
+    source: '国立天文台'
+  },
+  {
+    about: '自然',
+    title: '台風の目は、なぜ静かになるのか',
+    body: '台風は巨大な空気の渦だ。外側では雨風が強いのに、まんなかの「目」では空気が下に降りて雲が消え、比較的穏やかになることがある。目のすぐ外側が一番風が強い。\n\nだから「少し晴れた」だけで安心はできない。目が通り過ぎると、反対側から再び強い風が吹く。気象衛星の写真で渦を見ると、地図の上の円が実は立体の空気の動きだとわかる。\n\n天気予報は当てずっぽうではなく、気圧・水蒸気・風をコンピュータで先読みしている。翌日の予定を立てるとき、警報の意味を読む練習になる。',
+    url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html',
+    source: '気象庁'
+  },
+  {
+    about: 'くらし',
+    title: 'プラスチックは、石油からどうやってできるのか',
+    body: 'ペットボトルもレジ袋も、もとをたどると原油の一部からできていることが多い。原油を加熱して分けると、ガソリンやナフサなど性質の違う液体になる。その小さな分子をつなげると、細長いプラスチックの鎖になる。\n\n軽い・さびない・好きな形にしやすい、という便利さの裏側で、自然には分解しにくい。燃やす・埋める・再利用する、のどれを選ぶかで地球への負荷が変わる。\n\n身の回りの「何からできているか」を一つ調べると、工場と海と自分の買い物が一本の線でつながる。',
+    url: 'https://www.env.go.jp/recycle/plastic/',
+    source: '環境省'
+  },
+  {
+    about: 'お金',
+    title: '銀行は、預かったお金をたんすにしまっているのか',
+    body: '銀行に預けたお金は、金庫に全額眠っているわけではない。一部は引き出しに備え、残りは企業や家への貸し出しに回る。貸し出した先が利息を払い、その一部が預金者の利息になる。\n\nみんなが同時に全額を下ろそうとすると足りなくなるので、国のしくみで備えがある。だから「預けた数字」と「金庫の紙幣」は同じ枚数とは限らない。\n\n土日は株の取引所が閉まる。銀行のATMが動いていても、市場で値段が付く商品とは別の休み方だ。お金の置き場所を考える練習日にできる。',
+    url: 'https://www.boj.or.jp/about/education/index.htm',
+    source: '日本銀行'
+  }
 ];
 
 const FALLBACK_URLS = {
@@ -76,14 +121,122 @@ function decodeXml(s) {
 
 function parseRssItems(xml) {
   const items = [];
-  const chunks = String(xml || '').split(/<item[\s>]/i).slice(1);
+  const raw = String(xml || '');
+  const chunks = raw.split(/<item[\s>]/i).slice(1);
   for (const chunk of chunks) {
     const body = chunk.split(/<\/item>/i)[0] || '';
     const title = decodeXml((body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
-    const link = decodeXml((body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1] || '').trim();
+    const link = decodeXml((body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1]
+      || (body.match(/<link[^>]+href=["']([^"']+)["']/i) || [])[1]
+      || '').trim();
+    if (title && isHttpUrl(link)) items.push({ title, url: link });
+  }
+  const entries = raw.split(/<entry[\s>]/i).slice(1);
+  for (const chunk of entries) {
+    const body = chunk.split(/<\/entry>/i)[0] || '';
+    const title = decodeXml((body.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
+    const link = decodeXml((body.match(/<link[^>]+href=["']([^"']+)["']/i) || [])[1]
+      || (body.match(/<link[^>]*>([\s\S]*?)<\/link>/i) || [])[1]
+      || '').trim();
     if (title && isHttpUrl(link)) items.push({ title, url: link });
   }
   return items;
+}
+
+function japanWeekday(date = new Date()) {
+  const wd = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'short' }).format(date);
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[wd] ?? 1;
+}
+
+function isJapanWeekend() {
+  const w = japanWeekday();
+  return w === 0 || w === 6;
+}
+
+function writeNewsFile({ kind, learnedFrom, items }) {
+  writeFileSync(
+    fileURLToPath(OUT),
+    JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      kind,
+      source: 'イエノミクス解説',
+      learnedFrom,
+      items
+    }, null, 2) + '\n',
+    'utf8'
+  );
+}
+
+function scoreWeekendTitle(title) {
+  const t = String(title || '');
+  if (WEEKEND_SKIP.test(t)) return -1;
+  let n = 1;
+  if (WEEKEND_LIKE.test(t)) n += 3;
+  return n;
+}
+
+function guessWeekendAbout(title) {
+  const t = String(title || '');
+  if (/宇宙|惑星|火星|月|衛星|ロケット|星|銀河|NASA|JAXA/.test(t)) return '宇宙';
+  if (/恐竜|化石|深海|火山|地震|天気|台風|オーロラ|動物|昆虫|海|森/.test(t)) return '自然';
+  if (/お金|銀行|貯金|利息|物価|税/.test(t)) return 'お金';
+  return 'くらし';
+}
+
+async function buildWeekendNews() {
+  const learned = [];
+  for (const feed of WEEKEND_FEEDS) {
+    try {
+      const items = await loadRssFeed(feed);
+      learned.push(...items);
+      console.log(`${feed.name} ${items.length}件（土日）`);
+    } catch (e) {
+      console.warn(String(e?.message || e));
+    }
+  }
+
+  const ranked = learned
+    .map(row => ({ ...row, score: scoreWeekendTitle(row.title) }))
+    .filter(row => row.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const seen = new Set();
+  const picks = [];
+  for (const row of ranked) {
+    if (picks.length >= 10) break;
+    const key = row.title.slice(0, 24);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    picks.push(row);
+  }
+
+  const kids = await writeWeekendKidsNews(picks);
+  const usedUrl = new Set();
+  const takeUrl = about => {
+    const hit = picks.find(p => guessWeekendAbout(p.title) === about && !usedUrl.has(p.url))
+      || picks.find(p => !usedUrl.has(p.url));
+    if (hit) usedUrl.add(hit.url);
+    return hit;
+  };
+
+  const items = WEEKEND_FALLBACK.map(base => {
+    const article = kids?.[base.about];
+    const hit = takeUrl(base.about);
+    return {
+      about: base.about,
+      title: article?.title || base.title,
+      body: article?.body || base.body,
+      url: hit?.url || base.url,
+      source: hit?.source || base.source
+    };
+  });
+
+  writeNewsFile({
+    kind: 'weekend',
+    learnedFrom: WEEKEND_FEEDS.map(f => f.name),
+    items
+  });
+  console.log(`news.json 土日 ${items.length}件 材料${learned.length}件`);
 }
 
 function lastMovePct(col) {
@@ -174,20 +327,29 @@ async function fetchFeed(feed) {
   return parseRssItems(await res.text()).map(row => ({ ...row, source: feed.name }));
 }
 
+async function loadRssFeed(feed) {
+  return fetchFeed(feed);
+}
+
 async function main() {
+  if (isJapanWeekend()) {
+    await buildWeekendNews();
+    return;
+  }
+
   const learned = [];
   for (const feed of FEEDS) {
     try {
-      const items = await fetchFeed(feed);
+      const items = await loadRssFeed(feed);
       learned.push(...items);
-      const tagged = items.filter(x => sortTopic(x.title));
+      const tagged = items.filter(x => sortTopicByTitle(x.title));
       console.log(`${feed.name} ${items.length}件 語彙仕分け${tagged.length}`);
     } catch (e) {
       console.warn(String(e?.message || e));
     }
   }
 
-  const taneOf = learned.map(x => sortTopic(x.title));
+  const taneOf = learned.map(x => sortTopicByTitle(x.title));
   const prefer = ['JPX マーケットニュース', 'FRB', 'FRB 金利', '日本銀行', 'METI Journal', 'SEC', '金融庁', 'JPX お知らせ'];
   const groqIdx = [];
   for (const name of prefer) {
@@ -195,7 +357,7 @@ async function main() {
       if (learned[i].source === name && !groqIdx.includes(i)) groqIdx.push(i);
     }
   }
-  const groq = await groqLabelTitles(groqIdx.map(i => learned[i].title));
+  const groq = await labelTitles(groqIdx.map(i => learned[i].title));
   const groqAt = new Map(groqIdx.map((i, j) => [i, groq?.[j] || '']));
   const topicOf = (row, i) => groqAt.get(i) || taneOf[i];
 
@@ -217,7 +379,7 @@ async function main() {
     const hit = pickOne(about);
     return { about, pct: moves[about], headline: hit.title || '', hit };
   });
-  const kids = await groqWriteKidsNews(briefs.map(({ about, pct, headline }) => ({ about, pct, headline })));
+  const kids = await writeKidsNews(briefs.map(({ about, pct, headline }) => ({ about, pct, headline })));
 
   const items = briefs.map(({ about, hit }) => {
     const written = composeExplain(about, moves[about]);
@@ -231,16 +393,11 @@ async function main() {
     };
   });
 
-  writeFileSync(
-    fileURLToPath(OUT),
-    JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      source: 'イエノミクス解説',
-      learnedFrom: FEEDS.map(f => f.name),
-      items
-    }, null, 2) + '\n',
-    'utf8'
-  );
+  writeNewsFile({
+    kind: 'market',
+    learnedFrom: FEEDS.map(f => f.name),
+    items
+  });
   console.log(`news.json ${items.length}件 学び${learned.length}件`);
 }
 

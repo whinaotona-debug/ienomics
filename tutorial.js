@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=199';
+import { esc } from './utils.js?v=200';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -61,7 +61,7 @@ const PARENT_STEPS = [
   {
     target: 'news',
     title: 'ニュース',
-    body: '日経平均・S&P500・金・原油の見出しが並びます。データは GDELT Project です。タップすると元の記事が開きます。'
+    body: '平日は日経平均・S&P500・金・原油の解説が出ます。土日は取引所が休みなので、宇宙やくらしなど小中学生向けの面白い話に切り替わります。'
   },
   {
     target: 'tasklist',
@@ -134,7 +134,7 @@ const CHILD_STEPS = [
   {
     target: 'news',
     title: 'ニュース',
-    body: 'かぶや きんの ニュースが みられます。みだしだけ でていて、タップすると もとの きじが ひらきます。'
+    body: 'へいじつは かぶの はなし、どにちは とりひきじょが やすみなので、うちゅうや くらしの おもしろい はなしに かわります。'
   },
   {
     target: 'tasklist',

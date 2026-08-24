@@ -1,7 +1,7 @@
-import { state } from './state.js?v=199';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=199';
-import { refreshTutorial } from './tutorial.js?v=199';
-import { auth } from './firebase.js?v=199';
+import { state } from './state.js?v=200';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=200';
+import { refreshTutorial } from './tutorial.js?v=200';
+import { auth } from './firebase.js?v=200';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1497,13 +1497,29 @@ function renderExchange() {
   return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800">${rb('換金承認','かんきんしょうにん')}</h2><div class="space-y-3">${p.length>0?p.map(e=>`<div class="p-5 rounded-2xl bg-slate-50 border border-slate-100"><p class="font-black text-lg mb-4 text-slate-800">${e.yen}円 の申請</p><div class="flex gap-3"><button onclick="approveExchange('${e.id}', ${e.points})" class="flex-1 solid-btn primary-btn py-3 font-bold text-sm">承認する</button><button onclick="rejectExchange('${e.id}')" class="flex-1 solid-btn py-3 font-bold text-sm text-slate-500 hover:bg-slate-100">却下</button></div></div>`).join(''):`<div class="flex flex-col items-center justify-center py-10 opacity-40"><div class="w-8 h-8 mb-3 text-slate-400">${getIcon('exchange')}</div><p class="text-[10px] font-bold text-slate-400">現在、申請はありません</p></div>`}</div>`;
 }
 function renderNews() {
-  const order = ['日経平均', 'S&P500', '金', '原油'];
+  const marketAbout = new Set(['日経平均', 'S&P500', '金', '原油']);
+  const weekendAbout = ['宇宙', '自然', 'くらし', 'お金'];
+  const weekendNow = [0, 6].includes(japanParts().weekday);
   const all = (state.marketNews || []).filter(n => n && (n.title || n.about));
+  const weekendItems = all.filter(n => weekendAbout.includes(n.about) || (n.about && !marketAbout.has(n.about)));
+  const useWeekend = weekendNow || state.marketNewsKind === 'weekend' || weekendItems.length >= 2;
+  const fallback = [
+    { about: '宇宙', title: 'なぜ夜空の星は、昼間見えないのか', body: '星は昼も出ている。太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうだけだ。月のない暗い場所へ行くと、同じ目でも星の数がぐっと増えて見える。\n\n宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがある。まぶしい太陽を隠せば、背景はほぼ真っ黒だからだ。', url: 'https://www.nao.ac.jp/faq/' },
+    { about: '自然', title: '台風の目は、なぜ静かになるのか', body: '台風は巨大な空気の渦だ。外側では雨風が強いのに、まんなかの「目」では空気が下に降りて雲が消え、比較的穏やかになることがある。目のすぐ外側が一番風が強い。少し晴れただけで安心はできない。目が通り過ぎると、反対側から再び強い風が吹く。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
+    { about: 'くらし', title: 'プラスチックは、石油からどうやってできるのか', body: 'ペットボトルもレジ袋も、もとをたどると原油の一部からできていることが多い。原油を加熱して分けると、ガソリンなど性質の違う液体になる。その小さな分子をつなげると、細長いプラスチックの鎖になる。便利さの裏側で、自然には分解しにくい。', url: 'https://www.env.go.jp/recycle/plastic/' },
+    { about: 'お金', title: '銀行は、預かったお金をたんすにしまっているのか', body: '銀行に預けたお金は、金庫に全額眠っているわけではない。一部は引き出しに備え、残りは企業や家への貸し出しに回る。貸し出した先が利息を払い、その一部が預金者の利息になる。土日は株の取引所が閉まる。お金の置き場所を考える練習日にできる。', url: 'https://www.boj.or.jp/about/education/index.htm' }
+  ];
+
+  const order = useWeekend ? weekendAbout : ['日経平均', 'S&P500', '金', '原油'];
+  const pool = useWeekend
+    ? (weekendItems.length ? weekendItems : fallback)
+    : all.filter(n => marketAbout.has(n.about));
   const groups = order.map(about => ({
     about,
-    items: all.filter(n => n.about === about).slice(0, 1)
+    items: pool.filter(n => n.about === about).slice(0, 1)
   })).filter(g => g.items.length);
 
+  const sectionWord = useWeekend ? 'の話' : 'のニュース';
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
@@ -1511,7 +1527,7 @@ function renderNews() {
         const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
         return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}</article>`;
       }).join('');
-      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}のニュース</h3><div class="space-y-2">${rows}</div></section>`;
+      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}${sectionWord}</h3><div class="space-y-2">${rows}</div></section>`;
     }).join('')
     : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
 
@@ -1521,12 +1537,16 @@ function renderNews() {
     const j = japanParts(new Date(at));
     updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
   }
+  const weekendHint = useWeekend
+    ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けの面白い話をまとめています。</p>`
+    : '';
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('news')}</div>
       ${rb('ニュース','にゅーす')}
     </h2>
+    ${weekendHint}
     ${updatedLine}
     ${blocks}
   `;
