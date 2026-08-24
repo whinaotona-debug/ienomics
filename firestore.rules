@@ -188,6 +188,14 @@ service cloud.firestore {
                         && request.auth.uid in request.resource.data.players
                         && request.resource.data.size == resource.data.size
                       )
+                      || (
+                        resource.data.status == 'play'
+                        && request.resource.data.status == 'wait'
+                        && request.resource.data.size == resource.data.size
+                        && request.auth.uid in request.resource.data.players
+                        && resource.data.endAt is int
+                        && request.time.toMillis() > resource.data.endAt
+                      )
                     );
       allow delete: if false;
     }

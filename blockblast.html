@@ -25,6 +25,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Block Blast">
   <meta name="theme-color" content="#07122c">
+  <meta name="blast-rev" content="193">
   <title>Block Blast</title>
   <link rel="icon" type="image/svg+xml" href="blockblast-favicon.svg">
   <link rel="icon" type="image/png" href="blockblast-icon.png">
@@ -416,11 +417,29 @@
     }
     .modal p { color: #c5d4f5; margin: 8px 0 18px; font-size: 14px; }
     .modal a { color: #7aa7ff; }
-    #geminiKey {
+    #geminiKey, #matchCode, #matchName {
       width: 100%; border: 0; border-radius: 12px; padding: 12px;
-      font-family: inherit; font-size: 15px; font-weight: 700;
-      background: #0c1736; color: #fff; margin-bottom: 12px;
+      font-family: inherit; font-size: 16px; font-weight: 800;
+      background: #0c1736; color: #fff; margin-bottom: 10px;
+      text-align: center;
       user-select: text; -webkit-user-select: text;
+    }
+    .size-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .size-btn {
+      background: linear-gradient(180deg, #3a5080, #243560);
+      --btn-shadow: #121c36;
+      font-size: 15px;
+      padding: 10px;
+    }
+    .size-btn.on {
+      background: linear-gradient(180deg, #ffd24a, #f0a000);
+      color: #4a2e00;
+      --btn-shadow: #b06d00;
     }
     .gem-link {
       width: 100%; margin-top: 8px; background: none; box-shadow: none;
@@ -978,10 +997,13 @@
       <div class="coin-chip"><i class="draw-coin"></i> <b id="homeCoins">0</b></div>
       <div class="home-meta">BEST <em id="homeBest">0</em>　全消し <em id="homePerfects">0</em></div>
       <button class="play" id="btnStart">はじめる</button>
-      <button class="play" id="btnNear" style="background:linear-gradient(180deg,#ff8aa0,#e23b6a);color:#fff;--btn-shadow:#9a1840;margin-top:10px">近くの人とプレイ</button>
+      <button class="play" id="btnNear" style="background:linear-gradient(180deg,#ff8aa0,#e23b6a);color:#fff;--btn-shadow:#9a1840;margin-top:10px">合言葉で勝負</button>
       <div class="home-grid">
         <button class="play" id="btnMin1" style="background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96">1分チャレンジ</button>
+        <button class="play" id="btnMin2" style="background:linear-gradient(180deg,#7ad0ff,#2a88d4);color:#fff;--btn-shadow:#155a96">2分チャレンジ</button>
         <button class="play" id="btnRace" style="background:linear-gradient(180deg,#5ce1a6,#19a86a);color:#07331f;--btn-shadow:#0e6b42">1万点チャレンジ</button>
+        <button class="play" id="btnCombo" style="background:linear-gradient(180deg,#ffb36a,#e07812);color:#4a2200;--btn-shadow:#9a4a00">コンボ10</button>
+        <button class="play" id="btnClear" style="background:linear-gradient(180deg,#ffd56a,#f0a20a);color:#4a2e00;--btn-shadow:#b06d00">全消しチャレンジ</button>
         <button class="play" id="btnShop" style="background:linear-gradient(180deg,#c9a3ff,#7a5ae0);color:#fff;--btn-shadow:#4a2a96">ショップ</button>
         <button class="play" id="btnMissions" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">ミッション</button>
         <button class="play" id="btnRecords" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">きろく</button>
@@ -1018,7 +1040,7 @@
   <div id="howto">
     <div class="modal">
       <div class="logo" style="font-size:28px">あそびかた</div>
-      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ヒントは盤に場所を出して、Geminiが理由を詳しく書く。ヒントはコインOK。<br><br>近くの人とプレイは、同じ人数を選んだ人と5分勝負。全員揃ったら始まって、5分または積んだら終わり。ヒントとAI配置は使えない。<br><br>1分チャレンジは1分間のスコア、1万点チャレンジは1万点までの速さ。どちらもヒントとAI配置なし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。<br><br>ショップの見た目は点数に影響しないよ。</p>
+      <p style="text-align:left">8×8の盤にブロックを置いて、行と列をそろえて消そう。回転はできないよ。<br><br>消すとコンボが伸びる。3回置いても消さないとコンボはリセット。<br><br>コインはスコア ÷ 200（最大220枚）。AI配置・おまかせを1回でも使うとそのプレイはコインなし。<br><br>ヒントは盤に場所を出して、Geminiが理由を詳しく書く。ヒントはコインOK。<br><br>友だちと遊ぶときは、同じ合言葉と人数を入れて「つなぐ」。揃ったら5分勝負。ヒントとAIは使えない。<br><br>1分・2分は制限時間でスコアを競う。1万点は速さ、コンボ10はコンボを10までつなぐ速さ、全消しは1回全消しするまでの速さ。どれもヒントとAIなし。<br><br>毎日ミッションと連続ログインでコインがもらえるよ。<br><br>ショップの見た目は点数に影響しないよ。</p>
       <button class="play" id="btnHowClose">とじる</button>
     </div>
   </div>
@@ -1046,12 +1068,20 @@
   </div>
   <div id="match">
     <div class="modal">
-      <div class="logo" id="matchTitle" style="font-size:28px">近くの人とプレイ</div>
-      <p id="matchText">同じ人数を選んだ人とだけマッチするよ。揃ったら5分勝負。</p>
-      <div id="matchExtra" style="font-family:Fredoka,sans-serif;font-size:42px;color:var(--gold);min-height:0;margin:0 0 12px"></div>
-      <button class="play" id="btnSize2">2人</button>
-      <button class="play" id="btnSize3">3人</button>
-      <button class="play" id="btnSize4">4人</button>
+      <div class="logo" id="matchTitle" style="font-size:28px">合言葉で勝負</div>
+      <p id="matchText">友だちと同じ合言葉と人数を入れてつなごう。揃ったら5分勝負。</p>
+      <div id="matchForm">
+        <input id="matchName" type="text" placeholder="なまえ（任意）" maxlength="10" autocomplete="nickname">
+        <input id="matchCode" type="text" placeholder="合言葉（例：りんご）" maxlength="16" autocomplete="off">
+        <div class="size-row">
+          <button type="button" class="size-btn on" id="btnSize2">2人</button>
+          <button type="button" class="size-btn" id="btnSize3">3人</button>
+          <button type="button" class="size-btn" id="btnSize4">4人</button>
+        </div>
+        <button class="play" id="btnMatchGo">つなぐ</button>
+      </div>
+      <div id="matchExtra" style="font-family:Fredoka,sans-serif;font-size:18px;color:var(--gold);min-height:0;margin:0 0 12px"></div>
+      <button class="play" id="btnMatchCopy" style="display:none;background:linear-gradient(180deg,#7aa7ff,#3b6adf);color:#fff;--btn-shadow:#1d3f96">合言葉をコピー</button>
       <button class="play" id="btnMatchCancel" style="background:linear-gradient(180deg,#3a5080,#243560);color:#fff;--btn-shadow:#121c36">とじる</button>
     </div>
   </div>
@@ -1293,6 +1323,8 @@
     matchTitle: document.getElementById("matchTitle"),
     matchText: document.getElementById("matchText"),
     matchExtra: document.getElementById("matchExtra"),
+    matchName: document.getElementById("matchName"),
+    matchCode: document.getElementById("matchCode"),
     modeClock: document.getElementById("modeClock"),
     floatScore: document.getElementById("floatScore"),
     flash: document.getElementById("flash"),
@@ -1476,7 +1508,10 @@
       recs: [],
       seenHow: false,
       best1min: 0,
-      best10k: 0
+      best2min: 0,
+      best10k: 0,
+      bestCombo10: 0,
+      bestAllClear: 0
     };
   }
   function loadBest() {
@@ -1508,7 +1543,10 @@
         base.recs = Array.isArray(s.recs) ? s.recs : [];
         base.seenHow = !!s.seenHow;
         base.best1min = Number(s.best1min) || 0;
+        base.best2min = Number(s.best2min) || 0;
         base.best10k = Number(s.best10k) || 0;
+        base.bestCombo10 = Number(s.bestCombo10) || 0;
+        base.bestAllClear = Number(s.bestAllClear) || 0;
         if (s.owned) {
           for (const k of Object.keys(base.owned)) {
             if (Array.isArray(s.owned[k])) base.owned[k] = s.owned[k];
@@ -1709,7 +1747,10 @@
       ["消したライン", save.lines],
       ["置いた数", save.places],
       ["1分BEST", save.best1min],
+      ["2分BEST", save.best2min],
       ["1万点最速", save.best10k ? fmtRace(save.best10k) : "-"],
+      ["コンボ10最速", save.bestCombo10 ? fmtRace(save.bestCombo10) : "-"],
+      ["全消し最速", save.bestAllClear ? fmtRace(save.bestAllClear) : "-"],
       ["スキン", ownedSkins + " / 20"]
     ];
     const grid = document.createElement("div");
@@ -1873,6 +1914,7 @@
     usedAi: false,
     mode: null,
     vsSize: 0,
+    vsCode: "",
     roomId: null,
     endAt: 0,
     clockStart: 0
@@ -2620,6 +2662,8 @@
     }
     if (state.mode === "vs") vsPushScore(false, false);
     if (state.mode === "race10k" && state.score >= 10000) tryFinishMode("goal");
+    if (state.mode === "combo10" && state.combo >= 10) tryFinishMode("goal");
+    if (state.mode === "allclear" && res.empty) tryFinishMode("goal");
     return true;
   }
 
@@ -2690,11 +2734,26 @@
       state.endAt = state.clockStart + 60000;
       startModeClock();
       el.aiLine.textContent = "1分チャレンジ。ヒントとAIは使えない";
+    } else if (state.mode === "min2") {
+      state.clockStart = Date.now();
+      state.endAt = state.clockStart + 120000;
+      startModeClock();
+      el.aiLine.textContent = "2分チャレンジ。ヒントとAIは使えない";
     } else if (state.mode === "race10k") {
       state.clockStart = Date.now();
       state.endAt = 0;
       startModeClock();
       el.aiLine.textContent = "1万点までのタイム。ヒントとAIは使えない";
+    } else if (state.mode === "combo10") {
+      state.clockStart = Date.now();
+      state.endAt = 0;
+      startModeClock();
+      el.aiLine.textContent = "コンボを10までつなごう。ヒントとAIは使えない";
+    } else if (state.mode === "allclear") {
+      state.clockStart = Date.now();
+      state.endAt = 0;
+      startModeClock();
+      el.aiLine.textContent = "1回全消しするまでの速さ。ヒントとAIは使えない";
     } else if (state.mode === "vs") {
       startModeClock();
       el.aiLine.textContent = "5分勝負。ヒントとAIは使えない";
@@ -2719,7 +2778,11 @@
     return m + ":" + String(s).padStart(2, "0") + "." + c;
   }
   function assistBlocked() {
-    return state.mode === "vs" || state.mode === "min1" || state.mode === "race10k";
+    return state.mode === "vs" || state.mode === "min1" || state.mode === "min2"
+      || state.mode === "race10k" || state.mode === "combo10" || state.mode === "allclear";
+  }
+  function timedRaceMode() {
+    return state.mode === "race10k" || state.mode === "combo10" || state.mode === "allclear";
   }
   function applyModeHud() {
     el.app.classList.toggle("strict", assistBlocked());
@@ -2741,7 +2804,7 @@
   function paintModeClock() {
     if (!el.modeClock || !state.mode) return;
     el.modeClock.classList.add("on");
-    if (state.mode === "race10k") {
+    if (timedRaceMode()) {
       const t = (state.over ? (state.endAt || Date.now()) : Date.now()) - state.clockStart;
       el.modeClock.textContent = fmtRace(t);
       el.modeClock.classList.remove("warn");
@@ -2783,25 +2846,61 @@
     state.auto = false;
     state.busy = false;
     document.getElementById("btnAuto").textContent = "おまかせ";
-    if (state.mode === "race10k" && why === "goal") state.endAt = Date.now();
+    if (timedRaceMode() && why === "goal") state.endAt = Date.now();
     stopModeClock();
-    if (state.mode === "race10k") paintModeClock();
+    if (timedRaceMode()) paintModeClock();
     SFX.over();
     if (state.mode === "vs") {
       vsPushScore(true, why === "stack");
       showVsWait();
       return true;
     }
-    if (state.mode === "min1") {
-      if (state.score > save.best1min) save.best1min = state.score;
+    if (state.mode === "min1" || state.mode === "min2") {
+      const two = state.mode === "min2";
+      const bestKey = two ? "best2min" : "best1min";
+      if (state.score > save[bestKey]) save[bestKey] = state.score;
       persist();
       showEnd({
-        title: "1分チャレンジ",
+        title: two ? "2分チャレンジ" : "1分チャレンジ",
         rank: why === "time" ? "タイムアップ" : "積んだ",
         score: state.score,
         coins: "このモードはコインなし",
         coinsNo: true,
-        extra: "BEST " + save.best1min,
+        extra: "BEST " + save[bestKey],
+        againText: "もう一度"
+      });
+      return true;
+    }
+    if (state.mode === "combo10") {
+      const t = Math.max(0, (state.endAt || Date.now()) - state.clockStart);
+      const ok = why === "goal";
+      if (ok && (!save.bestCombo10 || t < save.bestCombo10)) save.bestCombo10 = t;
+      persist();
+      showEnd({
+        title: "コンボ10",
+        rank: ok ? "クリア" : "積んだ",
+        score: ok ? fmtRace(t) : state.combo,
+        scoreLabel: ok ? "タイム" : "コンボ",
+        coins: "このモードはコインなし",
+        coinsNo: true,
+        extra: save.bestCombo10 ? ("最速 " + fmtRace(save.bestCombo10)) : "",
+        againText: "もう一度"
+      });
+      return true;
+    }
+    if (state.mode === "allclear") {
+      const t = Math.max(0, (state.endAt || Date.now()) - state.clockStart);
+      const ok = why === "goal";
+      if (ok && (!save.bestAllClear || t < save.bestAllClear)) save.bestAllClear = t;
+      persist();
+      showEnd({
+        title: "全消しチャレンジ",
+        rank: ok ? "全消し！" : "積んだ",
+        score: ok ? fmtRace(t) : state.score,
+        scoreLabel: ok ? "タイム" : "スコア",
+        coins: "このモードはコインなし",
+        coinsNo: true,
+        extra: save.bestAllClear ? ("最速 " + fmtRace(save.bestAllClear)) : "",
         againText: "もう一度"
       });
       return true;
@@ -2830,8 +2929,23 @@
     state.roomId = null;
     goPlay();
   }
+  function startMin2() {
+    state.mode = "min2";
+    state.roomId = null;
+    goPlay();
+  }
   function startRace() {
     state.mode = "race10k";
+    state.roomId = null;
+    goPlay();
+  }
+  function startCombo10() {
+    state.mode = "combo10";
+    state.roomId = null;
+    goPlay();
+  }
+  function startAllClear() {
+    state.mode = "allclear";
     state.roomId = null;
     goPlay();
   }
@@ -2844,95 +2958,274 @@
     messagingSenderId: "347209039114",
     appId: "1:347209039114:web:0d3ff0477e7bb812210ef3"
   };
-  const fb = { db: null, auth: null, mods: null, uid: "" };
-  let unsubRoom = null;
+  const fb = { uid: "", token: "", refresh: "", exp: 0 };
+  let roomPoll = 0;
   let cdTimer = 0;
+  let cdGoAt = 0;
   let vsPushAt = 0;
   let vsShown = false;
+  let matchSize = 2;
+  let matchBusy = false;
+  const NICK_LS = "blockblast-nick";
 
-  async function fbReady() {
-    if (fb.db) return fb;
-    const appMod = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js");
-    const fsMod = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-    const authMod = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js");
-    const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(FB_CFG);
-    fb.mods = {
-      doc: fsMod.doc,
-      setDoc: fsMod.setDoc,
-      updateDoc: fsMod.updateDoc,
-      onSnapshot: fsMod.onSnapshot,
-      runTransaction: fsMod.runTransaction
-    };
-    fb.db = fsMod.getFirestore(app);
-    fb.auth = authMod.getAuth(app);
-    try {
-      if (authMod.setPersistence && authMod.inMemoryPersistence) {
-        await authMod.setPersistence(fb.auth, authMod.inMemoryPersistence);
-      }
-    } catch (e) {}
-    if (!fb.auth.currentUser) await authMod.signInAnonymously(fb.auth);
-    if (!fb.auth.currentUser) throw new Error("auth");
-    fb.uid = fb.auth.currentUser.uid;
-    return fb;
+  function loadNick() {
+    try { return (localStorage.getItem(NICK_LS) || "").trim().slice(0, 10); }
+    catch (e) { return ""; }
   }
-
-  function matchBtns(ids) {
-    ["btnSize2", "btnSize3", "btnSize4", "btnMatchCancel"].forEach(id => {
-      const n = document.getElementById(id);
-      if (n) n.style.display = ids.indexOf(id) >= 0 ? "block" : "none";
+  function saveNick(s) {
+    try { localStorage.setItem(NICK_LS, String(s || "").trim().slice(0, 10)); }
+    catch (e) {}
+  }
+  function normCode(s) {
+    return String(s || "").replace(/\s+/g, "").toLowerCase();
+  }
+  function codeId(raw, size) {
+    const s = normCode(raw);
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const safe = encodeURIComponent(s).replace(/[^a-zA-Z0-9]/g, "").slice(0, 20);
+    return "w" + size + "_" + (h >>> 0).toString(36) + "_" + (safe || "x") + "_" + s.length;
+  }
+  function fromValue(v) {
+    if (!v) return null;
+    if ("mapValue" in v) {
+      const o = {};
+      const f = (v.mapValue && v.mapValue.fields) || {};
+      for (const k of Object.keys(f)) o[k] = fromValue(f[k]);
+      return o;
+    }
+    if ("arrayValue" in v) return ((v.arrayValue && v.arrayValue.values) || []).map(fromValue);
+    if ("stringValue" in v) return v.stringValue;
+    if ("integerValue" in v) return Number(v.integerValue);
+    if ("doubleValue" in v) return v.doubleValue;
+    if ("booleanValue" in v) return !!v.booleanValue;
+    if ("nullValue" in v) return null;
+    return null;
+  }
+  function fromFields(fields) {
+    const o = {};
+    const f = fields || {};
+    for (const k of Object.keys(f)) o[k] = fromValue(f[k]);
+    return o;
+  }
+  function toValue(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === "boolean") return { booleanValue: v };
+    if (typeof v === "number") {
+      if (!isFinite(v)) return { nullValue: null };
+      if (Math.floor(v) === v && Math.abs(v) <= 9007199254740991) return { integerValue: String(v) };
+      return { doubleValue: v };
+    }
+    if (typeof v === "string") return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(toValue) } };
+    const fields = {};
+    for (const k of Object.keys(v || {})) {
+      if (v[k] === undefined) continue;
+      fields[k] = toValue(v[k]);
+    }
+    return { mapValue: { fields } };
+  }
+  function toFields(obj) {
+    const fields = {};
+    for (const k of Object.keys(obj || {})) {
+      if (obj[k] === undefined) continue;
+      fields[k] = toValue(obj[k]);
+    }
+    return fields;
+  }
+  function roomName(id) {
+    return "projects/" + FB_CFG.projectId + "/databases/(default)/documents/blastRooms/" + id;
+  }
+  async function fbAuth() {
+    const now = Date.now();
+    if (fb.token && fb.exp - 60000 > now) return fb.token;
+    if (fb.refresh) {
+      try {
+        const res = await fetch("https://securetoken.googleapis.com/v1/token?key=" + FB_CFG.apiKey, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(fb.refresh)
+        });
+        const j = await res.json();
+        if (res.ok && j.id_token) {
+          fb.token = j.id_token;
+          fb.uid = j.user_id || fb.uid;
+          fb.refresh = j.refresh_token || fb.refresh;
+          fb.exp = Date.now() + Number(j.expires_in || 3600) * 1000;
+          return fb.token;
+        }
+      } catch (e) {}
+    }
+    const res = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + FB_CFG.apiKey, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ returnSecureToken: true })
+    });
+    const j = await res.json();
+    if (!res.ok || !j.idToken) throw new Error((j.error && j.error.message) || "auth");
+    fb.token = j.idToken;
+    fb.uid = j.localId;
+    fb.refresh = j.refreshToken;
+    fb.exp = Date.now() + Number(j.expiresIn || 3600) * 1000;
+    return fb.token;
+  }
+  function commitStatus(j) {
+    return (j && j.error && j.error.status) || "";
+  }
+  async function fsCommit(writes) {
+    await fbAuth();
+    const res = await fetch("https://firestore.googleapis.com/v1/projects/" + FB_CFG.projectId + "/databases/(default)/documents:commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + fb.token },
+      body: JSON.stringify({ writes })
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error((j.error && j.error.message) || "fs");
+      err.status = commitStatus(j);
+      throw err;
+    }
+    return j;
+  }
+  async function fsGet(id) {
+    await fbAuth();
+    const res = await fetch("https://firestore.googleapis.com/v1/" + roomName(id), {
+      headers: { Authorization: "Bearer " + fb.token }
+    });
+    if (res.status === 404) return null;
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((j.error && j.error.message) || "get");
+    return { data: fromFields(j.fields), time: j.updateTime };
+  }
+  async function fsCreate(id, data) {
+    return fsCommit([{
+      update: { name: roomName(id), fields: toFields(data) },
+      currentDocument: { exists: false }
+    }]);
+  }
+  async function fsUpdate(id, patch, time) {
+    const write = {
+      update: { name: roomName(id), fields: toFields(patch) },
+      updateMask: { fieldPaths: Object.keys(patch) }
+    };
+    if (time) write.currentDocument = { updateTime: time };
+    else write.currentDocument = { exists: true };
+    return fsCommit([write]);
+  }
+  function playerSeed(i, name) {
+    return { name: name || "P", i, score: 0, done: false, stacked: false, beat: Date.now() };
+  }
+  function showMatchForm(on) {
+    const f = document.getElementById("matchForm");
+    if (f) f.style.display = on ? "block" : "none";
+  }
+  function paintSizeBtns() {
+    [2, 3, 4].forEach(n => {
+      const b = document.getElementById("btnSize" + n);
+      if (b) b.classList.toggle("on", matchSize === n);
     });
   }
   function openMatchPick() {
-    el.matchTitle.textContent = "近くの人とプレイ";
-    el.matchText.textContent = "同じ人数を選んだ人とだけマッチするよ。揃ったら5分勝負。";
+    showMatchForm(true);
+    el.matchTitle.textContent = "合言葉で勝負";
+    el.matchText.textContent = "友だちと同じ合言葉と人数を入れてつなごう。揃ったら5分勝負。";
     el.matchExtra.textContent = "";
-    el.matchExtra.style.fontSize = "22px";
-    matchBtns(["btnSize2", "btnSize3", "btnSize4", "btnMatchCancel"]);
-    document.getElementById("btnMatchCancel").textContent = "とじる";
+    el.matchExtra.style.fontSize = "18px";
+    if (el.matchName) el.matchName.value = loadNick();
+    if (el.matchCode && state.vsCode) el.matchCode.value = state.vsCode;
+    paintSizeBtns();
+    const cancel = document.getElementById("btnMatchCancel");
+    if (cancel) cancel.textContent = "とじる";
+    const copy = document.getElementById("btnMatchCopy");
+    if (copy) copy.style.display = "none";
     el.match.style.display = "flex";
   }
-  async function leaveMatch() {
-    if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
-    if (unsubRoom) { unsubRoom(); unsubRoom = null; }
-    const roomId = state.roomId;
-    const uid = fb.uid;
-    vsShown = false;
-    if (!roomId || !fb.db || !uid) return;
-    try {
-      const { doc, runTransaction } = fb.mods;
-      const roomRef = doc(fb.db, "blastRooms", roomId);
-      await runTransaction(fb.db, async tx => {
-        const snap = await tx.get(roomRef);
-        if (!snap.exists()) return;
-        const d = snap.data();
-        const lobbyRef = doc(fb.db, "blastLobby", "n" + d.size);
-        const lobby = await tx.get(lobbyRef);
-        const players = Object.assign({}, d.players || {});
-        if (!players[uid]) return;
-        if (d.status === "wait") {
-          delete players[uid];
-          tx.update(roomRef, { players });
-          if (lobby.exists() && lobby.data().roomId === roomId) {
-            const n = Object.keys(players).length;
-            tx.set(lobbyRef, { roomId: n ? roomId : null, n, size: d.size, t: Date.now() }, { merge: true });
-          }
-        } else if (!players[uid].done) {
-          tx.update(roomRef, {
-            ["players." + uid + ".done"]: true,
-            ["players." + uid + ".stacked"]: true,
-            ["players." + uid + ".score"]: state.score,
-            ["players." + uid + ".beat"]: Date.now()
+  function stopRoomPoll() {
+    if (roomPoll) { clearInterval(roomPoll); roomPoll = 0; }
+  }
+  async function connectWord(code, size) {
+    const id = codeId(code, size);
+    const nick = loadNick() || ("P" + (fb.uid || "xxx").slice(-3));
+    await fbAuth();
+    for (let n = 0; n < 8; n++) {
+      const snap = await fsGet(id);
+      if (!snap) {
+        try {
+          await fsCreate(id, {
+            size,
+            status: "wait",
+            goAt: 0,
+            endAt: 0,
+            createdAt: Date.now(),
+            code: String(code).slice(0, 16),
+            players: { [fb.uid]: playerSeed(0, nick) }
           });
+          return id;
+        } catch (e) {
+          if (e.status === "ALREADY_EXISTS" || /exists/i.test(e.message || "")) continue;
+          throw e;
         }
-      });
-    } catch (e) {}
+      }
+      const d = snap.data || {};
+      d.size = Number(d.size) || size;
+      const players = Object.assign({}, d.players || {});
+      if (d.size !== size) {
+        const err = new Error("size");
+        err.kind = "size";
+        err.want = d.size;
+        throw err;
+      }
+      if (players[fb.uid] && (d.status === "wait" || d.status === "play")) return id;
+      if (d.status === "play") {
+        if (vsAllDone(d)) {
+          try {
+            await fsUpdate(id, {
+              status: "wait",
+              goAt: 0,
+              endAt: 0,
+              players: { [fb.uid]: playerSeed(0, nick) }
+            }, snap.time);
+            return id;
+          } catch (e) { continue; }
+        }
+        const err = new Error("busy");
+        err.kind = "busy";
+        throw err;
+      }
+      const keys = Object.keys(players);
+      if (keys.length >= d.size) {
+        const err = new Error("full");
+        err.kind = "full";
+        throw err;
+      }
+      players[fb.uid] = playerSeed(keys.length, nick);
+      const nn = Object.keys(players).length;
+      const patch = { players };
+      if (nn >= d.size) {
+        const goAt = Date.now() + 3200;
+        patch.status = "play";
+        patch.goAt = goAt;
+        patch.endAt = goAt + 5 * 60 * 1000;
+      }
+      try {
+        await fsUpdate(id, patch, snap.time);
+        return id;
+      } catch (e) { continue; }
+    }
+    const err = new Error("match");
+    err.kind = "match";
+    throw err;
   }
   function vsPlayers(d) {
-    return Object.keys(d.players || {}).map(id => Object.assign({ id }, d.players[id]))
+    return Object.keys((d && d.players) || {}).map(id => Object.assign({ id }, d.players[id]))
       .sort((a, b) => (a.i || 0) - (b.i || 0));
   }
   function vsLabel(p) {
-    return p.id === fb.uid ? "きみ" : ("あいて" + ((p.i || 0) + 1));
+    const nm = String((p && p.name) || "").trim() || ("あいて" + ((p.i || 0) + 1));
+    return p.id === fb.uid ? (nm + "（きみ）") : nm;
   }
   function vsAllDone(d) {
     const ps = vsPlayers(d);
@@ -2949,16 +3242,42 @@
       return "<div class=\"vs-row" + me + st + "\"><span>" + (i + 1) + "位 " + vsLabel(p) + mark + "</span><em>" + (p.score || 0) + "</em></div>";
     }).join("");
   }
+  async function leaveMatch() {
+    if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
+    cdGoAt = 0;
+    stopRoomPoll();
+    vsShown = false;
+    const roomId = state.roomId;
+    const uid = fb.uid;
+    if (!roomId || !uid) return;
+    try {
+      const snap = await fsGet(roomId);
+      if (!snap) return;
+      const d = snap.data || {};
+      const players = Object.assign({}, d.players || {});
+      if (!players[uid]) return;
+      if (d.status === "wait") {
+        delete players[uid];
+        await fsUpdate(roomId, { players }, snap.time);
+      } else if (!players[uid].done) {
+        Object.assign(players[uid], { done: true, stacked: true, score: state.score, beat: Date.now() });
+        await fsUpdate(roomId, { players }, snap.time);
+      }
+    } catch (e) {}
+  }
   function vsPushScore(done, stacked) {
-    if (!fb.db || !state.roomId || !fb.uid) return;
+    if (!fb.uid || !state.roomId) return;
     const now = Date.now();
     if (!done && now - vsPushAt < 800) return;
     vsPushAt = now;
-    fb.mods.updateDoc(fb.mods.doc(fb.db, "blastRooms", state.roomId), {
-      ["players." + fb.uid + ".score"]: state.score,
-      ["players." + fb.uid + ".done"]: !!done,
-      ["players." + fb.uid + ".stacked"]: !!stacked,
-      ["players." + fb.uid + ".beat"]: now
+    const roomId = state.roomId;
+    const uid = fb.uid;
+    const score = state.score;
+    fsGet(roomId).then(snap => {
+      if (!snap || !snap.data.players || !snap.data.players[uid]) return;
+      const players = Object.assign({}, snap.data.players);
+      Object.assign(players[uid], { score, done: !!done, stacked: !!stacked, beat: Date.now() });
+      return fsUpdate(roomId, { players }, snap.time);
     }).catch(() => {});
   }
   function showVsWait() {
@@ -2971,7 +3290,7 @@
       extra: "全員終わるまで待ってね",
       again: false,
       share: false,
-      board: el.endBoard.innerHTML || ""
+      board: (el.endBoard && el.endBoard.innerHTML) || ""
     });
   }
   function showVsResult(d) {
@@ -2986,13 +3305,14 @@
       coins: "このモードはコインなし",
       coinsNo: true,
       extra: "",
-      againText: "もう一度マッチ",
+      againText: "もう一度つなぐ",
       share: true
     });
   }
   function beginVsPlay(d) {
     if (state.mode === "vs" && el.app.classList.contains("show")) return;
     if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
+    cdGoAt = 0;
     el.match.style.display = "none";
     state.mode = "vs";
     state.endAt = d.endAt;
@@ -3002,29 +3322,38 @@
     applyModeHud();
     newGame();
   }
-  function watchRoom(roomId) {
-    if (unsubRoom) { unsubRoom(); unsubRoom = null; }
-    unsubRoom = fb.mods.onSnapshot(fb.mods.doc(fb.db, "blastRooms", roomId), snap => {
-      if (!snap.exists()) return;
-      const d = snap.data();
-      const ps = vsPlayers(d);
-      if (d.status === "wait") {
-        el.matchTitle.textContent = "マッチ中";
-        el.matchText.textContent = ps.length + " / " + d.size + "人。揃ったら始まるよ";
-        el.matchExtra.style.fontSize = "18px";
-        el.matchExtra.innerHTML = ps.map(p => vsLabel(p)).join("　");
-        matchBtns(["btnMatchCancel"]);
-        document.getElementById("btnMatchCancel").textContent = "キャンセル";
-        return;
-      }
-      if (d.goAt && Date.now() < d.goAt) {
-        matchBtns(["btnMatchCancel"]);
-        document.getElementById("btnMatchCancel").textContent = "キャンセル";
-        el.matchTitle.textContent = "まもなく";
-        el.matchText.textContent = "5分勝負スタート";
-        el.matchExtra.style.fontSize = "64px";
+  function applyRoom(d) {
+    if (!d) return;
+    const ps = vsPlayers(d);
+    if (d.status === "wait") {
+      if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
+      cdGoAt = 0;
+      showMatchForm(false);
+      el.matchTitle.textContent = "まってる";
+      el.matchText.textContent = "合言葉「" + (state.vsCode || "") + "」　" + ps.length + " / " + d.size + "人。揃ったら始まるよ";
+      el.matchExtra.style.fontSize = "18px";
+      el.matchExtra.textContent = ps.map(p => vsLabel(p)).join("　") || "ひとりめ";
+      const copy = document.getElementById("btnMatchCopy");
+      if (copy) copy.style.display = "block";
+      const cancel = document.getElementById("btnMatchCancel");
+      if (cancel) cancel.textContent = "キャンセル";
+      el.match.style.display = "flex";
+      return;
+    }
+    if (d.goAt && Date.now() < d.goAt) {
+      showMatchForm(false);
+      const copy = document.getElementById("btnMatchCopy");
+      if (copy) copy.style.display = "none";
+      const cancel = document.getElementById("btnMatchCancel");
+      if (cancel) cancel.textContent = "キャンセル";
+      el.matchTitle.textContent = "まもなく";
+      el.matchText.textContent = "5分勝負スタート";
+      el.matchExtra.style.fontSize = "64px";
+      el.match.style.display = "flex";
+      if (cdGoAt !== d.goAt) {
+        cdGoAt = d.goAt;
         const tick = () => {
-          const n = Math.ceil((d.goAt - Date.now()) / 1000);
+          const n = Math.ceil((cdGoAt - Date.now()) / 1000);
           if (n <= 0) {
             if (cdTimer) { clearInterval(cdTimer); cdTimer = 0; }
             beginVsPlay(d);
@@ -3035,88 +3364,71 @@
         tick();
         if (cdTimer) clearInterval(cdTimer);
         cdTimer = setInterval(tick, 100);
-        el.match.style.display = "flex";
-        return;
       }
-      if (d.goAt && !el.app.classList.contains("show")) beginVsPlay(d);
-      if (el.endBoard && (state.over || vsShown)) {
-        el.endBoard.style.display = "block";
-        el.endBoard.innerHTML = vsBoardHtml(d, !vsAllDone(d));
-      }
-      if (vsAllDone(d) && !vsShown) showVsResult(d);
-    }, () => {
-      toast("マッチの通信が切れた");
-    });
-  }
-  async function startMatch(size) {
-    try {
-      await fbReady();
-    } catch (e) {
-      toast("つながんなかった。ネットを確認して");
       return;
     }
-    state.vsSize = size;
+    if (d.goAt && !el.app.classList.contains("show")) beginVsPlay(d);
+    if (state.mode === "vs" && el.app.classList.contains("show") && !state.over) {
+      el.aiLine.textContent = ps.map(p => vsLabel(p) + " " + (p.score || 0)).join("  /  ");
+    }
+    if (el.endBoard && (state.over || vsShown)) {
+      el.endBoard.style.display = "block";
+      el.endBoard.innerHTML = vsBoardHtml(d, !vsAllDone(d));
+    }
+    if (vsAllDone(d) && !vsShown) showVsResult(d);
+  }
+  function watchRoom(roomId) {
+    stopRoomPoll();
+    const tick = () => {
+      fsGet(roomId).then(snap => { if (snap) applyRoom(snap.data); }).catch(() => {});
+    };
+    tick();
+    roomPoll = setInterval(tick, 1000);
+  }
+  async function copyWord() {
+    const s = state.vsCode || (el.matchCode && el.matchCode.value) || "";
+    if (!s) return;
+    try {
+      await navigator.clipboard.writeText(s);
+      toast("合言葉をコピーした");
+    } catch (e) {
+      toast(s);
+    }
+  }
+  async function startWordMatch(reuse) {
+    if (matchBusy) return;
+    const code = reuse ? normCode(state.vsCode) : normCode(el.matchCode && el.matchCode.value);
+    const size = reuse ? (state.vsSize || matchSize) : matchSize;
+    if (!code) {
+      toast("合言葉を入れて");
+      return;
+    }
+    if (el.matchName) saveNick(el.matchName.value);
+    matchBusy = true;
     vsShown = false;
-    el.matchTitle.textContent = "マッチ中";
-    el.matchText.textContent = "同じ人数の人を探してる…";
-    el.matchExtra.textContent = "0 / " + size;
-    el.matchExtra.style.fontSize = "28px";
-    matchBtns(["btnMatchCancel"]);
-    document.getElementById("btnMatchCancel").textContent = "キャンセル";
+    state.vsCode = code;
+    state.vsSize = size;
+    showMatchForm(false);
+    el.matchTitle.textContent = "つないでる";
+    el.matchText.textContent = "合言葉「" + code + "」で探してる…";
+    el.matchExtra.textContent = "";
+    const cancel = document.getElementById("btnMatchCancel");
+    if (cancel) cancel.textContent = "キャンセル";
+    const copy = document.getElementById("btnMatchCopy");
+    if (copy) copy.style.display = "block";
     el.match.style.display = "flex";
     try {
-      const { doc, runTransaction } = fb.mods;
-      const uid = fb.uid;
-      const name = "P" + uid.slice(-3);
-      const lobbyRef = doc(fb.db, "blastLobby", "n" + size);
-      let roomId = null;
-      await runTransaction(fb.db, async tx => {
-        const lobbySnap = await tx.get(lobbyRef);
-        const lobby = lobbySnap.exists() ? lobbySnap.data() : null;
-        let joined = false;
-        if (lobby && lobby.roomId && Date.now() - (lobby.t || 0) < 180000) {
-          const roomRef = doc(fb.db, "blastRooms", lobby.roomId);
-          const roomSnap = await tx.get(roomRef);
-          if (roomSnap.exists()) {
-            const r = roomSnap.data();
-            const players = Object.assign({}, r.players || {});
-            if (r.status === "wait" && Object.keys(players).length < r.size) {
-              if (!players[uid]) {
-                players[uid] = { name, i: Object.keys(players).length, score: 0, done: false, stacked: false, beat: Date.now() };
-              }
-              const n = Object.keys(players).length;
-              const patch = { players };
-              if (n >= r.size) {
-                const goAt = Date.now() + 3200;
-                patch.status = "play";
-                patch.goAt = goAt;
-                patch.endAt = goAt + 5 * 60 * 1000;
-                tx.set(lobbyRef, { roomId: null, n: 0, size, t: Date.now() }, { merge: true });
-              } else {
-                tx.set(lobbyRef, { roomId: lobby.roomId, n, size, t: Date.now() }, { merge: true });
-              }
-              tx.update(roomRef, patch);
-              roomId = lobby.roomId;
-              joined = true;
-            }
-          }
-        }
-        if (!joined) {
-          roomId = "r" + Date.now().toString(36) + uid.slice(-4);
-          const roomRef = doc(fb.db, "blastRooms", roomId);
-          tx.set(roomRef, {
-            size, status: "wait", goAt: 0, endAt: 0, createdAt: Date.now(),
-            players: { [uid]: { name, i: 0, score: 0, done: false, stacked: false, beat: Date.now() } }
-          });
-          tx.set(lobbyRef, { roomId, n: 1, size, t: Date.now() });
-        }
-      });
+      const roomId = await connectWord(code, size);
       state.roomId = roomId;
       watchRoom(roomId);
     } catch (e) {
-      toast("マッチできなかった");
-      el.match.style.display = "none";
+      showMatchForm(true);
+      if (e.kind === "size") toast("人数が違うよ。相手は" + (e.want || "?") + "人だよ");
+      else if (e.kind === "busy") toast("その合言葉は対戦中。別の言葉か、終わってから");
+      else if (e.kind === "full") toast("満員だよ。別の合言葉にして");
+      else toast("つながんなかった。ネットを確認して");
     }
+    matchBusy = false;
   }
 
   async function playPlan(plan) {
@@ -3510,21 +3822,30 @@
     const n = state.vsSize;
     el.overlay.style.display = "none";
     if (mode === "vs") {
-      showHome();
-      startMatch(n || 2);
+      el.app.classList.remove("show");
+      stopModeClock();
+      startWordMatch(true);
       return;
     }
     if (mode === "min1") { startMin1(); return; }
+    if (mode === "min2") { startMin2(); return; }
     if (mode === "race10k") { startRace(); return; }
+    if (mode === "combo10") { startCombo10(); return; }
+    if (mode === "allclear") { startAllClear(); return; }
     newGame();
   });
   bind("btnStart", () => { SFX.ensure(); BGM.start(); state.mode = null; goPlay(); });
   bind("btnNear", () => { SFX.ensure(); openMatchPick(); });
   bind("btnMin1", () => { SFX.ensure(); BGM.start(); startMin1(); });
+  bind("btnMin2", () => { SFX.ensure(); BGM.start(); startMin2(); });
   bind("btnRace", () => { SFX.ensure(); BGM.start(); startRace(); });
-  bind("btnSize2", () => startMatch(2));
-  bind("btnSize3", () => startMatch(3));
-  bind("btnSize4", () => startMatch(4));
+  bind("btnCombo", () => { SFX.ensure(); BGM.start(); startCombo10(); });
+  bind("btnClear", () => { SFX.ensure(); BGM.start(); startAllClear(); });
+  bind("btnSize2", () => { matchSize = 2; paintSizeBtns(); });
+  bind("btnSize3", () => { matchSize = 3; paintSizeBtns(); });
+  bind("btnSize4", () => { matchSize = 4; paintSizeBtns(); });
+  bind("btnMatchGo", () => startWordMatch(false));
+  bind("btnMatchCopy", () => copyWord());
   bind("btnMatchCancel", () => {
     leaveMatch();
     state.roomId = null;
@@ -3547,6 +3868,11 @@
   bind("btnMissionsClose", () => el.missions.classList.remove("show"));
   bind("btnRecords", () => { el.records.classList.add("show"); renderRecords(); });
   bind("btnRecordsClose", () => el.records.classList.remove("show"));
+  if (el.matchCode) {
+    el.matchCode.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); startWordMatch(false); }
+    });
+  }
 })();
 </script>
 </body>
