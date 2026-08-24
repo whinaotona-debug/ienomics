@@ -182,25 +182,36 @@ html, body {
   min-height: 52px;
 }
 .nav-tab span {
-  line-height: 1.15;
+  line-height: 1.1;
   display: inline-flex;
   align-items: flex-end;
   justify-content: center;
-  min-height: 1.15em;
+  min-height: 1.1em;
+}
+body.furigana-on .nav-tab {
+  gap: 1px;
+  padding-top: 2px;
 }
 body.furigana-on .nav-tab span {
-  min-height: 2.1em;
-  align-items: flex-end;
+  min-height: 0;
+  line-height: 1.05;
 }
 .nav-tab span .ie-ruby {
   align-items: center;
+  line-height: 1;
 }
 .nav-tab span .ie-ruby-rt {
   font-weight: 500;
-  font-size: 0.55em;
+  font-size: 0.5em;
   letter-spacing: 0;
   color: inherit;
   opacity: 0.85;
+  margin: 0;
+  line-height: 1;
+  transform: translateY(3px);
+}
+.nav-tab span .ie-ruby-rb {
+  line-height: 1.1;
 }
 .nav-tab svg {
   width: 22px;

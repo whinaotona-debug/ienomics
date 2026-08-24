@@ -1,7 +1,7 @@
-import { state } from './state.js?v=200';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=200';
-import { refreshTutorial } from './tutorial.js?v=200';
-import { auth } from './firebase.js?v=200';
+import { state } from './state.js?v=201';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=201';
+import { refreshTutorial } from './tutorial.js?v=201';
+import { auth } from './firebase.js?v=201';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -725,10 +725,9 @@ function renderHome() {
                 <div class="w-4 h-4 text-[#2f8f82] shrink-0">${getIcon('propose')}</div>
                 <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${tJob.title}</span>
               </button>
-              <button onclick="setView('templates')" data-tour="templates" class="solid-btn w-full py-2.5 flex-row gap-1.5 mt-2 relative">
+              <button onclick="setView('templates')" data-tour="templates" class="solid-btn w-full py-2.5 flex-row gap-1.5 mt-2">
                 <div class="w-4 h-4 text-[#4a7bd6] shrink-0">${getIcon('repeat')}</div>
                 <span class="text-[10px] font-bold text-[#2c3d38] leading-none">${rb('定期一覧','ていきいちらん')}</span>
-                ${(state.taskTemplates || []).length > 0 ? `<span class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-[#3767bd] bg-sky-50 border border-sky-100 px-1.5 py-0.5 rounded-md">${state.taskTemplates.length}</span>` : ''}
               </button>
             </div>
             <div>
