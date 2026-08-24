@@ -1,7 +1,7 @@
-import { state } from './state.js?v=189';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=189';
-import { refreshTutorial } from './tutorial.js?v=189';
-import { auth } from './firebase.js?v=189';
+import { state } from './state.js?v=190';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=190';
+import { refreshTutorial } from './tutorial.js?v=190';
+import { auth } from './firebase.js?v=190';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1489,10 +1489,10 @@ function renderExchange() {
 }
 function renderNews() {
   const order = ['日経平均', 'S&P500', '金', '原油'];
-  const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
+  const all = (state.marketNews || []).filter(n => n && (n.title || n.about));
   const groups = order.map(about => ({
     about,
-        items: all.filter(n => n.about === about).slice(0, 1)
+    items: all.filter(n => n.about === about).slice(0, 1)
   })).filter(g => g.items.length);
 
   const blocks = groups.length
@@ -1500,8 +1500,7 @@ function renderNews() {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}についての解説`;
         const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
-        const site = n.source ? `<p class="text-[10px] font-bold text-slate-400 mt-2">参考: ${esc(n.source)}</p>` : '';
-        return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}${site}</a>`;
+        return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}</article>`;
       }).join('');
       return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}のニュース</h3><div class="space-y-2">${rows}</div></section>`;
     }).join('')
@@ -1520,7 +1519,7 @@ function renderNews() {
       ${rb('ニュース','にゅーす')}
     </h2>
     ${updatedLine}
-    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">12〜15歳向けの解説です。タップすると、参考にした公式の発表が開きます。媒体の見出しは転載していません。</p>
+    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">12〜15歳向けの解説です。媒体の見出しは転載していません。</p>
     <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">Yahoo・Googleニュースや、AI学習・自動収集を禁じている媒体のRSSは使っていません。</p>
     ${blocks}
   `;
