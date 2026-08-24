@@ -1,7 +1,7 @@
-import { state } from './state.js?v=188';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=188';
-import { refreshTutorial } from './tutorial.js?v=188';
-import { auth } from './firebase.js?v=188';
+import { state } from './state.js?v=189';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=189';
+import { refreshTutorial } from './tutorial.js?v=189';
+import { auth } from './firebase.js?v=189';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1492,14 +1492,14 @@ function renderNews() {
   const all = (state.marketNews || []).filter(n => n && n.url && (n.title || n.about));
   const groups = order.map(about => ({
     about,
-    items: all.filter(n => n.about === about).slice(0, 3)
+        items: all.filter(n => n.about === about).slice(0, 1)
   })).filter(g => g.items.length);
 
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}についての解説`;
-        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed ie-wrap-text">${esc(n.body)}</p>` : '';
+        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
         const site = n.source ? `<p class="text-[10px] font-bold text-slate-400 mt-2">参考: ${esc(n.source)}</p>` : '';
         return `<a class="block p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-white transition" href="${esc(n.url)}" target="_blank" rel="noopener noreferrer"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}${site}</a>`;
       }).join('');

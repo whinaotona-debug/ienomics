@@ -1,10 +1,10 @@
-import { state } from './state.js?v=188';
-import { render } from './ui.js?v=188';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount } from './utils.js?v=188';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=188';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=188';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=188';
-import { db, auth } from './firebase.js?v=188';
+import { state } from './state.js?v=189';
+import { render } from './ui.js?v=189';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount } from './utils.js?v=189';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=189';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=189';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=189';
+import { db, auth } from './firebase.js?v=189';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -138,10 +138,10 @@ let midnightTimer = null;
 let watchedDayKey = null;
 const DEADLINE_CHECK_MS = 30 * 1000;
 const MINUTE = 60 * 1000;
-/** 1時間前: 残り55〜70分。52分では出さない */
+/** 1時間前: 残り58〜70分。52分帯（45〜57分）では出さない */
 const DEADLINE_REMIND_SLOTS = [
-  { id: '60', label: 'あと1時間', minMs: 55 * MINUTE, maxMs: 70 * MINUTE },
-  { id: '30', label: 'あと30分', minMs: 25 * MINUTE, maxMs: 38 * MINUTE }
+  { id: '60', label: 'あと1時間', minMin: 58, maxMin: 70 },
+  { id: '30', label: 'あと30分', minMin: 28, maxMin: 36 }
 ];
 
 function getDeadlineNotifiedMap() {
@@ -172,8 +172,10 @@ function checkDeadlineReminders() {
     if (!['open', 'accepted'].includes(t.status)) continue;
 
     const remaining = t.deadline - now;
+    const remainMin = Math.floor(remaining / MINUTE);
+    if (remainMin >= 45 && remainMin <= 57) continue;
     for (const slot of DEADLINE_REMIND_SLOTS) {
-      if (remaining < slot.minMs || remaining > slot.maxMs) continue;
+      if (remainMin < slot.minMin || remainMin > slot.maxMin) continue;
       const key = `${t.id}:${slot.id}:${t.deadline}`;
       if (notified[key]) continue;
       notified[key] = 1;
@@ -1595,7 +1597,7 @@ async function loadMarketNews() {
       .map(row => ({
         about: String(row?.about || '').trim().slice(0, 40),
         title: String(row?.title || '').trim().slice(0, 180),
-        body: String(row?.body || '').trim().slice(0, 500),
+        body: String(row?.body || '').trim().slice(0, 2000),
         url: String(row?.url || '').trim(),
         source: String(row?.source || row?.domain || '').replace(/^www\./, '').slice(0, 80)
       }))
@@ -2158,6 +2160,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=188').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=189').catch(err => console.warn('SW登録失敗:', err));
   });
 }
