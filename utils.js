@@ -1,4 +1,4 @@
-import { state } from './state.js?v=201';
+import { state } from './state.js?v=202';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -814,14 +814,21 @@ export function rateForMarket(rates, name) {
 /** 買ったときの価格。古い持ち株は購入日の表から復元する。
  * 正解: 今の価値 = 入れたpt × (今の価格 / 買った価格)。売る額は画面の今の価値。 */
 export function getBuyRate(inv, currentRate) {
-  const stored = Number(inv?.buyRate);
-  if (stored > 0) return stored;
-
   const invested = Number(inv?.investedPoints) || 0;
   const shares = Number(inv?.shares);
   const implied = invested > 0 && shares > 0 ? invested / shares : null;
   const cur = Number(currentRate);
-  if (implied > 0 && cur > 0 && implied >= cur / 8 && implied <= cur * 8) return implied;
+  const ok = (r) => {
+    const n = Number(r);
+    if (!(n > 0)) return false;
+    if (!(cur > 0)) return true;
+    // 相場が数千なのに買値1、のような壊れた値は使わない（元本850が数万に見える）
+    return n >= cur / 8 && n <= cur * 8;
+  };
+
+  const stored = Number(inv?.buyRate);
+  if (ok(stored)) return stored;
+  if (ok(implied)) return implied;
 
   const hist = Number(inv?.createdAt) > 0 ? sheetRateAt(inv.name, inv.createdAt) : null;
   if (hist > 0) return hist;
@@ -1047,6 +1054,7 @@ function positionFromLogs(logs, name, dayMs) {
 /** 投資ドキュメント（売却済み含む）から、その日の元本と口数を出す */
 function positionFromInvestments(investments, name, dayMs) {
   const dayStart = japanDayStartMs(new Date(dayMs));
+  const price = sheetRateAt(name, dayMs) ?? 1;
   let principal = 0;
   let shares = 0;
   for (const inv of investments || []) {
@@ -1054,12 +1062,11 @@ function positionFromInvestments(investments, name, dayMs) {
     const created = Number(inv.createdAt) || 0;
     if (created && japanDayStartMs(new Date(created)) > dayStart) continue;
     const soldAt = Number(inv.soldAt) || 0;
-    // 売った日以降は持っていない
     if (inv.status === 'sold' && soldAt && japanDayStartMs(new Date(soldAt)) <= dayStart) continue;
     const pts = Number(inv.investedPoints) || 0;
-    const rate = Number(inv.buyRate) || 0;
+    const buy = getBuyRate(inv, price);
     principal += pts;
-    shares += pts > 0 && rate > 0 ? pts / rate : (Number(inv.shares) || 0);
+    shares += pts > 0 && buy > 0 ? pts / buy : 0;
   }
   return { principal, shares };
 }
@@ -1069,19 +1076,33 @@ export const CHART_TOTAL = '__total__';
 function positionAtDay(list, logList, name, ms) {
   const todayStart = japanDayStartMs();
   const dayStart = japanDayStartMs(new Date(ms));
-  // 過ぎた日は 0:00 確定ログを優先。今日の追加購入で昨日以前の元本を動かさない
+  const fromInv = list.some(inv => inv.name === name)
+    ? positionFromInvestments(list, name, ms)
+    : null;
+
   if (dayStart < todayStart) {
     const eod = eodLogForDay(logList, name, ms);
     if (eod) {
-      return {
-        principal: Number(eod.investedPoints) || Number(eod.principal) || 0,
-        shares: Number(eod.shares) || 0
-      };
+      const principal = Number(eod.investedPoints) || Number(eod.principal) || 0;
+      const shares = Number(eod.shares) || 0;
+      const invP = fromInv ? fromInv.principal : principal;
+      // 重複した買いログから作った確定ログは、実元本より桁違いに大きい
+      if (!(fromInv && principal > invP * 1.05 + 1)) {
+        const shareOk = !(fromInv && shares > fromInv.shares * 1.05 + 0.0001);
+        return {
+          principal,
+          shares: shareOk ? shares : fromInv.shares
+        };
+      }
     }
   }
+  if (fromInv) return fromInv;
   const hasTrades = logList.some(l => l.name === name && isTradeLog(l));
-  if (hasTrades) return positionFromLogs(logList, name, ms);
-  if (list.some(inv => inv.name === name)) return positionFromInvestments(list, name, ms);
+  if (hasTrades) {
+    const fromLogs = positionFromLogs(logList, name, ms);
+    if (fromInv && fromLogs.principal > fromInv.principal * 1.05 + 1) return fromInv;
+    return fromLogs;
+  }
   return { principal: 0, shares: 0 };
 }
 
@@ -1092,10 +1113,7 @@ export function buildInvestmentEodRows(investments, logs, dayKey) {
   const names = getChartMarketNames(investments, logs);
   const rows = [];
   for (const name of names) {
-    const hasTrades = (logs || []).some(l => l.name === name && isTradeLog(l));
-    const pos = hasTrades
-      ? positionFromLogs(logs, name, end)
-      : positionFromInvestments(investments, name, end);
+    const pos = positionAtDay(investments, logs, name, end);
     if (!(pos.principal > 0 || pos.shares > 0)) continue;
     const price = sheetRateAt(name, end) ?? 1;
     rows.push({
