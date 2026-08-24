@@ -353,8 +353,15 @@ body.furigana-on .nav-tab span {
   box-shadow: 0 14px 32px rgba(31, 79, 73, 0.28);
   border: 1px solid rgba(255,255,255,0.12);
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0;
+}
+.ie-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  min-width: 0;
 }
 .ie-hero::after {
   content: "";
@@ -396,6 +403,60 @@ body.furigana-on .nav-tab span {
   justify-content: flex-start;
 }
 .ie-hero-sync:active { opacity: 0.85; }
+.ie-child-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.14);
+  position: relative;
+  z-index: 12;
+  min-width: 0;
+}
+.ie-child-select-light {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
+}
+.ie-child-select-light .ie-child-select-label {
+  color: #6b7f78;
+}
+.ie-child-select-light .ie-child-select-input {
+  border: 1px solid #d7e3de;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%231c2b27' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+  background-size: 16px;
+  color: #1c2b27;
+}
+.ie-child-select-label {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.78);
+  white-space: nowrap;
+}
+.ie-child-select-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.14) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+  background-size: 16px;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 12px;
+  padding: 8px 32px 8px 12px;
+  outline: none;
+}
+.ie-child-select-input option {
+  color: #1c2b27;
+  background: #fff;
+  font-weight: 700;
+}
 /* 左右ラベルを同じ行高に揃えて、残高と同期IDの位置がズレないようにする */
 .ie-hero-label {
   height: 1.2em;

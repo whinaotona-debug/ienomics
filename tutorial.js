@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=198';
+import { esc } from './utils.js?v=199';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -26,7 +26,7 @@ const PARENT_STEPS = [
     // お子さまがひとりのときは切り替えタブが出ないので、この説明も飛ばす
     requireTarget: true,
     title: 'お子さまの切り替え',
-    body: 'ごきょうだいを登録すると、ここに名前が並びます。タップするとその子の口座に切り替わります。砂時計のマークは、まだ端末がつながっていない子です。'
+    body: 'ごきょうだいを登録すると、同期IDの下に名前のメニューが出ます。選ぶとその子の口座に切り替わります。「つながり待ち」は、まだ端末がつながっていない子です。'
   },
   {
     target: 'job',

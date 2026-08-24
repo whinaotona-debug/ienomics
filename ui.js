@@ -1,7 +1,7 @@
-import { state } from './state.js?v=198';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=198';
-import { refreshTutorial } from './tutorial.js?v=198';
-import { auth } from './firebase.js?v=198';
+import { state } from './state.js?v=199';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=199';
+import { refreshTutorial } from './tutorial.js?v=199';
+import { auth } from './firebase.js?v=199';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -308,25 +308,28 @@ function bindSwipeRows(root) {
 }
 
 /**
- * お子さまの名前を並べて、タップで口座を切り替えられるようにする。
+ * お子さまの口座切り替え。同期IDの下にプルダウンで出す。
  * ひとりだけのときは切り替える意味がないので何も返さない。
- * @param {'hero'|'light'} tone 置く場所の背景に合わせた見た目
  */
-function renderChildTabs(tone) {
+function renderChildSelect(tone = 'hero') {
   if (state.role !== 'parent') return '';
   const list = Array.isArray(state.children) ? state.children : [];
   if (list.length < 2) return '';
 
-  const tabs = list.map(c => {
+  const options = list.map(c => {
+    const wait = c.childLinked === false ? '（つながり待ち）' : '';
     const on = c.id === state.familyCode;
-    const waiting = c.childLinked === false ? ' ⏳' : '';
-    return `<button type="button" role="tab" aria-selected="${on}"
-              onclick="switchActiveChild('${esc(c.id)}')"
-              class="ie-child-tab ${on ? 'on' : ''}"
-              title="${esc(c.childName)}${c.childLinked === false ? '（連携待ち）' : ''}">${esc(c.childName)}${waiting}</button>`;
+    return `<option value="${esc(c.id)}" ${on ? 'selected' : ''}>${esc(c.childName || 'こども')}${wait}</option>`;
   }).join('');
 
-  return `<div class="ie-child-tabs ie-child-tabs-${tone}" role="tablist" aria-label="お子さまの切り替え" data-tour="childtabs">${tabs}</div>`;
+  const extra = tone === 'light' ? ' ie-child-select-light' : '';
+  const tour = tone === 'hero' ? ' data-tour="childtabs"' : '';
+  return `
+    <label class="ie-child-select${extra}"${tour}>
+      <span class="ie-child-select-label">表示する子</span>
+      <select class="ie-child-select-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
+    </label>
+  `;
 }
 
 /**
@@ -346,7 +349,7 @@ function renderChildManageList() {
         : `${(c.points || 0).toLocaleString()}円${Number(c.stockCap) > 0 ? ` / 運用上限${Number(c.stockCap).toLocaleString()}` : ''}`);
     return `
       <div class="ie-child-row ${active ? 'on' : ''}">
-        <button type="button" onclick="switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
+        <button type="button" onclick="window.switchActiveChild('${esc(c.id)}')" class="ie-child-row-main" aria-label="${esc(c.childName)}の画面に切り替える">
           <span class="ie-child-row-name">${esc(c.childName)}</span>
           <span class="ie-child-row-sub">${esc(sub)}</span>
         </button>
@@ -367,7 +370,7 @@ function renderChildManageList() {
 }
 
 function renderHeader() {
-  const childTabs = state.role === 'parent' ? renderChildTabs('hero') : '';
+  const childSelect = state.role === 'parent' ? renderChildSelect() : '';
   const nameLabel = state.role === 'parent'
     ? `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('口座','こうざ')}</span>`
     : `<span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName)} の</span>${rb('資産','しさん')}</span>`;
@@ -401,24 +404,26 @@ function renderHeader() {
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
       </div>
-      ${childTabs ? `<div class="ie-hero-tabs">${childTabs}</div>` : ''}
-      <div class="ie-hero">
-        <div class="ie-hero-main">
-          <div class="ie-hero-label" data-tour="nametag"><p>${nameLabel}</p></div>
-          <div class="ie-hero-balance flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
-            <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
-            <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">円</span>
+      <div class="ie-hero ${childSelect ? 'has-child-select' : ''}">
+        <div class="ie-hero-top">
+          <div class="ie-hero-main">
+            <div class="ie-hero-label" data-tour="nametag"><p>${nameLabel}</p></div>
+            <div class="ie-hero-balance flex items-baseline gap-1.5" data-tour="points" aria-label="現在の残高 ${state.points} ポイント">
+              <span id="ie-points-value" class="ie-points-value text-4xl font-black tracking-tight tabular-nums ${state.points < 0 ? 'text-red-300' : 'text-white'}">${(displayedPoints ?? state.points).toLocaleString()}</span>
+              <span id="ie-points-unit" class="text-xs font-bold ${state.points < 0 ? 'text-red-300/90' : 'text-white/75'}">円</span>
+            </div>
+            ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
+            ${payHint}
+            ${streakHint}
           </div>
-          ${state.points < 0 ? `<p class="text-[10px] font-bold text-red-200 mt-1">残高不足（株・換金はロック中）</p>` : ''}
-          ${payHint}
-          ${streakHint}
+          <div class="ie-hero-divider" aria-hidden="true"></div>
+          <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
+            <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
+            <p class="ie-hero-code">${esc(state.familyCode)}</p>
+            <p class="ie-hero-copyhint">タップでコピー</p>
+          </button>
         </div>
-        <div class="ie-hero-divider" aria-hidden="true"></div>
-        <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
-          <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
-          <p class="ie-hero-code">${esc(state.familyCode)}</p>
-          <p class="ie-hero-copyhint">タップでコピー</p>
-        </button>
+        ${childSelect}
       </div>
     </div>
   `;
@@ -1272,6 +1277,7 @@ function renderSettings() {
     <div class="p-6 bg-slate-50 rounded-2xl text-center mb-6 border border-slate-100">
       <p class="text-[10px] font-bold text-slate-500 mb-2 tracking-wide">${rbPair('同期','どうき','ID')}</p>
       <p class="text-2xl font-mono font-bold text-slate-800 tracking-widest">${esc(state.familyCode)}</p>
+      ${isChild ? '' : renderChildSelect('light')}
     </div>
 
     ${isChild ? '' : `
@@ -1297,8 +1303,8 @@ function renderSettings() {
         <span class="ie-guide-text">
           <span class="ie-guide-title">お子さまを${rb('追加','ついか')}</span>
           <span class="ie-guide-sub">${state.children.length >= 2
-            ? `いま${state.children.length}人。上の名前をタップで切り替えできます`
-            : '兄弟姉妹を登録すると、上の名前をタップで切り替えできます'}</span>
+            ? `いま${state.children.length}人。同期IDの下のメニューで切り替えできます`
+            : '兄弟姉妹を登録すると、同期IDの下のメニューで切り替えできます'}</span>
         </span>
         <span class="ie-guide-arrow" aria-hidden="true">›</span>
       </button>
@@ -1956,7 +1962,7 @@ function renderPasswordResetForm() {
   `;
 }
 function renderWaitingChild() {
-  const tabs = renderChildTabs('light');
+  const childSelect = renderChildSelect('light');
   return `
     <div class="h-full flex flex-col items-center justify-center p-6 bg-slate-50 relative overflow-hidden">
       <img src="logo.png" class="absolute inset-0 w-full h-full object-cover opacity-5 pointer-events-none mix-blend-multiply" onerror="this.style.display='none'" />
@@ -1966,13 +1972,10 @@ function renderWaitingChild() {
           子供の端末で「子供として開始」を選び、<br>以下の同期IDを入力してください。
         </p>
         <div class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-mono font-black text-3xl tracking-widest text-slate-800">${esc(state.familyCode)}</div>
+        ${childSelect ? `<div class="mb-6 text-left">${childSelect}</div>` : ''}
         <div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse">
           <div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...
         </div>
-        ${tabs ? `
-          <p class="text-[10px] font-bold text-slate-500 mb-2">ほかのお子さまの画面に切り替え</p>
-          <div class="mb-6">${tabs}</div>
-        ` : ''}
         <button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button>
       </div>
     </div>
