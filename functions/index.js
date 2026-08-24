@@ -304,6 +304,29 @@ exports.onFamilyDeleted = onDocumentDeleted('families/{code}', async (event) => 
  * 定期のお仕事を、サーバー側で今日分だけ作る。
  * ドキュメントIDは端末側と同じ `rep_{テンプレID}_{年月日}` なので二重にならない。
  */
+async function runCleanupExpiredTasks() {
+  const now = Date.now();
+  const startToday = japanDeadlineMs(0, 0, new Date(now));
+  const removable = new Set(['open', 'accepted', 'proposed', 'rejected', 'proposal_rejected']);
+  let swept = 0;
+  try {
+    const snap = await db.collection('tasks').where('deadline', '<', startToday).limit(300).get();
+    for (const d of snap.docs) {
+      const t = d.data() || {};
+      if (!removable.has(t.status)) continue;
+      await d.ref.update({
+        status: 'deleted',
+        deletedAt: now,
+        autoDeleted: true
+      });
+      swept += 1;
+    }
+  } catch (e) {
+    console.warn('[cleanupExpiredTasks]', e?.message || e);
+  }
+  if (swept) console.log(`[cleanupExpiredTasks] ${swept}件を削除`);
+}
+
 async function runGenerateRepeatedTasks() {
   const now = new Date();
   const j = japanParts(now);
@@ -376,7 +399,10 @@ exports.generateRepeatedTasks = onSchedule(
 // 取りこぼし防止。0:00に失敗しても、最大15分以内に追いつく。
 exports.generateRepeatedTasksCatchup = onSchedule(
   { schedule: 'every 15 minutes', timeZone: 'Asia/Tokyo' },
-  runGenerateRepeatedTasks
+  async () => {
+    await runGenerateRepeatedTasks();
+    await runCleanupExpiredTasks();
+  }
 );
 
 /**

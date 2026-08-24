@@ -1,4 +1,4 @@
-import { state } from './state.js?v=191';
+import { state } from './state.js?v=192';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -265,6 +265,29 @@ export function japanTodayKey(date = new Date()) {
 export function japanDayStartMs(date = new Date()) {
   const j = japanParts(date);
   return new Date(`${j.year}-${pad2(j.month)}-${pad2(j.day)}T00:00:00+09:00`).getTime();
+}
+
+/** Firestore Timestamp や文字列もミリ秒にする */
+export function deadlineToMs(value) {
+  if (value == null || value === '') return 0;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value.toMillis === 'function') return value.toMillis();
+  if (typeof value.seconds === 'number') return value.seconds * 1000;
+  const n = new Date(value).getTime();
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * 期限切れのうち、日付が変わった分（昨日以前）は片付ける。
+ * 当日分は 23:59 までは一覧に残す。
+ */
+export function shouldSweepExpiredTask(task, now = Date.now()) {
+  const ms = deadlineToMs(task?.deadline);
+  if (!ms || ms >= now) return false;
+  if (!['open', 'accepted', 'proposed', 'rejected', 'proposal_rejected'].includes(task.status)) return false;
+  const startToday = japanDayStartMs(new Date(now));
+  if (ms < startToday) return true;
+  return now >= japanDeadlineMs(23, 59, new Date(now));
 }
 
 export function japanDeadlineMs(hours, minutes, date = new Date()) {

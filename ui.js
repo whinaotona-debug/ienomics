@@ -1,7 +1,7 @@
-import { state } from './state.js?v=191';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=191';
-import { refreshTutorial } from './tutorial.js?v=191';
-import { auth } from './firebase.js?v=191';
+import { state } from './state.js?v=192';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=192';
+import { refreshTutorial } from './tutorial.js?v=192';
+import { auth } from './firebase.js?v=192';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -531,6 +531,7 @@ function renderInboxPanel() {
 function renderHome() {
   const activeTasks = state.tasks
     .filter(t => ['open', 'accepted', 'completed', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status))
+    .filter(t => t.status === 'completed' || !shouldSweepExpiredTask(t))
     .slice()
     .sort((a, b) => {
       const da = a.deadline || Number.POSITIVE_INFINITY;
@@ -1686,7 +1687,9 @@ function buildCalendarDayMap(year, month) {
 
   // 承認済み・削除済みも含め、過去の仕事がカレンダーから消えないようにする
   const listed = (state.tasks || []).filter(t =>
-    t.deadline && !['proposed', 'proposal_rejected'].includes(t.status)
+    t.deadline
+    && !['proposed', 'proposal_rejected', 'deleted'].includes(t.status)
+    && (t.status === 'completed' || t.status === 'approved' || !shouldSweepExpiredTask(t))
   );
   for (const t of listed) {
     const j = japanParts(new Date(t.deadline));

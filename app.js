@@ -1,10 +1,10 @@
-import { state } from './state.js?v=191';
-import { render } from './ui.js?v=191';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount } from './utils.js?v=191';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=191';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=191';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=191';
-import { db, auth } from './firebase.js?v=191';
+import { state } from './state.js?v=192';
+import { render } from './ui.js?v=192';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=192';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=192';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=192';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=192';
+import { db, auth } from './firebase.js?v=192';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -264,29 +264,13 @@ if (typeof document !== 'undefined') {
 
 let isCleaningExpiredTasks = false;
 
-/** 期限が切れた当日の仕事を、その日 23:59 以降に自動削除 */
+/** 昨日以前の期限切れ仕事を消す。親子どちらでも動かす（親端末が閉じていると残るのを防ぐ） */
 async function cleanupExpiredDeadlineTasks() {
-  if (state.role !== 'parent' || !state.familyCode || isCleaningExpiredTasks) return;
+  if (!state.familyCode || isCleaningExpiredTasks) return;
   if (!Array.isArray(state.tasks) || state.tasks.length === 0) return;
 
-  const now = new Date();
-  const nowMs = now.getTime();
-  const targets = [];
-
-  for (const t of state.tasks) {
-    if (!t.deadline) continue;
-    // 進行中・提案・お断りのみ（完了待ち・承認済みは残す）
-    if (!['open', 'accepted', 'proposed', 'rejected', 'proposal_rejected'].includes(t.status)) continue;
-    // まだ期限前
-    if (t.deadline > nowMs) continue;
-
-    const dl = japanParts(new Date(t.deadline));
-    // 期限日（日本時間）の 23:59:00
-    const dayEnd = japanDeadlineMs(23, 59, new Date(t.deadline));
-    if (nowMs < dayEnd) continue;
-
-    targets.push(t);
-  }
+  const nowMs = Date.now();
+  const targets = state.tasks.filter(t => shouldSweepExpiredTask(t, nowMs));
 
   if (targets.length === 0) return;
 
@@ -2160,6 +2144,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=191').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=192').catch(err => console.warn('SW登録失敗:', err));
   });
 }
