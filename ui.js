@@ -1,7 +1,7 @@
-import { state } from './state.js?v=190';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=190';
-import { refreshTutorial } from './tutorial.js?v=190';
-import { auth } from './firebase.js?v=190';
+import { state } from './state.js?v=191';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments } from './utils.js?v=191';
+import { refreshTutorial } from './tutorial.js?v=191';
+import { auth } from './firebase.js?v=191';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1519,8 +1519,6 @@ function renderNews() {
       ${rb('ニュース','にゅーす')}
     </h2>
     ${updatedLine}
-    <p class="text-[11px] font-bold text-slate-500 mb-1 leading-relaxed">12〜15歳向けの解説です。媒体の見出しは転載していません。</p>
-    <p class="text-[11px] font-bold text-slate-500 mb-4 leading-relaxed">Yahoo・Googleニュースや、AI学習・自動収集を禁じている媒体のRSSは使っていません。</p>
     ${blocks}
   `;
 }
