@@ -1,7 +1,7 @@
-import { state } from './state.js?v=195';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=195';
-import { refreshTutorial } from './tutorial.js?v=195';
-import { auth } from './firebase.js?v=195';
+import { state } from './state.js?v=196';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=196';
+import { refreshTutorial } from './tutorial.js?v=196';
+import { auth } from './firebase.js?v=196';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1785,17 +1785,6 @@ function renderCalendar() {
     const hasTask = items.some(x => x.kind === 'task');
     const hasPlan = items.some(x => x.kind === 'planned');
     const overdue = items.some(x => x.kind === 'task' && x.deadline && x.deadline < Date.now() && !['completed', 'approved'].includes(x.status));
-    const dots = items.slice(0, 3).map(x => {
-      let cls = 'plan';
-      if (x.kind === 'task') {
-        if (x.status === 'completed') cls = 'done';
-        else if (x.deadline && x.deadline < Date.now()) cls = 'over';
-        else if (x.repeat) cls = 'repeat';
-        else cls = 'task';
-      }
-      return `<span class="ie-cal-dot ${cls}"></span>`;
-    }).join('');
-    const more = items.length > 3 ? `<span class="ie-cal-more">+${items.length - 3}</span>` : '';
     const preview = items[0]
       ? `<span class="ie-cal-preview">${esc(items[0].title)}</span>`
       : '';
@@ -1803,7 +1792,6 @@ function renderCalendar() {
       <button type="button" class="ie-cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''} ${hasTask || hasPlan ? 'has' : ''} ${overdue ? 'overdue' : ''}"
               onclick="selectCalendarDay(${day})" aria-label="${month}月${day}日${items.length ? ` 仕事${items.length}件` : ''}" aria-pressed="${isSelected}">
         <span class="ie-cal-num">${day}</span>
-        <span class="ie-cal-marks">${dots}${more}</span>
         ${preview}
       </button>
     `);
@@ -1855,12 +1843,6 @@ function renderCalendar() {
       </div>
       <div class="ie-cal-weekhead">${weekHead}</div>
       <div class="ie-cal-grid">${cells.join('')}</div>
-      <div class="ie-cal-legend">
-        <span><i class="ie-cal-dot task"></i>仕事</span>
-        <span><i class="ie-cal-dot repeat"></i>定期</span>
-        <span><i class="ie-cal-dot plan"></i>これから</span>
-        <span><i class="ie-cal-dot over"></i>期限切れ</span>
-      </div>
     </div>
 
     <div class="mt-4">

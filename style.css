@@ -1520,31 +1520,6 @@ body.ie-tour-open { overflow: hidden; }
   justify-content: center;
   line-height: 1;
 }
-.ie-cal-marks {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-height: 8px;
-  padding-left: 1px;
-}
-.ie-cal-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  display: inline-block;
-  flex: none;
-}
-.ie-cal-dot.task { background: var(--ie-accent); }
-.ie-cal-dot.repeat { background: #4a7bd6; }
-.ie-cal-dot.plan { background: #b7c7c1; }
-.ie-cal-dot.done { background: #c47a20; }
-.ie-cal-dot.over { background: #d9655b; }
-.ie-cal-more {
-  font-size: 7px;
-  font-weight: 900;
-  color: var(--ie-muted);
-  line-height: 1;
-}
 .ie-cal-preview {
   font-size: 7.5px;
   font-weight: 800;
@@ -1555,22 +1530,6 @@ body.ie-tour-open { overflow: hidden; }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-word;
-}
-.ie-cal-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--ie-line-soft);
-  font-size: 9px;
-  font-weight: 800;
-  color: var(--ie-muted);
-}
-.ie-cal-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 .ie-cal-item {
   display: flex;
