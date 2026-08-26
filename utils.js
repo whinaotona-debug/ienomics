@@ -1,4 +1,4 @@
-import { state } from './state.js?v=219';
+import { state } from './state.js?v=220';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -233,12 +233,23 @@ export function shiftJapanDayKey(dayKey, deltaDays) {
 }
 
 /**
- * 自動支払いの「直近の引落日」（今日以前）。取りこぼし回収用。
- * 戻り値: 日付キー。まだ来ていない／対象外なら null。
+ * 支払い設定が作られた日本日付。これより前の期日は落とさない。
+ */
+function paymentCreatedDayKey(p) {
+  const at = Number(p?.createdAt) || 0;
+  if (!(at > 0)) return null;
+  return japanTodayKey(new Date(at));
+}
+
+/**
+ * 自動支払いの「直近の引落日」（今日以前）。
+ * 戻り値: 日付キー。まだ来ていない／設定前の期日なら null。
  */
 export function lastScheduledPaymentDueKey(p, todayStr = japanTodayKey()) {
   if (!p || p.status !== 'active') return null;
   const todayVal = dateKeyToValue(todayStr);
+  const createdKey = paymentCreatedDayKey(p);
+  const createdVal = createdKey ? dateKeyToValue(createdKey) : null;
 
   if (p.mode === 'once') {
     if (!p.dueDate) return null;
@@ -252,6 +263,7 @@ export function lastScheduledPaymentDueKey(p, todayStr = japanTodayKey()) {
   if (p.interval === 'weekly') {
     for (let back = 0; back < 14; back++) {
       const key = shiftJapanDayKey(todayStr, -back);
+      if (createdVal != null && dateKeyToValue(key) < createdVal) break;
       const [y, m, d] = key.split('-').map(Number);
       const j = japanParts(new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`));
       if (days.includes(j.weekday)) return key;
@@ -262,6 +274,7 @@ export function lastScheduledPaymentDueKey(p, todayStr = japanTodayKey()) {
   // monthly
   for (let back = 0; back < 62; back++) {
     const key = shiftJapanDayKey(todayStr, -back);
+    if (createdVal != null && dateKeyToValue(key) < createdVal) break;
     const [y, m, d] = key.split('-').map(Number);
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
     if (days.some(day => Math.min(day, last) === d)) return key;
@@ -269,7 +282,11 @@ export function lastScheduledPaymentDueKey(p, todayStr = japanTodayKey()) {
   return null;
 }
 
-/** いま引落すべきか。取りこぼした日があれば回収する */
+/**
+ * いま引落すべきか。
+ * 定期は「期日の当日」だけ落とす（昨日以前の分をまとめて回収しない）。
+ * 単発は指定日以降の未引落をその日に落とす。
+ */
 export function isScheduledPaymentDue(p, todayStr = japanTodayKey()) {
   if (!p || p.status !== 'active') return false;
   if (p.mode === 'once' && p.lastChargedKey) return false;
@@ -277,6 +294,13 @@ export function isScheduledPaymentDue(p, todayStr = japanTodayKey()) {
   const dueKey = lastScheduledPaymentDueKey(p, todayStr);
   if (!dueKey) return false;
   if (p.lastChargedKey && dateKeyToValue(p.lastChargedKey) >= dateKeyToValue(dueKey)) return false;
+
+  const createdKey = paymentCreatedDayKey(p);
+  if (createdKey && dateKeyToValue(dueKey) < dateKeyToValue(createdKey)) return false;
+
+  // 毎週・毎月は当日のみ（25日設定を26日にまとめて落とさない）
+  if (p.mode !== 'once' && String(dueKey) !== String(todayStr)) return false;
+
   return true;
 }
 

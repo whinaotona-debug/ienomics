@@ -624,9 +624,17 @@ function shiftJapanDayKey(dayKey, deltaDays) {
   return japanTodayKey(new Date(ms));
 }
 
+function paymentCreatedDayKey(p) {
+  const at = Number(p?.createdAt) || 0;
+  if (!(at > 0)) return null;
+  return japanTodayKey(new Date(at));
+}
+
 function lastScheduledPaymentDueKey(p, todayStr) {
   if (!p || p.status !== 'active') return null;
   const todayVal = dateKeyToValue(todayStr);
+  const createdKey = paymentCreatedDayKey(p);
+  const createdVal = createdKey ? dateKeyToValue(createdKey) : null;
 
   if (p.mode === 'once') {
     if (!p.dueDate) return null;
@@ -640,6 +648,7 @@ function lastScheduledPaymentDueKey(p, todayStr) {
   if (p.interval === 'weekly') {
     for (let back = 0; back < 14; back++) {
       const key = shiftJapanDayKey(todayStr, -back);
+      if (createdVal != null && dateKeyToValue(key) < createdVal) break;
       const [y, m, d] = key.split('-').map(Number);
       const j = japanParts(new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`));
       if (days.includes(j.weekday)) return key;
@@ -649,6 +658,7 @@ function lastScheduledPaymentDueKey(p, todayStr) {
 
   for (let back = 0; back < 62; back++) {
     const key = shiftJapanDayKey(todayStr, -back);
+    if (createdVal != null && dateKeyToValue(key) < createdVal) break;
     const [y, m, d] = key.split('-').map(Number);
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
     if (days.some(day => Math.min(day, last) === d)) return key;
@@ -662,6 +672,10 @@ function isPaymentDue(p, todayStr) {
   const dueKey = lastScheduledPaymentDueKey(p, todayStr);
   if (!dueKey) return false;
   if (p.lastChargedKey && dateKeyToValue(p.lastChargedKey) >= dateKeyToValue(dueKey)) return false;
+  const createdKey = paymentCreatedDayKey(p);
+  if (createdKey && dateKeyToValue(dueKey) < dateKeyToValue(createdKey)) return false;
+  // 定期は期日当日だけ
+  if (p.mode !== 'once' && String(dueKey) !== String(todayStr)) return false;
   return true;
 }
 

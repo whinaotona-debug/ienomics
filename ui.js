@@ -1,7 +1,7 @@
-import { state } from './state.js?v=219';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=219';
-import { refreshTutorial } from './tutorial.js?v=219';
-import { auth } from './firebase.js?v=219';
+import { state } from './state.js?v=220';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=220';
+import { refreshTutorial } from './tutorial.js?v=220';
+import { auth } from './firebase.js?v=220';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1165,8 +1165,8 @@ function renderPayments() {
     </h2>
     <p class="text-[10px] font-bold text-slate-400 mb-4 leading-relaxed">
       ${state.role === 'parent'
-        ? '期日になると、ホーム上の口座残高（大きな数字）から自動で引き落とされます。家庭内銀行の預け入れには触れません。'
-        : '設定された支払いが、期日にホーム上の口座残高から引き落とされます。'}
+        ? '期日の当日に、ホーム上の口座残高から引き落とされます。毎週・毎月は当日だけです（過ぎた日の分をまとめて落としません）。'
+        : '設定された支払いは、期日の当日にホーム上の口座残高から引き落とされます。'}
     </p>
     ${state.role === 'parent' ? `<button onclick="setView('paymentCreate')" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-5">＋ 支払いを設定</button>` : ''}
     <p class="text-[9px] font-bold text-slate-400 mb-2 tracking-wider">設定中</p>
