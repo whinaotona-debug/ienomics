@@ -410,7 +410,7 @@ body.furigana-on .nav-tab span {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 0;
   min-width: 0;
 }
 .ie-hero-sync {
@@ -427,44 +427,75 @@ body.furigana-on .nav-tab span {
   cursor: pointer;
 }
 .ie-hero-sync:active { opacity: 0.85; }
-/* ヒーロー：同期IDの下に、枠なしの小さい名前切り替え */
-.ie-hero-aside .ie-child-select-quiet {
-  display: block;
-  margin: 1px 0 0;
-  padding: 0;
-  border: none;
+.ie-hero-aside-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  margin-top: 6px;
   width: auto;
   max-width: 100%;
-  align-self: flex-end;
-  line-height: 1;
 }
-.ie-hero-aside .ie-child-select-quiet .ie-child-select-input {
+/* 同期ID下：コピー案内と同じトーンの名前切り替え */
+.ie-child-pick {
   display: block;
-  width: auto;
-  max-width: 6.8rem;
   margin: 0;
-  padding: 0 12px 0 0;
+  padding: 0;
   border: none;
+  line-height: 1;
+  max-width: 100%;
+}
+.ie-child-pick-input {
+  display: block;
+  margin: 0;
+  padding: 0 10px 0 0;
+  max-width: 7rem;
+  border: 0;
   border-radius: 0;
-  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.42)' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 0 center;
-  background-size: 9px;
-  color: rgba(255,255,255,0.52);
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.35)' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0 center;
+  background-size: 8px;
+  color: rgba(255,255,255,0.4);
   font: inherit;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
   text-align: right;
-  line-height: 1.2;
   box-shadow: none;
+  outline: none;
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
+  field-sizing: content;
 }
-.ie-hero-aside .ie-child-select-quiet .ie-child-select-input:focus {
-  border: none;
-  color: rgba(255,255,255,0.78);
-  outline: none;
+.ie-child-pick-input:focus,
+.ie-child-pick-input:active {
+  color: rgba(255,255,255,0.62);
 }
+.ie-child-pick-input option {
+  color: #1c2b27;
+  background: #eef6f3;
+  font-weight: 700;
+  text-align: left;
+}
+.ie-hero-copyhint {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.4);
+  line-height: 1;
+  cursor: pointer;
+}
+.ie-hero-copyhint:active { opacity: 0.75; }
 .ie-child-select {
   display: flex;
   align-items: center;
@@ -497,6 +528,10 @@ body.furigana-on .nav-tab span {
   border-radius: 8px;
   padding: 5px 26px 5px 9px;
   max-width: 11rem;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  outline: none;
 }
 .ie-child-select-label {
   flex: none;
@@ -638,13 +673,6 @@ body.furigana-on .ie-hero-label .ie-ruby-rt {
   line-height: 1.1;
   margin: 0;
   min-height: 1.1em;
-}
-.ie-hero-copyhint {
-  font-size: 8px;
-  font-weight: 700;
-  color: rgba(255,255,255,0.55);
-  margin-top: 4px;
-  line-height: 1;
 }
 
 /* ptスロット風カウント */

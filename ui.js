@@ -1,7 +1,7 @@
-import { state } from './state.js?v=207';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=207';
-import { refreshTutorial } from './tutorial.js?v=207';
-import { auth } from './firebase.js?v=207';
+import { state } from './state.js?v=208';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=208';
+import { refreshTutorial } from './tutorial.js?v=208';
+import { auth } from './firebase.js?v=208';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -324,8 +324,8 @@ function renderChildSelect(tone = 'hero') {
 
   if (tone === 'hero') {
     return `
-      <label class="ie-child-select ie-child-select-quiet" data-tour="childtabs">
-        <select class="ie-child-select-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
+      <label class="ie-child-pick" data-tour="childtabs">
+        <select class="ie-child-pick-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
       </label>
     `;
   }
@@ -427,9 +427,11 @@ function renderHeader() {
             <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
               <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
               <p class="ie-hero-code">${esc(state.familyCode)}</p>
-              <p class="ie-hero-copyhint">タップでコピー</p>
             </button>
-            ${childSelect}
+            <div class="ie-hero-aside-meta">
+              ${childSelect}
+              <button type="button" onclick="copySyncCode()" class="ie-hero-copyhint" tabindex="-1">タップでコピー</button>
+            </div>
           </div>
         </div>
       </div>
