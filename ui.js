@@ -1,7 +1,7 @@
-import { state } from './state.js?v=206';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=206';
-import { refreshTutorial } from './tutorial.js?v=206';
-import { auth } from './firebase.js?v=206';
+import { state } from './state.js?v=207';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=207';
+import { refreshTutorial } from './tutorial.js?v=207';
+import { auth } from './firebase.js?v=207';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -317,15 +317,21 @@ function renderChildSelect(tone = 'hero') {
   if (list.length < 2) return '';
 
   const options = list.map(c => {
-    const wait = c.childLinked === false ? '（つながり待ち）' : '';
+    const wait = c.childLinked === false ? '（待ち）' : '';
     const on = c.id === state.familyCode;
     return `<option value="${esc(c.id)}" ${on ? 'selected' : ''}>${esc(c.childName || 'こども')}${wait}</option>`;
   }).join('');
 
-  const extra = tone === 'light' ? ' ie-child-select-light' : '';
-  const tour = tone === 'hero' ? ' data-tour="childtabs"' : '';
+  if (tone === 'hero') {
+    return `
+      <label class="ie-child-select ie-child-select-quiet" data-tour="childtabs">
+        <select class="ie-child-select-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
+      </label>
+    `;
+  }
+
   return `
-    <label class="ie-child-select${extra}"${tour}>
+    <label class="ie-child-select ie-child-select-light">
       <span class="ie-child-select-label">こども</span>
       <select class="ie-child-select-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
     </label>

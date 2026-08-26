@@ -404,18 +404,17 @@ body.furigana-on .nav-tab span {
 }
 .ie-hero-aside {
   flex: 0 0 auto;
-  max-width: 42%;
+  max-width: 38%;
   position: relative;
   z-index: 12;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
 }
 .ie-hero-sync {
   flex: 0 0 auto;
-  width: 100%;
   text-align: right;
   display: flex;
   flex-direction: column;
@@ -428,34 +427,43 @@ body.furigana-on .nav-tab span {
   cursor: pointer;
 }
 .ie-hero-sync:active { opacity: 0.85; }
-.ie-hero-aside .ie-child-select {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  margin: 0;
+/* ヒーロー：同期IDの下に、枠なしの小さい名前切り替え */
+.ie-hero-aside .ie-child-select-quiet {
+  display: block;
+  margin: 1px 0 0;
   padding: 0;
   border: none;
-  width: 100%;
-  max-width: 9.5rem;
-}
-.ie-hero-aside .ie-child-select-label {
-  font-size: 8px;
-  letter-spacing: 0.06em;
-  color: rgba(255,255,255,0.5);
+  width: auto;
+  max-width: 100%;
+  align-self: flex-end;
   line-height: 1;
 }
-.ie-hero-aside .ie-child-select-input {
-  width: 100%;
-  max-width: none;
-  font-size: 10px;
-  padding: 3px 20px 3px 7px;
-  border-radius: 7px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(8, 36, 32, 0.32) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 5px center;
-  background-size: 11px;
-  color: rgba(255,255,255,0.88);
+.ie-hero-aside .ie-child-select-quiet .ie-child-select-input {
+  display: block;
+  width: auto;
+  max-width: 6.8rem;
+  margin: 0;
+  padding: 0 12px 0 0;
+  border: none;
+  border-radius: 0;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.42)' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 0 center;
+  background-size: 9px;
+  color: rgba(255,255,255,0.52);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: right;
+  line-height: 1.2;
   box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.ie-hero-aside .ie-child-select-quiet .ie-child-select-input:focus {
+  border: none;
+  color: rgba(255,255,255,0.78);
+  outline: none;
 }
 .ie-child-select {
   display: flex;
@@ -484,6 +492,11 @@ body.furigana-on .nav-tab span {
   background-size: 14px;
   color: #2c3d38;
   box-shadow: none;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 5px 26px 5px 9px;
+  max-width: 11rem;
 }
 .ie-child-select-label {
   flex: none;
@@ -496,28 +509,16 @@ body.furigana-on .nav-tab span {
 .ie-child-select-input {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: 10.5rem;
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(8, 36, 32, 0.28) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 6px center;
-  background-size: 12px;
-  color: rgba(255,255,255,0.78);
   font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 8px;
-  padding: 4px 22px 4px 8px;
   outline: none;
-  box-shadow: none;
-}
-.ie-child-select-input:focus {
-  border-color: rgba(255,255,255,0.28);
 }
 .ie-child-select-input option {
   color: #1c2b27;
   background: #eef6f3;
   font-weight: 700;
+  text-align: left;
 }
 .ie-invest-flash {
   display: flex;
@@ -642,7 +643,7 @@ body.furigana-on .ie-hero-label .ie-ruby-rt {
   font-size: 8px;
   font-weight: 700;
   color: rgba(255,255,255,0.55);
-  margin-top: 6px;
+  margin-top: 4px;
   line-height: 1;
 }
 
