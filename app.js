@@ -1,10 +1,10 @@
-import { state } from './state.js?v=210';
-import { render } from './ui.js?v=210';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=210';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=210';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=210';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=210';
-import { db, auth } from './firebase.js?v=210';
+import { state } from './state.js?v=211';
+import { render } from './ui.js?v=211';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=211';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=211';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=211';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=211';
+import { db, auth } from './firebase.js?v=211';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -48,7 +48,7 @@ async function guard(key, fn, { busy = true, busyLabel = '通信中...' } = {}) 
 function friendlyError(error) {
   const code = error?.code || '';
   if (code === 'permission-denied') {
-    return 'このデータを操作する権限がありません。同期IDやログイン状態を確認してください。';
+    return 'うまく送れませんでした。アプリを開き直すか、設定で同期IDをつなぎ直してください。';
   }
   if (code === 'unavailable' || code === 'auth/network-request-failed') {
     return 'ネットワークにつながりませんでした。通信状況を確認してもう一度お試しください。';
@@ -56,7 +56,11 @@ function friendlyError(error) {
   if (code === 'auth/too-many-requests') {
     return '試行回数が多すぎます。しばらく待ってからお試しください。';
   }
-  return error?.message || '不明なエラーが発生しました。';
+  const msg = String(error?.message || '');
+  if (/権限|permission|Permission/i.test(msg)) {
+    return 'うまく送れませんでした。アプリを開き直すか、設定で同期IDをつなぎ直してください。';
+  }
+  return msg || 'うまくいきませんでした。もう一度お試しください。';
 }
 
 /** 紛らわしい文字（0/O、1/I/L）を避けた6文字の同期IDを、重複しないように作る */
@@ -150,7 +154,7 @@ async function ensureChildMember() {
   } catch (error) {
     console.error('メンバー登録に失敗:', error);
     if (error?.code === 'permission-denied') {
-      throw new Error('この口座への接続が切れています。設定で同期IDをつなぎ直してください。');
+      throw new Error('うまく送れませんでした。設定で同期IDをつなぎ直してください。');
     }
     throw error;
   }
@@ -2300,6 +2304,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=210').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=211').catch(err => console.warn('SW登録失敗:', err));
   });
 }

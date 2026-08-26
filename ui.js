@@ -1,7 +1,7 @@
-import { state } from './state.js?v=210';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=210';
-import { refreshTutorial } from './tutorial.js?v=210';
-import { auth } from './firebase.js?v=210';
+import { state } from './state.js?v=211';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=211';
+import { refreshTutorial } from './tutorial.js?v=211';
+import { auth } from './firebase.js?v=211';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -191,6 +191,7 @@ export function render() {
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
   animatePointsDisplay();
   bindSwipeRows(appDiv);
+  bindChildPickOutsideClose();
   tickJapanClock();
   if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
   // 画面が作り直されたので、ガイドの枠を測り直す
@@ -205,6 +206,22 @@ function tickJapanClock() {
 if (typeof window !== 'undefined' && !window.__ieClockStarted) {
   window.__ieClockStarted = true;
   setInterval(tickJapanClock, 15000);
+}
+
+/** 子切り替えメニュー：外側をタップしたら閉じる（1回だけ登録） */
+function bindChildPickOutsideClose() {
+  if (typeof window === 'undefined' || window.__ieChildPickCloseBound) return;
+  window.__ieChildPickCloseBound = true;
+  const closeOpenPicks = (e) => {
+    document.querySelectorAll('details.ie-child-pick[open]').forEach((el) => {
+      if (!el.contains(e.target)) el.open = false;
+    });
+  };
+  document.addEventListener('pointerdown', closeOpenPicks, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    document.querySelectorAll('details.ie-child-pick[open]').forEach((el) => { el.open = false; });
+  });
 }
 
 /**
