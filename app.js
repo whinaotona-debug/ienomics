@@ -1,10 +1,10 @@
-import { state } from './state.js?v=211';
-import { render } from './ui.js?v=211';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=211';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=211';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=211';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=211';
-import { db, auth } from './firebase.js?v=211';
+import { state } from './state.js?v=212';
+import { render } from './ui.js?v=212';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=212';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=212';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=212';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=212';
+import { db, auth } from './firebase.js?v=212';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -48,7 +48,7 @@ async function guard(key, fn, { busy = true, busyLabel = '通信中...' } = {}) 
 function friendlyError(error) {
   const code = error?.code || '';
   if (code === 'permission-denied') {
-    return 'うまく送れませんでした。アプリを開き直すか、設定で同期IDをつなぎ直してください。';
+    return 'もう一度お試しください。';
   }
   if (code === 'unavailable' || code === 'auth/network-request-failed') {
     return 'ネットワークにつながりませんでした。通信状況を確認してもう一度お試しください。';
@@ -56,11 +56,11 @@ function friendlyError(error) {
   if (code === 'auth/too-many-requests') {
     return '試行回数が多すぎます。しばらく待ってからお試しください。';
   }
-  const msg = String(error?.message || '');
-  if (/権限|permission|Permission/i.test(msg)) {
-    return 'うまく送れませんでした。アプリを開き直すか、設定で同期IDをつなぎ直してください。';
+  const msg = String(error?.message || '').trim();
+  if (!msg || /権限|permission|Permission|authorized|Unauthorized/i.test(msg)) {
+    return 'もう一度お試しください。';
   }
-  return msg || 'うまくいきませんでした。もう一度お試しください。';
+  return msg;
 }
 
 /** 紛らわしい文字（0/O、1/I/L）を避けた6文字の同期IDを、重複しないように作る */
@@ -135,29 +135,26 @@ window.enablePushNotifications = async () => {
   }
 };
 
-/** この端末を、その家族のメンバーとして登録する（書き込み権限の前提） */
+/** この端末を、その家族のメンバーとして登録する（失敗しても書き込みは続行） */
 async function claimChildMembership(code) {
-  if (!code) throw new Error('同期IDがありません');
-  const user = await ensureAnonymousAuth();
-  await updateDoc(doc(db, "families", code), {
-    childUids: arrayUnion(user.uid),
-    childLinked: true
-  });
+  if (!code) return;
+  try {
+    const user = await ensureAnonymousAuth();
+    await updateDoc(doc(db, "families", code), {
+      childUids: arrayUnion(user.uid),
+      childLinked: true
+    });
+  } catch (error) {
+    console.warn('メンバー登録スキップ:', error);
+  }
 }
 
-/** 子供側の書き込み前に、ログインとメンバー登録を確かめる */
+/** 子供側の書き込み前に、匿名ログインだけ確かめる */
 async function ensureChildMember() {
   if (state.role !== 'child') return;
-  if (!state.familyCode) throw new Error('同期IDがありません。設定からつなぎ直してください。');
-  try {
-    await claimChildMembership(state.familyCode);
-  } catch (error) {
-    console.error('メンバー登録に失敗:', error);
-    if (error?.code === 'permission-denied') {
-      throw new Error('うまく送れませんでした。設定で同期IDをつなぎ直してください。');
-    }
-    throw error;
-  }
+  if (!state.familyCode) throw new Error('同期IDがありません');
+  await ensureAnonymousAuth();
+  await claimChildMembership(state.familyCode);
 }
 
 // ★ 追加：今日追加したテンプレートのIDを記憶しておく箱（セッション中の一時記憶）
@@ -2304,6 +2301,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=211').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=212').catch(err => console.warn('SW登録失敗:', err));
   });
 }
