@@ -1,10 +1,10 @@
-import { state } from './state.js?v=220';
-import { render } from './ui.js?v=220';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=220';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=220';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=220';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=220';
-import { db, auth } from './firebase.js?v=220';
+import { state } from './state.js?v=221';
+import { render } from './ui.js?v=221';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=221';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=221';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=221';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=221';
+import { db, auth } from './firebase.js?v=221';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -389,7 +389,6 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
     return 'synced';
   }
 
-  // 銀行預け入れと同じく、口座ポイントを increment で減らす（上の大きな数字）
   const famSnap = await getDoc(famRef);
   if (!snapExists(famSnap)) {
     throw new Error('口座データが見つかりません');
@@ -398,44 +397,18 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
   const ptsAfter = ptsBefore - amount;
   const wentNegative = ptsAfter < 0;
 
-  // 履歴スロットを確保してから残高を減らす（二重引落防止）
-  try {
-    await runTransaction(db, async (tx) => {
-      const chargeSnap = await tx.get(chargeRef);
-      if (snapExists(chargeSnap)) {
-        const err = new Error('already-charged');
-        err.code = 'already-charged';
-        throw err;
-      }
-      tx.set(chargeRef, {
-        familyCode,
-        paymentId: p.id,
-        title,
-        amount,
-        points: amount,
-        chargedAt: Date.now(),
-        createdAt: Date.now(),
-        chargeKey: dueKey,
-        ...(wentNegative ? { wentNegative: true } : {})
-      });
-    });
-  } catch (err) {
-    if (err?.code === 'already-charged' || /already-charged/.test(String(err?.message || ''))) {
-      const paySnap = await getDoc(payRef);
-      if (snapExists(paySnap)) {
-        const payData = paySnap.data();
-        const alreadyMarked = payData.lastChargedKey
-          && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey);
-        if (payData.status === 'active' && !alreadyMarked) {
-          const sync = { lastChargedKey: dueKey };
-          if (payData.mode === 'once') sync.status = 'done';
-          await updateDoc(payRef, sync);
-        }
-      }
-      return 'synced';
-    }
-    throw err;
-  }
+  // 銀行預け入れと同じ手順: 履歴作成 → 口座を減らす → 支払い設定を更新
+  await setDoc(chargeRef, {
+    familyCode,
+    paymentId: p.id,
+    title,
+    amount,
+    points: amount,
+    chargedAt: Date.now(),
+    createdAt: Date.now(),
+    chargeKey: dueKey,
+    ...(wentNegative ? { wentNegative: true } : {})
+  });
 
   try {
     await updateDoc(famRef, { points: increment(-amount) });
@@ -448,7 +421,6 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
     throw err;
   }
 
-  // いま見ている口座なら、表示もすぐ減らす
   if (familyCode === state.familyCode) {
     state.points = ptsAfter;
   }
@@ -2391,6 +2363,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=220').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=221').catch(err => console.warn('SW登録失敗:', err));
   });
 }

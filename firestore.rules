@@ -128,7 +128,13 @@ service cloud.firestore {
     }
 
     match /paymentLogs/{docId} {
-      allow read: if canReadDoc();
+      // 未作成ドキュメントの get も許可する（引落前の有無確認用）。
+      // 無いと resource.data 参照で permission-denied になり、新規引落が全部失敗する。
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/paymentLogs/$(docId))
+        || canUseFamily(resource.data.familyCode)
+      );
+      allow list: if canReadDoc();
       allow create: if canCreateDoc();
       allow update: if canModifyDoc();
       allow delete: if canUseFamily(resource.data.familyCode);
