@@ -1,4 +1,4 @@
-import { state } from './state.js?v=214';
+import { state } from './state.js?v=215';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -984,18 +984,24 @@ function chartDayLabel(ms) {
 /** その銘柄（または全体）で最初に運用を始めた時刻 */
 function firstInvestMs(investments, logs, name = null) {
   let min = null;
-  const consider = (t) => {
-    const n = Number(t) || 0;
-    if (!n) return;
+  const consider = (v) => {
+    const n = Number(v);
+    if (!(n > 0)) return;
+    // 明らかに壊れた古い日付は無視
+    if (n < Date.parse('2024-01-01T00:00:00+09:00')) return;
     if (min == null || n < min) min = n;
   };
   for (const inv of investments || []) {
     if (name && inv.name !== name) continue;
+    if (inv.status === 'sold' && !(Number(inv.investedPoints) > 0)) continue;
     consider(inv.createdAt);
   }
   for (const log of logs || []) {
     if (log.type === 'eod') continue;
+    // 自動補完ログは開始日判定に使わない（昔の日に元本が載る原因になる）
+    if (log.backfilled) continue;
     if (name && log.name !== name) continue;
+    if (!isTradeLog(log)) continue;
     consider(log.at);
   }
   return min;
@@ -1004,7 +1010,7 @@ function firstInvestMs(investments, logs, name = null) {
 /**
  * 市場レートの時系列。
  * range: 'week' | 'month' | 'all'
- * opts.fromMs: 全期間の開始（運用開始日）。未指定なら表の先頭から。
+ * opts.fromMs: 運用開始日。これより前の日はグラフに出さない。
  */
 export function getMarketRates(range = 'month', opts = {}) {
   const now = new Date();
@@ -1033,26 +1039,24 @@ export function getMarketRates(range = 'month', opts = {}) {
     return rates;
   };
 
+  const end = japanDayStartMs(now);
+  const fromFloor = opts.fromMs != null ? japanDayStartMs(new Date(opts.fromMs)) : null;
+
   if (range === 'all') {
-    const end = japanDayStartMs(now);
-    let start = opts.fromMs != null
-      ? japanDayStartMs(new Date(opts.fromMs))
+    let start = fromFloor != null
+      ? fromFloor
       : (reference?.[0]?.ms ?? end);
     if (start > end) start = end;
 
-    // 始めた日〜今日のカレンダーを作り、見やすい点数に間引く（5年でも〇/〇で読める）
     const dayPoints = [];
     for (let ms = start; ms <= end; ms += 86400000) {
       dayPoints.push({ ms });
     }
-    // 相場表にある日があれば優先して密度を保つが、開始日より前は切る
     let points = dayPoints;
     if (reference?.length) {
       const fromSheet = reference.filter(p => p.ms >= start && p.ms <= end + 86399999);
-      // 表が開始日以降を十分カバーしているときだけ表を使う
       if (fromSheet.length >= 2) {
         const sheetStart = fromSheet[0].ms;
-        // 開始日が表より前なら、開始日〜表の直前を日次で足す
         if (sheetStart > start) {
           const head = [];
           for (let ms = start; ms < sheetStart; ms += 86400000) head.push({ ms });
@@ -1072,17 +1076,22 @@ export function getMarketRates(range = 'month', opts = {}) {
   let steps = 30;
   if (range === 'week') steps = 7;
   else if (range === 'month') steps = 30;
-  else steps = 7;
 
+  let points;
   if (reference) {
-    return fillRates(reference.slice(-steps));
+    points = reference.slice(-steps);
+  } else {
+    points = [];
+    for (let i = steps - 1; i >= 0; i--) {
+      points.push({ ms: japanDayStartMs(new Date(now.getTime() - i * 86400000)) });
+    }
   }
-
-  const fallbackPts = [];
-  for (let i = steps - 1; i >= 0; i--) {
-    fallbackPts.push({ ms: japanDayStartMs(new Date(now.getTime() - i * 86400000)) });
+  // 株を入れる前の日は切る（表が古い日まであっても元本0の線を引かない）
+  if (fromFloor != null) {
+    points = points.filter(p => p.ms >= fromFloor);
+    if (!points.length) points = [{ ms: end }];
   }
-  return fillRates(fallbackPts);
+  return fillRates(points);
 }
 
 /** いま運用中の株だけ（売却済みは除く） */
@@ -1142,19 +1151,35 @@ function positionFromLogs(logs, name, dayMs) {
   return { principal, shares };
 }
 
+/** 投資ドキュメントの購入日。無いときは売買ログの最初の買いを使う */
+function investmentStartMs(inv, logs) {
+  const created = Number(inv?.createdAt) || 0;
+  if (created > 0) return created;
+  const buys = (logs || [])
+    .filter(l => l.name === inv?.name && l.type === 'buy' && Number(l.at) > 0)
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+  return Number(buys[0]?.at) || 0;
+}
+
 /** 投資ドキュメント（売却済み含む）から、その日の元本と口数を出す */
-function positionFromInvestments(investments, name, dayMs) {
+function positionFromInvestments(investments, logs, name, dayMs) {
   const dayStart = japanDayStartMs(new Date(dayMs));
   const price = sheetRateAt(name, dayMs) ?? 1;
   let principal = 0;
   let shares = 0;
   for (const inv of investments || []) {
     if (inv.name !== name) continue;
-    const created = Number(inv.createdAt) || 0;
-    if (created && japanDayStartMs(new Date(created)) > dayStart) continue;
+    const start = investmentStartMs(inv, logs);
+    // 購入日が不明な持ち株は「今日」にだけ載せる（過去へは伸ばさない）
+    if (!start) {
+      if (dayStart < japanDayStartMs()) continue;
+    } else if (japanDayStartMs(new Date(start)) > dayStart) {
+      continue;
+    }
     const soldAt = Number(inv.soldAt) || 0;
     if (inv.status === 'sold' && soldAt && japanDayStartMs(new Date(soldAt)) <= dayStart) continue;
     const pts = Number(inv.investedPoints) || 0;
+    if (!(pts > 0) && inv.status === 'sold') continue;
     const buy = getBuyRate(inv, price);
     principal += pts;
     shares += pts > 0 && buy > 0 ? pts / buy : 0;
@@ -1167,33 +1192,37 @@ export const CHART_TOTAL = '__total__';
 function positionAtDay(list, logList, name, ms) {
   const todayStart = japanDayStartMs();
   const dayStart = japanDayStartMs(new Date(ms));
-  const fromInv = list.some(inv => inv.name === name)
-    ? positionFromInvestments(list, name, ms)
-    : null;
+  const hasInvDocs = list.some(inv => inv.name === name);
+  const fromInv = hasInvDocs ? positionFromInvestments(list, logList, name, ms) : null;
+  const hasTrades = logList.some(l => l.name === name && isTradeLog(l));
+  const fromLogs = hasTrades ? positionFromLogs(logList, name, ms) : null;
 
+  // 1) 投資ドキュメントがある日はそれを正とする（過去へ元本が伸びるのを防ぐ）
+  if (fromInv && (fromInv.principal > 0 || fromInv.shares > 0)) {
+    // ログ再生がドキュメントより大幅に大きい＝重複買いログ。ドキュメントを使う
+    if (fromLogs && fromLogs.principal > fromInv.principal * 1.05 + 1) return fromInv;
+    return fromInv;
+  }
+
+  // 2) その日は持っていなかった（ドキュメント基準）→ 0。壊れたEODは無視
+  if (fromInv && fromInv.principal <= 0 && fromInv.shares <= 0) {
+    return { principal: 0, shares: 0 };
+  }
+
+  // 3) 過去日のEODは、ログ再生と大きく食い違うときだけ捨てる
   if (dayStart < todayStart) {
     const eod = eodLogForDay(logList, name, ms);
     if (eod) {
       const principal = Number(eod.investedPoints) || Number(eod.principal) || 0;
       const shares = Number(eod.shares) || 0;
-      const invP = fromInv ? fromInv.principal : principal;
-      // 重複した買いログから作った確定ログは、実元本より桁違いに大きい
-      if (!(fromInv && principal > invP * 1.05 + 1)) {
-        const shareOk = !(fromInv && shares > fromInv.shares * 1.05 + 0.0001);
-        return {
-          principal,
-          shares: shareOk ? shares : fromInv.shares
-        };
+      if (fromLogs && principal > fromLogs.principal * 1.05 + 1) {
+        return fromLogs;
       }
+      if (principal > 0 || shares > 0) return { principal, shares };
     }
   }
-  if (fromInv) return fromInv;
-  const hasTrades = logList.some(l => l.name === name && isTradeLog(l));
-  if (hasTrades) {
-    const fromLogs = positionFromLogs(logList, name, ms);
-    if (fromInv && fromLogs.principal > fromInv.principal * 1.05 + 1) return fromInv;
-    return fromLogs;
-  }
+
+  if (fromLogs) return fromLogs;
   return { principal: 0, shares: 0 };
 }
 
@@ -1231,9 +1260,7 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
     ? CHART_TOTAL
     : ((name && names.includes(name)) ? name : CHART_TOTAL);
   const isTotal = targetName === CHART_TOTAL;
-  const fromMs = range === 'all'
-    ? firstInvestMs(list, logList, isTotal ? null : targetName)
-    : null;
+  const fromMs = firstInvestMs(list, logList, isTotal ? null : targetName);
   const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
   const principal = [];
   const assets = [];

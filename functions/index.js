@@ -428,7 +428,7 @@ function replayInvestmentPosition(logs, name, untilMs) {
   let principal = 0;
   let shares = 0;
   const events = (logs || [])
-    .filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell'))
+    .filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell') && !l.backfilled)
     .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
   for (const log of events) {
     const at = Number(log.at) || 0;
@@ -442,6 +442,28 @@ function replayInvestmentPosition(logs, name, untilMs) {
       principal = Math.max(0, principal - pts);
       shares = Math.max(0, shares - sh);
     }
+  }
+  return { principal, shares };
+}
+
+/** 投資ドキュメントから、その時点の元本・口数（重複買いログよりこちらを正とする） */
+function positionFromInvestmentsAt(investments, name, untilMs) {
+  let principal = 0;
+  let shares = 0;
+  for (const inv of investments || []) {
+    if (inv.name !== name) continue;
+    const created = Number(inv.createdAt) || 0;
+    // 購入日が無いものは過去日の確定に載せない
+    if (!created || created > untilMs) continue;
+    const soldAt = Number(inv.soldAt) || 0;
+    if (inv.status === 'sold' && soldAt && soldAt <= untilMs) continue;
+    const pts = Number(inv.investedPoints) || 0;
+    if (!(pts > 0) && inv.status === 'sold') continue;
+    const buy = Number(inv.buyRate) || 0;
+    const storedShares = Number(inv.shares);
+    principal += pts;
+    if (Number.isFinite(storedShares) && storedShares > 0) shares += storedShares;
+    else if (pts > 0 && buy > 0) shares += pts / buy;
   }
   return { principal, shares };
 }
@@ -482,12 +504,20 @@ async function runSnapshotInvestmentEod() {
     const names = new Set();
     for (const inv of bag.inv) if (inv.name) names.add(inv.name);
     for (const log of bag.logs) {
-      if (log.name && (log.type === 'buy' || log.type === 'sell')) names.add(log.name);
+      if (log.name && (log.type === 'buy' || log.type === 'sell') && !log.backfilled) names.add(log.name);
     }
     for (const name of names) {
       const already = bag.logs.some(l => l.type === 'eod' && l.dayKey === yesterday && l.name === name && l.finalized);
       if (already) continue;
-      const pos = replayInvestmentPosition(bag.logs, name, end);
+      const hasInv = bag.inv.some(i => i.name === name);
+      const fromInv = positionFromInvestmentsAt(bag.inv, name, end);
+      const fromLogs = replayInvestmentPosition(bag.logs, name, end);
+      // 持ち株ドキュメントがあるときはそれを正。ログ再生が膨らんでいても上書きしない
+      let pos = hasInv ? fromInv : fromLogs;
+      if (hasInv && fromLogs.principal > 0 && fromLogs.principal < fromInv.principal * 0.95) {
+        // ドキュメントが古くログの方が小さいときはログも参考にしない（売却済みは fromInv=0）
+        pos = fromInv;
+      }
       if (!(pos.principal > 0 || pos.shares > 0)) continue;
       await db.collection('investmentLogs').doc(eodLogDocId(code, name, yesterday)).set({
         familyCode: code,

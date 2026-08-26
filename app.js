@@ -1,10 +1,10 @@
-import { state } from './state.js?v=214';
-import { render } from './ui.js?v=214';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=214';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=214';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=214';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=214';
-import { db, auth } from './firebase.js?v=214';
+import { state } from './state.js?v=215';
+import { render } from './ui.js?v=215';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=215';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=215';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=215';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=215';
+import { db, auth } from './firebase.js?v=215';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1283,29 +1283,42 @@ async function backfillInvestmentBuyLogs() {
   const logs = state.investmentLogs || [];
   if (!invs.length) return;
 
+  const rates = getCurrentMarketRates();
   const missing = [];
   for (const inv of invs) {
     const name = inv.name;
     if (!name) continue;
-    const net = logs
-      .filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell'))
-      .reduce((sum, l) => {
-        const pts = Number(l.investedPoints) || 0;
-        return sum + (l.type === 'sell' ? -pts : pts);
-      }, 0);
     const held = Number(inv.investedPoints) || 0;
-    if (held > 0 && net + 0.5 < held) {
-      const gap = held - Math.max(0, net);
-      const rate = Number(inv.buyRate) || getCurrentMarketRates()[name] || 1;
-      const hasTrades = logs.some(l => l.name === name && (l.type === 'buy' || l.type === 'sell'));
-      missing.push({
-        name,
-        investedPoints: gap,
-        shares: rate > 0 ? gap / rate : 0,
-        rate,
-        at: hasTrades ? Date.now() : (Number(inv.createdAt) || Date.now())
-      });
-    }
+    if (!(held > 0)) continue;
+
+    const tradeLogs = logs.filter(l => l.name === name && (l.type === 'buy' || l.type === 'sell'));
+    const net = tradeLogs.reduce((sum, l) => {
+      const pts = Number(l.investedPoints) || 0;
+      return sum + (l.type === 'sell' ? -pts : pts);
+    }, 0);
+
+    // ログの合計が持ち株より大きい＝重複ログ。足し増ししない
+    if (net > held + 0.5) continue;
+    if (net + 0.5 >= held) continue;
+
+    const gap = held - Math.max(0, net);
+    if (!(gap >= 1)) continue;
+
+    const created = Number(inv.createdAt) || 0;
+    const sheetBuy = created > 0 ? (Number(inv.buyRate) || rates[name] || 1) : (rates[name] || 1);
+    const rate = Number(inv.buyRate) > 0 ? Number(inv.buyRate) : sheetBuy;
+    const safeRate = rate > 0 ? rate : 1;
+    // 壊れた買値で口数が爆発しないよう、今の相場の1/8〜8倍に収める
+    const cur = rates[name] || safeRate;
+    const buy = (safeRate >= cur / 8 && safeRate <= cur * 8) ? safeRate : cur;
+
+    missing.push({
+      name,
+      investedPoints: gap,
+      shares: gap / buy,
+      rate: buy,
+      at: created > 0 ? created : Date.now()
+    });
   }
   if (!missing.length) return;
 
@@ -2283,6 +2296,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=214').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=215').catch(err => console.warn('SW登録失敗:', err));
   });
 }
