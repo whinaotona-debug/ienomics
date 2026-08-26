@@ -1,10 +1,10 @@
-import { state } from './state.js?v=215';
-import { render } from './ui.js?v=215';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=215';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=215';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=215';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=215';
-import { db, auth } from './firebase.js?v=215';
+import { state } from './state.js?v=216';
+import { render } from './ui.js?v=216';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=216';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=216';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=216';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=216';
+import { db, auth } from './firebase.js?v=216';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -332,10 +332,26 @@ async function cleanupExpiredDeadlineTasks() {
 }
 
 let isProcessingPayments = false;
+let paymentProcessQueued = false;
+
+function paymentDoneUpdates(payData, dueKey) {
+  const updates = { lastChargedKey: dueKey };
+  if (payData.mode === 'once') updates.status = 'done';
+  else if (payData.countMode === 'finite') {
+    const left = Math.max(0, (payData.remainingCount ?? 1) - 1);
+    updates.remainingCount = left;
+    if (left <= 0) updates.status = 'done';
+  }
+  return updates;
+}
 
 async function processScheduledPayments() {
-  if (!state.familyCode || isProcessingPayments) return;
+  if (!state.familyCode) return;
   if (!Array.isArray(state.scheduledPayments) || state.scheduledPayments.length === 0) return;
+  if (isProcessingPayments) {
+    paymentProcessQueued = true;
+    return;
+  }
 
   isProcessingPayments = true;
   const now = new Date();
@@ -349,14 +365,7 @@ async function processScheduledPayments() {
       const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
       if (amount <= 0) {
         try {
-          const updates = { lastChargedKey: dueKey };
-          if (p.mode === 'once') updates.status = 'done';
-          else if (p.countMode === 'finite') {
-            const left = Math.max(0, (p.remainingCount ?? 1) - 1);
-            updates.remainingCount = left;
-            if (left <= 0) updates.status = 'done';
-          }
-          await updateDoc(doc(db, "scheduledPayments", p.id), updates);
+          await updateDoc(doc(db, "scheduledPayments", p.id), paymentDoneUpdates(p, dueKey));
         } catch (err) {
           console.error("支払い0円処理エラー:", err);
         }
@@ -371,25 +380,33 @@ async function processScheduledPayments() {
       try {
         let charged = false;
         let wentNegative = false;
+        let alreadyCharged = false;
 
         await runTransaction(db, async (tx) => {
           const chargeSnap = await tx.get(chargeRef);
-          if (chargeSnap.exists()) return;
-
           const famSnap = await tx.get(famRef);
-          if (!famSnap.exists()) return;
-          const pts = famSnap.data().points || 0;
-
           const paySnap = await tx.get(payRef);
           if (!paySnap.exists()) return;
           const payData = paySnap.data();
           if (payData.status !== 'active') return;
+
+          // 履歴だけ先に残っていて未同期のとき、引落済みに揃える
+          if (chargeSnap.exists()) {
+            if (!(payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey))) {
+              tx.update(payRef, paymentDoneUpdates(payData, dueKey));
+            }
+            alreadyCharged = true;
+            return;
+          }
+
+          if (!famSnap.exists()) return;
           if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) return;
 
+          const pts = famSnap.data().points || 0;
           const nextPts = pts - amount;
           wentNegative = nextPts < 0;
 
-          tx.set(chargeRef, {
+          const chargeRow = {
             familyCode: state.familyCode,
             paymentId: p.id,
             title: payData.title || p.title,
@@ -397,20 +414,14 @@ async function processScheduledPayments() {
             points: amount,
             chargedAt: Date.now(),
             createdAt: Date.now(),
-            chargeKey: dueKey,
-            wentNegative: wentNegative || undefined
-          });
-          tx.update(famRef, { points: nextPts });
+            chargeKey: dueKey
+          };
+          // Firestore は undefined を拒否する。残高OKのときに落ちないよう true のときだけ書く
+          if (wentNegative) chargeRow.wentNegative = true;
 
-          const updates = { lastChargedKey: dueKey };
-          if (payData.mode === 'once') {
-            updates.status = 'done';
-          } else if (payData.countMode === 'finite') {
-            const left = Math.max(0, (payData.remainingCount ?? 1) - 1);
-            updates.remainingCount = left;
-            if (left <= 0) updates.status = 'done';
-          }
-          tx.update(payRef, updates);
+          tx.set(chargeRef, chargeRow);
+          tx.update(famRef, { points: nextPts });
+          tx.update(payRef, paymentDoneUpdates(payData, dueKey));
           charged = true;
         });
 
@@ -426,6 +437,8 @@ async function processScheduledPayments() {
               `「${p.title}」 −${amount}円`
             );
           }
+        } else if (alreadyCharged) {
+          // no-op: 状態だけ同期
         }
       } catch (err) {
         console.error("支払い処理エラー:", err);
@@ -433,6 +446,10 @@ async function processScheduledPayments() {
     }
   } finally {
     isProcessingPayments = false;
+    if (paymentProcessQueued) {
+      paymentProcessQueued = false;
+      setTimeout(() => { processScheduledPayments(); }, 50);
+    }
   }
 }
 
@@ -2127,7 +2144,9 @@ window.addScheduledPayment = async () => {
     await addDoc(collection(db, "scheduledPayments"), data);
     setView('payments');
     showToast("支払いを設定しました");
-    processScheduledPayments();
+    // スナップショット到着前でも、到着直後の競合でも落とせるよう少し遅らせて再実行
+    await processScheduledPayments();
+    setTimeout(() => { processScheduledPayments(); }, 400);
   }, { busyLabel: '設定しています...' });
 };
 
@@ -2296,6 +2315,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=215').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=216').catch(err => console.warn('SW登録失敗:', err));
   });
 }

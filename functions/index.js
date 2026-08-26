@@ -765,7 +765,7 @@ async function runProcessScheduledPayments() {
         const nextPts = pts - amount;
         const wentNegative = nextPts < 0;
 
-        tx.set(chargeRef, {
+        const chargeRow = {
           familyCode,
           paymentId: p.id,
           title: payData.title || p.title || '支払い',
@@ -773,9 +773,11 @@ async function runProcessScheduledPayments() {
           points: amount,
           chargedAt: Date.now(),
           createdAt: Date.now(),
-          chargeKey: dueKey,
-          wentNegative: wentNegative || undefined
-        });
+          chargeKey: dueKey
+        };
+        // Firestore は undefined を拒否する。true のときだけ書く
+        if (wentNegative) chargeRow.wentNegative = true;
+        tx.set(chargeRef, chargeRow);
         tx.update(famRef, { points: nextPts });
 
         const updates = { lastChargedKey: dueKey };
