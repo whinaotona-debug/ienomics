@@ -417,10 +417,10 @@ body.furigana-on .nav-tab span {
 .ie-child-select {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.14);
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.12);
   position: relative;
   z-index: 12;
   min-width: 0;
@@ -434,39 +434,104 @@ body.furigana-on .nav-tab span {
   color: #6b7f78;
 }
 .ie-child-select-light .ie-child-select-input {
-  border: 1px solid #d7e3de;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%231c2b27' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
-  background-size: 16px;
-  color: #1c2b27;
+  border: 1px solid #cfe0da;
+  background: #f4f9f7 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%235f7970' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
+  background-size: 14px;
+  color: #2c3d38;
+  box-shadow: none;
 }
 .ie-child-select-label {
   flex: none;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.04em;
-  color: rgba(255,255,255,0.78);
+  color: rgba(255,255,255,0.58);
   white-space: nowrap;
 }
 .ie-child-select-input {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 10.5rem;
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.14) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 8px center;
-  background-size: 16px;
-  color: #fff;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(8, 36, 32, 0.28) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 6px center;
+  background-size: 12px;
+  color: rgba(255,255,255,0.78);
   font: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  border-radius: 12px;
-  padding: 8px 32px 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 4px 22px 4px 8px;
   outline: none;
+  box-shadow: none;
+}
+.ie-child-select-input:focus {
+  border-color: rgba(255,255,255,0.28);
 }
 .ie-child-select-input option {
   color: #1c2b27;
-  background: #fff;
+  background: #eef6f3;
   font-weight: 700;
+}
+.ie-invest-flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid #e4efe9;
+  background: linear-gradient(135deg, #f7fbf9 0%, #eef6f2 100%);
+}
+.ie-invest-flash-mark {
+  flex: none;
+  margin-top: 1px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #2f8f82;
+  background: rgba(47, 143, 130, 0.12);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+.ie-invest-flash-text {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: #2c3d38;
+}
+.ie-news-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.ie-news-topic {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #334540;
+}
+.ie-news-topic::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 0.45em;
+  border-radius: 50%;
+  background: #2f8f82;
+}
+.ie-news-kicker {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #2f8f82;
+  margin-bottom: 4px;
 }
 /* 左右ラベルを同じ行高に揃えて、残高と同期IDの位置がズレないようにする */
 .ie-hero-label {

@@ -1,10 +1,10 @@
-import { state } from './state.js?v=203';
-import { render } from './ui.js?v=203';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=203';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=203';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=203';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=203';
-import { db, auth } from './firebase.js?v=203';
+import { state } from './state.js?v=204';
+import { render } from './ui.js?v=204';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=204';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=204';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=204';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=204';
+import { db, auth } from './firebase.js?v=204';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1710,6 +1710,11 @@ async function loadMarketNews() {
       .map(row => ({
         about: String(row?.about || '').trim().slice(0, 40),
         title: String(row?.title || '').trim().slice(0, 180),
+        blurb: String(row?.blurb || '').trim().slice(0, 120),
+        topics: (Array.isArray(row?.topics) ? row.topics : [])
+          .map(t => String(t || '').trim())
+          .filter(Boolean)
+          .slice(0, 5),
         body: String(row?.body || '').trim().slice(0, 4000),
         url: String(row?.url || '').trim(),
         source: String(row?.source || row?.domain || '').replace(/^www\./, '').slice(0, 80)
@@ -2276,6 +2281,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=203').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=204').catch(err => console.warn('SW登録失敗:', err));
   });
 }

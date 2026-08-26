@@ -1,4 +1,4 @@
-import { state } from './state.js?v=203';
+import { state } from './state.js?v=204';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -804,6 +804,41 @@ function sheetRateAt(name, ms) {
 function sheetLatestRate(name) {
   const points = sheetSeries?.[name];
   return points && points.length ? points[points.length - 1].rate : null;
+}
+
+/** 銘柄名 → ニュース欄の見出し名 */
+export const NEWS_ABOUT_BY_MARKET = {
+  日本: '日経平均',
+  アメリカ: 'S&P500',
+  原油: '原油',
+  金: '金'
+};
+
+/** 表の直近2日の変化率（%）。取れなければ null */
+export function getMarketMovePct(name) {
+  const points = sheetSeries?.[name];
+  if (!points || points.length < 2) return null;
+  const a = Number(points[points.length - 2]?.rate);
+  const b = Number(points[points.length - 1]?.rate);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return null;
+  return ((b - a) / a) * 100;
+}
+
+/** 5秒で読める1行。ニュースの blurb があれば優先。なければ値動きから作る */
+export function getMarketFlashLine(marketName, newsItems) {
+  const about = NEWS_ABOUT_BY_MARKET[marketName] || marketName;
+  const pct = getMarketMovePct(marketName);
+  const hit = (newsItems || []).find(n => n.about === about);
+  if (hit?.blurb) return hit.blurb;
+  if (hit?.title && Number.isFinite(pct)) {
+    const arrow = pct > 0.4 ? '↑' : pct < -0.4 ? '↓' : '→';
+    return `${about}${arrow} 約${Math.abs(pct).toFixed(1)}%　${hit.title}`;
+  }
+  if (hit?.title) return hit.title;
+  if (!Number.isFinite(pct)) return '';
+  if (pct > 0.4) return `${about}が約${pct.toFixed(1)}% 上がった`;
+  if (pct < -0.4) return `${about}が約${Math.abs(pct).toFixed(1)}% 下がった`;
+  return `${about}はほぼ横ばい`;
 }
 
 export function rateForMarket(rates, name) {

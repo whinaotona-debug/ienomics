@@ -129,9 +129,14 @@ const WRITE_SCHEMA = {
         properties: {
           about: { type: 'string', enum: ABOUTS },
           title: { type: 'string' },
+          blurb: { type: 'string' },
+          topics: {
+            type: 'array',
+            items: { type: 'string' }
+          },
           body: { type: 'string' }
         },
-        required: ['about', 'title', 'body'],
+        required: ['about', 'title', 'blurb', 'topics', 'body'],
         additionalProperties: false
       }
     }
@@ -141,14 +146,14 @@ const WRITE_SCHEMA = {
 };
 
 const KIDS_PAPER_PROMPT = [
-  'あなたは小中学生向けの子供新聞を作る人です。',
-  '今から出すことを子供新聞を作ると思ってまとめてください。',
-  '前置きは不要です。',
-  '子供新聞の文字や記事に関係ないことも書いてはいけません。',
-  '記事の内容だけを書いてください。',
-  '',
-  'あいさつ、自己紹介、対象年齢、学年、「学びになる」「勉強になる」という注釈、出典、参考、リンク、まとめ、注意書き、AIであることの説明、元の文章の丸写しは書かない。',
-  '見出しは短く。本文はやさしい日本語で5段落。各段落は3文以上。1本あたり500字以上。将来を断定しない。'
+  'あなたは小中学生向けの経済ニュース記者です。',
+  '教科書の解説ではなく、今日のニュース記事として書いてください。',
+  '前置きは不要。記事だけを書く。',
+  'あいさつ、自己紹介、対象年齢、「学びになる」などの注釈、出典、まとめ、AIであることの説明は書かない。',
+  'title: 新聞の見出しのように短く具体的。値動きや出来事を入れる。',
+  'blurb: 5秒でわかる1行（40字以内）。例「原油↓1.2%　運ぶコストが軽くなる話に」',
+  'topics: 具体的なトピックスを3つ。短い文。',
+  'body: やさしい日本語で4〜5段落。何が起きたか・なぜ話題か・生活とのつながりを書く。将来を断定しない。'
 ].join('\n');
 
 function looksLikeMeta(s) {
@@ -167,10 +172,20 @@ function parseKidsArticles(text) {
   for (const row of rows) {
     const about = String(row?.about || '').trim();
     const title = String(row?.title || '').replace(/\s+/g, ' ').trim();
+    const blurb = String(row?.blurb || '').replace(/\s+/g, ' ').trim();
+    const topics = (Array.isArray(row?.topics) ? row.topics : [])
+      .map(t => String(t || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .slice(0, 5);
     const body = String(row?.body || '').trim();
-    if (!ABOUTS.includes(about) || !title || body.length < 200) continue;
-    if (looksLikeMeta(title) || looksLikeMeta(body)) continue;
-    out[about] = { title: title.slice(0, 80), body: body.slice(0, 4000) };
+    if (!ABOUTS.includes(about) || !title || body.length < 160) continue;
+    if (looksLikeMeta(title) || looksLikeMeta(body) || looksLikeMeta(blurb)) continue;
+    out[about] = {
+      title: title.slice(0, 80),
+      blurb: (blurb || title).slice(0, 80),
+      topics,
+      body: body.slice(0, 4000)
+    };
   }
   return Object.keys(out).length ? out : null;
 }
@@ -204,7 +219,7 @@ export async function groqWriteKidsNews(briefs) {
     },
     messages: [
       { role: 'system', content: KIDS_PAPER_PROMPT },
-      { role: 'user', content: `${user}\n\n銘柄ごとに子供新聞の見出しと本文を書いてください。JSONだけ返してください。` }
+      { role: 'user', content: `${user}\n\n銘柄ごとに title・blurb・topics・body を書いてください。JSONだけ返してください。` }
     ]
   };
 
@@ -252,9 +267,14 @@ const WEEKEND_SCHEMA = {
         properties: {
           about: { type: 'string', enum: WEEKEND_ABOUTS },
           title: { type: 'string' },
+          blurb: { type: 'string' },
+          topics: {
+            type: 'array',
+            items: { type: 'string' }
+          },
           body: { type: 'string' }
         },
-        required: ['about', 'title', 'body'],
+        required: ['about', 'title', 'blurb', 'topics', 'body'],
         additionalProperties: false
       }
     }
@@ -266,10 +286,13 @@ const WEEKEND_SCHEMA = {
 const WEEKEND_PAPER_PROMPT = [
   'あなたは小中学生向けの子供新聞を作る人です。',
   'きょうは株や為替の取引所が休みです。値動きの話は書かない。',
-  '科学・自然・くらし・お金のしくみから、ためになって面白い話にする。',
+  '科学・自然・くらし・お金のしくみから、新聞の記事っぽく具体的に書く。',
   '前置きは不要です。記事の内容だけを書いてください。',
   'あいさつ、自己紹介、対象年齢、「学びになる」などの注釈、出典、まとめ、AIであることの説明は書かない。',
-  '見出しは短く。本文はやさしい日本語で5段落。各段落は3文以上。1本あたり500字以上。将来を断定しない。怖い事件や戦争は書かない。'
+  'title: ニュース見出し風。短く。',
+  'blurb: 5秒でわかる1行（40字以内）。',
+  'topics: 具体的なトピックスを3つ。短い文。',
+  '本文はやさしい日本語で5段落。各段落は3文以上。1本あたり500字以上。将来を断定しない。怖い事件や戦争は書かない。'
 ].join('\n');
 
 function parseWeekendArticles(text) {
@@ -284,10 +307,22 @@ function parseWeekendArticles(text) {
   for (const row of rows) {
     const about = String(row?.about || '').trim();
     const title = String(row?.title || '').replace(/\s+/g, ' ').trim();
+    const blurb = String(row?.blurb || '').replace(/\s+/g, ' ').trim();
+    const topics = (Array.isArray(row?.topics) ? row.topics : [])
+      .map(t => String(t || '').replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .slice(0, 5);
     const body = String(row?.body || '').trim();
     if (!WEEKEND_ABOUTS.includes(about) || !title || body.length < 200) continue;
-    if (looksLikeMeta(title) || looksLikeMeta(body)) continue;
-    if (!out[about]) out[about] = { title: title.slice(0, 80), body: body.slice(0, 4000) };
+    if (looksLikeMeta(title) || looksLikeMeta(body) || looksLikeMeta(blurb)) continue;
+    if (!out[about]) {
+      out[about] = {
+        title: title.slice(0, 80),
+        blurb: (blurb || title).slice(0, 80),
+        topics,
+        body: body.slice(0, 4000)
+      };
+    }
   }
   return Object.keys(out).length ? out : null;
 }
@@ -316,7 +351,7 @@ export async function groqWriteWeekendKidsNews(picks) {
       { role: 'system', content: WEEKEND_PAPER_PROMPT },
       {
         role: 'user',
-        content: `${user}\n\n宇宙・自然・くらし・お金の4欄について、子供新聞の見出しと本文を書いてください。JSONだけ返してください。`
+          content: `${user}\n\n宇宙・自然・くらし・お金の4欄について、title・blurb・topics・body を書いてください。JSONだけ返してください。`
       }
     ]
   };

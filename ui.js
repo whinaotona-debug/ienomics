@@ -1,7 +1,7 @@
-import { state } from './state.js?v=203';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask } from './utils.js?v=203';
-import { refreshTutorial } from './tutorial.js?v=203';
-import { auth } from './firebase.js?v=203';
+import { state } from './state.js?v=204';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=204';
+import { refreshTutorial } from './tutorial.js?v=204';
+import { auth } from './firebase.js?v=204';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -326,7 +326,7 @@ function renderChildSelect(tone = 'hero') {
   const tour = tone === 'hero' ? ' data-tour="childtabs"' : '';
   return `
     <label class="ie-child-select${extra}"${tour}>
-      <span class="ie-child-select-label">表示する子</span>
+      <span class="ie-child-select-label">こども</span>
       <select class="ie-child-select-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
     </label>
   `;
@@ -839,8 +839,23 @@ function renderInvest() {
     return `<button type="button" onclick="investCustom('${m.id}')" class="solid-btn py-3 bg-white hover:bg-slate-50 font-bold text-[11px] shadow-sm border border-slate-200">${esc(m.buyLabel)}</button>`;
   }).join('');
 
+  const flashMarket = chartName === CHART_TOTAL
+    ? (MARKET_ORDER
+      .map(name => ({ name, pct: getMarketMovePct(name) }))
+      .filter(row => Number.isFinite(row.pct))
+      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0]?.name || '原油')
+    : chartName;
+  const flashLine = getMarketFlashLine(flashMarket, state.marketNews);
+  const flashHtml = flashLine
+    ? `<div class="ie-invest-flash" role="status">
+        <span class="ie-invest-flash-mark">速報</span>
+        <p class="ie-invest-flash-text">${esc(flashLine)}</p>
+      </div>`
+    : '';
+
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-purple-500">${getIcon('invest')}</div>${rb('資産運用','しさんうんよう')}</h2>
+    ${flashHtml}
     ${sheetInfo?.isStale ? `
       <div class="mb-4 px-4 py-3 rounded-xl border bg-amber-50 border-amber-200">
         <p class="text-xs font-bold text-amber-800">表の最終日は ${esc(sheetInfo.lastLabel)}（${sheetInfo.staleDays}日前）です</p>
@@ -1503,10 +1518,10 @@ function renderNews() {
   const weekendItems = all.filter(n => weekendAbout.includes(n.about) || (n.about && !marketAbout.has(n.about)));
   const useWeekend = weekendNow || state.marketNewsKind === 'weekend' || weekendItems.length >= 2;
   const fallback = [
-    { about: '宇宙', title: 'なぜ夜空の星は、昼間見えないのか', body: '星は昼も出ている。太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうだけだ。月のない暗い場所へ行くと、同じ目でも星の数がぐっと増えて見える。\n\n宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがある。まぶしい太陽を隠せば、背景はほぼ真っ黒だからだ。', url: 'https://www.nao.ac.jp/faq/' },
-    { about: '自然', title: '台風の目は、なぜ静かになるのか', body: '台風は巨大な空気の渦だ。外側では雨風が強いのに、まんなかの「目」では空気が下に降りて雲が消え、比較的穏やかになることがある。目のすぐ外側が一番風が強い。少し晴れただけで安心はできない。目が通り過ぎると、反対側から再び強い風が吹く。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
-    { about: 'くらし', title: 'プラスチックは、石油からどうやってできるのか', body: 'ペットボトルもレジ袋も、もとをたどると原油の一部からできていることが多い。原油を加熱して分けると、ガソリンなど性質の違う液体になる。その小さな分子をつなげると、細長いプラスチックの鎖になる。便利さの裏側で、自然には分解しにくい。', url: 'https://www.env.go.jp/recycle/plastic/' },
-    { about: 'お金', title: '銀行は、預かったお金をたんすにしまっているのか', body: '銀行に預けたお金は、金庫に全額眠っているわけではない。一部は引き出しに備え、残りは企業や家への貸し出しに回る。貸し出した先が利息を払い、その一部が預金者の利息になる。土日は株の取引所が閉まる。お金の置き場所を考える練習日にできる。', url: 'https://www.boj.or.jp/about/education/index.htm' }
+    { about: '宇宙', title: '昼間でも星はある。見えにくいだけ', blurb: '昼の空が明るくて星が見えない', topics: ['星は昼も出ている', '空気が光を散らす', '暗い場所だと数が見える'], body: '星は昼も出ている。太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうだけだ。月のない暗い場所へ行くと、同じ目でも星の数がぐっと増えて見える。\n\n宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがある。まぶしい太陽を隠せば、背景はほぼ真っ黒だからだ。', url: 'https://www.nao.ac.jp/faq/' },
+    { about: '自然', title: '台風の「目」は、なぜ静かなのか', blurb: '台風の真ん中は一時的に穏やか', topics: ['目では空気が下りる', '目の外側が一番強い', '通り過ぎたあと再び強まる'], body: '台風は巨大な空気の渦だ。外側では雨風が強いのに、まんなかの「目」では空気が下に降りて雲が消え、比較的穏やかになることがある。目のすぐ外側が一番風が強い。少し晴れただけで安心はできない。目が通り過ぎると、反対側から再び強い風が吹く。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
+    { about: 'くらし', title: 'プラスチックは石油からできることが多い', blurb: 'ペットボトルのもとは原油の一部', topics: ['原油を分けて材料にする', '分子をつなげてプラスチックに', '分解しにくいのが課題'], body: 'ペットボトルもレジ袋も、もとをたどると原油の一部からできていることが多い。原油を加熱して分けると、ガソリンなど性質の違う液体になる。その小さな分子をつなげると、細長いプラスチックの鎖になる。便利さの裏側で、自然には分解しにくい。', url: 'https://www.env.go.jp/recycle/plastic/' },
+    { about: 'お金', title: '銀行は預かったお金を全部しまっていない', blurb: '預金の一部は貸し出しに回る', topics: ['引き出し用に一部を残す', '残りは企業や家へ貸す', '利息はそのお礼の一部'], body: '銀行に預けたお金は、金庫に全額眠っているわけではない。一部は引き出しに備え、残りは企業や家への貸し出しに回る。貸し出した先が利息を払い、その一部が預金者の利息になる。土日は株の取引所が閉まる。お金の置き場所を考える練習日にできる。', url: 'https://www.boj.or.jp/about/education/index.htm' }
   ];
 
   const order = useWeekend ? weekendAbout : ['日経平均', 'S&P500', '金', '原油'];
@@ -1518,15 +1533,24 @@ function renderNews() {
     items: pool.filter(n => n.about === about).slice(0, 1)
   })).filter(g => g.items.length);
 
-  const sectionWord = useWeekend ? 'の話' : 'のニュース';
+  const sectionWord = useWeekend ? 'トピックス' : 'ニュース';
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
-        const label = n.title || `${n.about}についての解説`;
-        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
-        return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100"><p class="text-[13px] font-bold text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>${body}</article>`;
+        const label = n.title || `${n.about}のニュース`;
+        const topics = Array.isArray(n.topics) ? n.topics.filter(Boolean).slice(0, 5) : [];
+        const topicHtml = topics.length
+          ? `<ul class="ie-news-topics">${topics.map(t => `<li class="ie-news-topic">${esc(t)}</li>`).join('')}</ul>`
+          : '';
+        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
+        return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100">
+          <p class="ie-news-kicker">${esc(g.about)}</p>
+          <p class="text-[14px] font-black text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>
+          ${topicHtml}
+          ${body}
+        </article>`;
       }).join('');
-      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}${sectionWord}</h3><div class="space-y-2">${rows}</div></section>`;
+      return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}の${sectionWord}</h3><div class="space-y-2">${rows}</div></section>`;
     }).join('')
     : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
 
@@ -1537,7 +1561,7 @@ function renderNews() {
     updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
   }
   const weekendHint = useWeekend
-    ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けの面白い話をまとめています。</p>`
+    ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けのトピックスをまとめています。</p>`
     : '';
 
   return `
