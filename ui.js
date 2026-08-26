@@ -1,7 +1,7 @@
-import { state } from './state.js?v=204';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=204';
-import { refreshTutorial } from './tutorial.js?v=204';
-import { auth } from './firebase.js?v=204';
+import { state } from './state.js?v=205';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=205';
+import { refreshTutorial } from './tutorial.js?v=205';
+import { auth } from './firebase.js?v=205';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -404,7 +404,7 @@ function renderHeader() {
           <span class="w-4 h-4">${getIcon('refresh')}</span>
         </button>
       </div>
-      <div class="ie-hero ${childSelect ? 'has-child-select' : ''}">
+      <div class="ie-hero">
         <div class="ie-hero-top">
           <div class="ie-hero-main">
             <div class="ie-hero-label" data-tour="nametag"><p>${nameLabel}</p></div>
@@ -417,13 +417,15 @@ function renderHeader() {
             ${streakHint}
           </div>
           <div class="ie-hero-divider" aria-hidden="true"></div>
-          <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
-            <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
-            <p class="ie-hero-code">${esc(state.familyCode)}</p>
-            <p class="ie-hero-copyhint">タップでコピー</p>
-          </button>
+          <div class="ie-hero-aside">
+            <button type="button" onclick="copySyncCode()" class="ie-hero-sync" data-tour="synccode" title="タップでコピー" aria-label="同期IDをコピー">
+              <div class="ie-hero-label ie-hero-label-right"><p>${rbPair('同期','どうき','ID')}</p></div>
+              <p class="ie-hero-code">${esc(state.familyCode)}</p>
+              <p class="ie-hero-copyhint">タップでコピー</p>
+            </button>
+            ${childSelect}
+          </div>
         </div>
-        ${childSelect}
       </div>
     </div>
   `;
