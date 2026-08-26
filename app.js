@@ -1,10 +1,10 @@
-import { state } from './state.js?v=217';
-import { render } from './ui.js?v=217';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=217';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=217';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=217';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=217';
-import { db, auth } from './firebase.js?v=217';
+import { state } from './state.js?v=218';
+import { render } from './ui.js?v=218';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=218';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=218';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=218';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=218';
+import { db, auth } from './firebase.js?v=218';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -333,6 +333,7 @@ async function cleanupExpiredDeadlineTasks() {
 
 let isProcessingPayments = false;
 let paymentProcessQueued = false;
+let lastPaymentErrorToastAt = 0;
 
 function paymentDoneUpdates(payData, dueKey) {
   const updates = { lastChargedKey: dueKey };
@@ -345,10 +346,15 @@ function paymentDoneUpdates(payData, dueKey) {
   return updates;
 }
 
+function snapExists(snap) {
+  if (!snap) return false;
+  return typeof snap.exists === 'function' ? snap.exists() : !!snap.exists;
+}
+
 /**
  * 1件の支払いを期日どおり落とす。
  * 戻り値: 'charged' | 'synced' | 'skipped' | 'zero'
- * 失敗時は throw（呼び出し側で見せる）。
+ * 失敗時は throw（呼び出し側で扱う。自動巡回ではアラートしない）。
  */
 async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = new Date()) {
   if (!state.familyCode || !p?.id) return 'skipped';
@@ -357,7 +363,7 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
   const dueKey = lastScheduledPaymentDueKey(p, todayStr) || todayStr;
   const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
 
-  if (amount <= 0) {
+  if (!(amount > 0)) {
     await updateDoc(doc(db, "scheduledPayments", p.id), paymentDoneUpdates(p, dueKey));
     return 'zero';
   }
@@ -378,18 +384,17 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
     const chargeSnap = await tx.get(chargeRef);
     const famSnap = await tx.get(famRef);
     const paySnap = await tx.get(payRef);
-    if (!paySnap.exists()) return;
+    if (!snapExists(paySnap)) return;
 
     const payData = paySnap.data();
     title = payData.title || p.title || '支払い';
     if (payData.status !== 'active') return;
 
     // 履歴だけある → 設定側を引落済みに揃える（二重減算しない）
-    if (chargeSnap.exists()) {
+    if (snapExists(chargeSnap)) {
       const alreadyMarked = payData.lastChargedKey
         && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey);
       if (!alreadyMarked) {
-        // 回数は減らさない（実引落は済んでいる）。キーと単発完了だけ揃える
         const sync = { lastChargedKey: dueKey };
         if (payData.mode === 'once') sync.status = 'done';
         tx.update(payRef, sync);
@@ -398,9 +403,7 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
       return;
     }
 
-    if (!famSnap.exists()) {
-      throw new Error('口座データが見つかりません');
-    }
+    if (!snapExists(famSnap)) return;
     if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) {
       return;
     }
@@ -444,7 +447,7 @@ async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = n
   return result;
 }
 
-async function processScheduledPayments({ notifyError = false } = {}) {
+async function processScheduledPayments() {
   if (!state.familyCode) return;
   if (!Array.isArray(state.scheduledPayments) || state.scheduledPayments.length === 0) return;
   if (isProcessingPayments) {
@@ -455,7 +458,7 @@ async function processScheduledPayments({ notifyError = false } = {}) {
   isProcessingPayments = true;
   const now = new Date();
   const todayStr = todayKeyString();
-  const errors = [];
+  let firstError = null;
 
   try {
     for (const p of state.scheduledPayments) {
@@ -464,11 +467,16 @@ async function processScheduledPayments({ notifyError = false } = {}) {
         await chargeOneScheduledPayment(p, todayStr, now);
       } catch (err) {
         console.error("支払い処理エラー:", p.id, err);
-        errors.push(err);
+        if (!firstError) firstError = err;
       }
     }
-    if (notifyError && errors.length) {
-      await showAlert(friendlyError(errors[0]), { title: '支払いの引落に失敗しました' });
+    // 自動巡回ではダイアログを出さない（連発防止）。ごくまれにトースト1回だけ。
+    if (firstError) {
+      const t = Date.now();
+      if (t - lastPaymentErrorToastAt > 60000) {
+        lastPaymentErrorToastAt = t;
+        showToast('支払いの自動引落を再試行しています');
+      }
     }
   } finally {
     isProcessingPayments = false;
@@ -930,9 +938,9 @@ window.setView = (viewName) => {
   }
   state.view = viewName;
   render();
-  // 支払い画面を開いたタイミングでも未引落を拾う
+  // 支払い画面を開いたときも未引落を静かに再試行（ダイアログは出さない）
   if (viewName === 'payments') {
-    setTimeout(() => { processScheduledPayments({ notifyError: true }); }, 0);
+    setTimeout(() => { processScheduledPayments(); }, 0);
   }
 };
 
@@ -2183,20 +2191,15 @@ window.addScheduledPayment = async () => {
         showToast("支払いを設定しました（今回の金額は0円）");
       } else {
         showToast("支払いを設定しました");
-        // 期日が未来などのときは通常の巡回に任せる
         paymentProcessQueued = true;
         processScheduledPayments();
       }
     } catch (err) {
       console.error('[addScheduledPayment charge]', err);
       setView('payments');
-      showToast("支払いを設定しました");
-      await showAlert(
-        `${friendlyError(err)}\n設定は保存済みです。更新してもう一度お試しください。`,
-        { title: '引落に失敗しました' }
-      );
+      showToast("支払いを設定しました（引落はあとで再試行します）");
       paymentProcessQueued = true;
-      processScheduledPayments({ notifyError: true });
+      processScheduledPayments();
     }
   }, { busyLabel: '設定しています...' });
 };
@@ -2366,6 +2369,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=217').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=218').catch(err => console.warn('SW登録失敗:', err));
   });
 }
