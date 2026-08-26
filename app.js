@@ -1,10 +1,10 @@
-import { state } from './state.js?v=208';
-import { render } from './ui.js?v=208';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=208';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=208';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=208';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=208';
-import { db, auth } from './firebase.js?v=208';
+import { state } from './state.js?v=209';
+import { render } from './ui.js?v=209';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=209';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=209';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=209';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=209';
+import { db, auth } from './firebase.js?v=209';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -131,16 +131,28 @@ window.enablePushNotifications = async () => {
   }
 };
 
-/** この端末を、その家族のメンバーとして登録する */
+/** この端末を、その家族のメンバーとして登録する（書き込み権限の前提） */
 async function claimChildMembership(code) {
+  if (!code) throw new Error('同期IDがありません');
   const user = await ensureAnonymousAuth();
+  await updateDoc(doc(db, "families", code), {
+    childUids: arrayUnion(user.uid),
+    childLinked: true
+  });
+}
+
+/** 子供側の書き込み前に、ログインとメンバー登録を確かめる */
+async function ensureChildMember() {
+  if (state.role !== 'child') return;
+  if (!state.familyCode) throw new Error('同期IDがありません。設定からつなぎ直してください。');
   try {
-    await updateDoc(doc(db, "families", code), {
-      childUids: arrayUnion(user.uid),
-      childLinked: true
-    });
+    await claimChildMembership(state.familyCode);
   } catch (error) {
-    console.warn("メンバー登録に失敗:", error);
+    console.error('メンバー登録に失敗:', error);
+    if (error?.code === 'permission-denied') {
+      throw new Error('この口座への接続が切れています。設定で同期IDをつなぎ直してください。');
+    }
+    throw error;
   }
 }
 
@@ -517,7 +529,11 @@ window.onload = async () => {
           }
           return; // ログイン成功時はこのリスナーがもう一度呼ばれる
         }
-        await claimChildMembership(state.familyCode);
+        try {
+          await claimChildMembership(state.familyCode);
+        } catch (error) {
+          console.warn('メンバー登録を再試行できませんでした:', error);
+        }
         setupListeners();
       } 
       else { render(); }
@@ -1205,6 +1221,7 @@ window.proposeTask = async () => {
   if (!p || p <= 0) return showAlert("ほしいポイントを1以上で入力してください");
 
   await guard('proposeTask', async () => {
+    await ensureChildMember();
     await addDoc(collection(db, "tasks"), {
       familyCode: state.familyCode,
       title: t,
@@ -1528,6 +1545,7 @@ window.sendWish = async () => {
   if (!a || a <= 0) return showAlert('ほしい円を入れてね');
   if (!reason) return showAlert('なぜ必要かを書いてね');
   await guard('sendWish', async () => {
+    await ensureChildMember();
     await addDoc(collection(db, 'wishes'), {
       familyCode: state.familyCode,
       points: a,
@@ -1578,6 +1596,7 @@ window.requestExchange = async () => {
   if (!a || a <= 0) return showAlert("換金したいポイントを入力してください");
   if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}円）`);
   await guard('requestExchange', async () => {
+    await ensureChildMember();
     await addDoc(collection(db, "exchanges"), { familyCode: state.familyCode, points: a, yen: a, status: 'pending', createdAt: Date.now() });
     setView('home');
     showToast("換金を申請しました");
@@ -2281,6 +2300,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=208').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=209').catch(err => console.warn('SW登録失敗:', err));
   });
 }

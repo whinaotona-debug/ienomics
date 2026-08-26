@@ -44,10 +44,17 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['childUids', 'childLinked'])
         && request.resource.data.childUids is list
         && request.auth.uid in request.resource.data.childUids
-        // 既存メンバーを消したり他人を追加したりはできない
-        && request.resource.data.childUids.removeAll(
-             (resource.data.keys().hasAny(['childUids']) ? resource.data.childUids : [])
-           ).hasOnly([request.auth.uid]);
+        && request.resource.data.childUids.hasAll(
+             (resource.data.keys().hasAny(['childUids']) && resource.data.childUids is list)
+               ? resource.data.childUids
+               : []
+           )
+        && request.resource.data.childUids.size()
+             <= (
+               (resource.data.keys().hasAny(['childUids']) && resource.data.childUids is list)
+                 ? resource.data.childUids.size()
+                 : 0
+             ) + 1;
     }
 
     // ---- 利用者プロフィール ----

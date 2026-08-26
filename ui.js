@@ -1,7 +1,7 @@
-import { state } from './state.js?v=208';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=208';
-import { refreshTutorial } from './tutorial.js?v=208';
-import { auth } from './firebase.js?v=208';
+import { state } from './state.js?v=209';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=209';
+import { refreshTutorial } from './tutorial.js?v=209';
+import { auth } from './firebase.js?v=209';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -308,7 +308,8 @@ function bindSwipeRows(root) {
 }
 
 /**
- * お子さまの口座切り替え。同期IDの下にプルダウンで出す。
+ * お子さまの口座切り替え。同期IDの下に出す。
+ * ネイティブselectは端末で白く塗りつぶされるので使わない。
  * ひとりだけのときは切り替える意味がないので何も返さない。
  */
 function renderChildSelect(tone = 'hero') {
@@ -316,19 +317,28 @@ function renderChildSelect(tone = 'hero') {
   const list = Array.isArray(state.children) ? state.children : [];
   if (list.length < 2) return '';
 
+  const active = list.find(c => c.id === state.familyCode) || list[0];
+  const activeName = active?.childName || 'こども';
+
+  if (tone === 'hero') {
+    const items = list.map(c => {
+      const wait = c.childLinked === false ? ' · 待ち' : '';
+      const on = c.id === state.familyCode ? ' on' : '';
+      return `<button type="button" class="ie-child-pick-item${on}" onclick="event.preventDefault(); window.switchActiveChild('${esc(c.id)}')">${esc(c.childName || 'こども')}${wait}</button>`;
+    }).join('');
+    return `
+      <details class="ie-child-pick" data-tour="childtabs">
+        <summary class="ie-child-pick-sum">${esc(activeName)}</summary>
+        <div class="ie-child-pick-menu" role="listbox">${items}</div>
+      </details>
+    `;
+  }
+
   const options = list.map(c => {
     const wait = c.childLinked === false ? '（待ち）' : '';
     const on = c.id === state.familyCode;
     return `<option value="${esc(c.id)}" ${on ? 'selected' : ''}>${esc(c.childName || 'こども')}${wait}</option>`;
   }).join('');
-
-  if (tone === 'hero') {
-    return `
-      <label class="ie-child-pick" data-tour="childtabs">
-        <select class="ie-child-pick-input" aria-label="お子さまの切り替え" onclick="event.stopPropagation()" onchange="window.switchActiveChild(this.value)">${options}</select>
-      </label>
-    `;
-  }
 
   return `
     <label class="ie-child-select ie-child-select-light">
