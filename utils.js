@@ -1,4 +1,4 @@
-import { state } from './state.js?v=213';
+import { state } from './state.js?v=214';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -222,6 +222,62 @@ export function dateKeyToValue(key) {
   if (!key) return 0;
   const [y, m, d] = String(key).split('-').map(Number);
   return y * 10000 + m * 100 + d;
+}
+
+/** 日本時間の日付キーを n 日ずらす */
+export function shiftJapanDayKey(dayKey, deltaDays) {
+  const [y, m, d] = String(dayKey || '').split('-').map(Number);
+  if (!y || !m || !d) return dayKey;
+  const ms = new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`).getTime() + (Number(deltaDays) || 0) * 86400000;
+  return japanTodayKey(new Date(ms));
+}
+
+/**
+ * 自動支払いの「直近の引落日」（今日以前）。取りこぼし回収用。
+ * 戻り値: 日付キー。まだ来ていない／対象外なら null。
+ */
+export function lastScheduledPaymentDueKey(p, todayStr = japanTodayKey()) {
+  if (!p || p.status !== 'active') return null;
+  const todayVal = dateKeyToValue(todayStr);
+
+  if (p.mode === 'once') {
+    if (!p.dueDate) return null;
+    if (todayVal < dateKeyToValue(p.dueDate)) return null;
+    return p.dueDate;
+  }
+
+  const days = (p.days || []).map(Number).filter(Number.isFinite);
+  if (!days.length) return null;
+
+  if (p.interval === 'weekly') {
+    for (let back = 0; back < 14; back++) {
+      const key = shiftJapanDayKey(todayStr, -back);
+      const [y, m, d] = key.split('-').map(Number);
+      const j = japanParts(new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`));
+      if (days.includes(j.weekday)) return key;
+    }
+    return null;
+  }
+
+  // monthly
+  for (let back = 0; back < 62; back++) {
+    const key = shiftJapanDayKey(todayStr, -back);
+    const [y, m, d] = key.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    if (days.some(day => Math.min(day, last) === d)) return key;
+  }
+  return null;
+}
+
+/** いま引落すべきか。取りこぼした日があれば回収する */
+export function isScheduledPaymentDue(p, todayStr = japanTodayKey()) {
+  if (!p || p.status !== 'active') return false;
+  if (p.mode === 'once' && p.lastChargedKey) return false;
+
+  const dueKey = lastScheduledPaymentDueKey(p, todayStr);
+  if (!dueKey) return false;
+  if (p.lastChargedKey && dateKeyToValue(p.lastChargedKey) >= dateKeyToValue(dueKey)) return false;
+  return true;
 }
 
 const JST = 'Asia/Tokyo';
@@ -555,7 +611,7 @@ export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs
     if (!at) continue;
     rows.push({
       kind: 'spend',
-      label: p.title ? `支払い「${p.title}」` : '支払い',
+      label: p.title ? `支払い引落「${p.title}」` : '支払い引落',
       points: -(Number(p.points) || Number(p.amount) || 0),
       at
     });

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=213';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=213';
-import { refreshTutorial } from './tutorial.js?v=213';
-import { auth } from './firebase.js?v=213';
+import { state } from './state.js?v=214';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=214';
+import { refreshTutorial } from './tutorial.js?v=214';
+import { auth } from './firebase.js?v=214';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1134,7 +1134,7 @@ function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.for
 function renderPayments() {
   const active = (state.scheduledPayments || []).filter(p => p.status === 'active');
   const done = (state.scheduledPayments || []).filter(p => p.status === 'done');
-  const logs = (state.paymentLogs || []).slice(0, 8);
+  const logs = (state.paymentLogs || []).slice(0, 40);
 
   const card = (p) => {
     const sched = formatPaymentSchedule(p);

@@ -526,6 +526,7 @@ exports.generateRepeatedTasksCatchup = onSchedule(
     await runGenerateRepeatedTasks();
     await runCleanupExpiredTasks();
     await runSnapshotInvestmentEod();
+    await runProcessScheduledPayments();
   }
 );
 
@@ -578,4 +579,194 @@ exports.remindDeadlines = onSchedule(
       }
     }
   }
+);
+
+function dateKeyToValue(key) {
+  if (!key) return 0;
+  const [y, m, d] = String(key).split('-').map(Number);
+  return y * 10000 + m * 100 + d;
+}
+
+function shiftJapanDayKey(dayKey, deltaDays) {
+  const [y, m, d] = String(dayKey || '').split('-').map(Number);
+  if (!y || !m || !d) return dayKey;
+  const ms = new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`).getTime() + (Number(deltaDays) || 0) * 86400000;
+  return japanTodayKey(new Date(ms));
+}
+
+function lastScheduledPaymentDueKey(p, todayStr) {
+  if (!p || p.status !== 'active') return null;
+  const todayVal = dateKeyToValue(todayStr);
+
+  if (p.mode === 'once') {
+    if (!p.dueDate) return null;
+    if (todayVal < dateKeyToValue(p.dueDate)) return null;
+    return p.dueDate;
+  }
+
+  const days = (p.days || []).map(Number).filter(Number.isFinite);
+  if (!days.length) return null;
+
+  if (p.interval === 'weekly') {
+    for (let back = 0; back < 14; back++) {
+      const key = shiftJapanDayKey(todayStr, -back);
+      const [y, m, d] = key.split('-').map(Number);
+      const j = japanParts(new Date(`${y}-${pad2(m)}-${pad2(d)}T12:00:00+09:00`));
+      if (days.includes(j.weekday)) return key;
+    }
+    return null;
+  }
+
+  for (let back = 0; back < 62; back++) {
+    const key = shiftJapanDayKey(todayStr, -back);
+    const [y, m, d] = key.split('-').map(Number);
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    if (days.some(day => Math.min(day, last) === d)) return key;
+  }
+  return null;
+}
+
+function isPaymentDue(p, todayStr) {
+  if (!p || p.status !== 'active') return false;
+  if (p.mode === 'once' && p.lastChargedKey) return false;
+  const dueKey = lastScheduledPaymentDueKey(p, todayStr);
+  if (!dueKey) return false;
+  if (p.lastChargedKey && dateKeyToValue(p.lastChargedKey) >= dateKeyToValue(dueKey)) return false;
+  return true;
+}
+
+function lastMonthEarnedPoints(tasks, balloons, now = new Date()) {
+  const j = japanParts(now);
+  let year = j.year;
+  let month = j.month - 1;
+  if (month < 1) {
+    month = 12;
+    year -= 1;
+  }
+  let sum = 0;
+  for (const t of tasks || []) {
+    if (t.status !== 'approved') continue;
+    const at = t.approvedAt || t.completedAt || t.createdAt;
+    if (!at) continue;
+    const p = japanParts(new Date(at));
+    if (p.year === year && p.month === month) sum += Math.max(0, Number(t.points) || 0);
+  }
+  for (const b of balloons || []) {
+    if (b.status !== 'received') continue;
+    const at = b.receivedAt || b.createdAt;
+    if (!at) continue;
+    const p = japanParts(new Date(at));
+    if (p.year === year && p.month === month) sum += Math.max(0, Number(b.points) || 0);
+  }
+  return sum;
+}
+
+function paymentAmountFor(p, tasks, balloons, now = new Date()) {
+  if (!p) return 0;
+  if (p.amountKind === 'percentLastMonth') {
+    const pct = Math.min(100, Math.max(0, Number(p.percent) || 0));
+    if (pct <= 0) return 0;
+    return Math.floor(lastMonthEarnedPoints(tasks, balloons, now) * pct / 100);
+  }
+  return Math.max(0, Number(p.amount) || 0);
+}
+
+/** アプリが閉じていても、期日の支払いを口座から落とす */
+async function runProcessScheduledPayments() {
+  const todayStr = japanTodayKey();
+  const now = new Date();
+  const snap = await db.collection('scheduledPayments').where('status', '==', 'active').get();
+  if (snap.empty) return;
+
+  // ％計算用に、対象家族の tasks / balloons をまとめて読む
+  const familyCodes = [...new Set(snap.docs.map(d => d.data().familyCode).filter(Boolean))];
+  const earnedByFamily = new Map();
+  for (const code of familyCodes) {
+    const [tasksSnap, balloonsSnap] = await Promise.all([
+      db.collection('tasks').where('familyCode', '==', code).where('status', '==', 'approved').get(),
+      db.collection('balloons').where('familyCode', '==', code).where('status', '==', 'received').get()
+    ]);
+    earnedByFamily.set(code, {
+      tasks: tasksSnap.docs.map(d => d.data()),
+      balloons: balloonsSnap.docs.map(d => d.data())
+    });
+  }
+
+  let charged = 0;
+  for (const payDoc of snap.docs) {
+    const p = { id: payDoc.id, ...payDoc.data() };
+    if (!isPaymentDue(p, todayStr)) continue;
+    const dueKey = lastScheduledPaymentDueKey(p, todayStr) || todayStr;
+    const familyCode = p.familyCode;
+    if (!familyCode) continue;
+
+    const earned = earnedByFamily.get(familyCode) || { tasks: [], balloons: [] };
+    const amount = paymentAmountFor(p, earned.tasks, earned.balloons, now);
+
+    if (amount <= 0) {
+      const updates = { lastChargedKey: dueKey };
+      if (p.mode === 'once') updates.status = 'done';
+      else if (p.countMode === 'finite') {
+        const left = Math.max(0, (p.remainingCount ?? 1) - 1);
+        updates.remainingCount = left;
+        if (left <= 0) updates.status = 'done';
+      }
+      await payDoc.ref.update(updates);
+      continue;
+    }
+
+    const chargeRef = db.collection('paymentLogs').doc(`${p.id}_${dueKey}`);
+    const famRef = db.collection('families').doc(familyCode);
+
+    try {
+      let didCharge = false;
+      await db.runTransaction(async (tx) => {
+        const chargeSnap = await tx.get(chargeRef);
+        if (chargeSnap.exists) return;
+        const famSnap = await tx.get(famRef);
+        if (!famSnap.exists) return;
+        const paySnap = await tx.get(payDoc.ref);
+        if (!paySnap.exists) return;
+        const payData = paySnap.data();
+        if (payData.status !== 'active') return;
+        if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) return;
+
+        const pts = Number(famSnap.data().points) || 0;
+        const nextPts = pts - amount;
+        const wentNegative = nextPts < 0;
+
+        tx.set(chargeRef, {
+          familyCode,
+          paymentId: p.id,
+          title: payData.title || p.title || '支払い',
+          amount,
+          points: amount,
+          chargedAt: Date.now(),
+          createdAt: Date.now(),
+          chargeKey: dueKey,
+          wentNegative: wentNegative || undefined
+        });
+        tx.update(famRef, { points: nextPts });
+
+        const updates = { lastChargedKey: dueKey };
+        if (payData.mode === 'once') updates.status = 'done';
+        else if (payData.countMode === 'finite') {
+          const left = Math.max(0, (payData.remainingCount ?? 1) - 1);
+          updates.remainingCount = left;
+          if (left <= 0) updates.status = 'done';
+        }
+        tx.update(payDoc.ref, updates);
+        didCharge = true;
+      });
+      if (didCharge) charged += 1;
+    } catch (err) {
+      console.error('[processScheduledPayments]', p.id, err);
+    }
+  }
+  if (charged) console.log(`[processScheduledPayments] ${charged}件 ${todayStr}`);
+}
+
+exports.processScheduledPayments = onSchedule(
+  { schedule: 'every 15 minutes', timeZone: 'Asia/Tokyo' },
+  runProcessScheduledPayments
 );

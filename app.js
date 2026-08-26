@@ -1,10 +1,10 @@
-import { state } from './state.js?v=213';
-import { render } from './ui.js?v=213';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask } from './utils.js?v=213';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=213';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=213';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=213';
-import { db, auth } from './firebase.js?v=213';
+import { state } from './state.js?v=214';
+import { render } from './ui.js?v=214';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=214';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=214';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=214';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=214';
+import { db, auth } from './firebase.js?v=214';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -333,27 +333,6 @@ async function cleanupExpiredDeadlineTasks() {
 
 let isProcessingPayments = false;
 
-function isScheduledPaymentDue(p, now, todayStr) {
-  if (!p || p.status !== 'active') return false;
-  if (p.lastChargedKey === todayStr) return false;
-
-  if (p.mode === 'once') {
-    if (p.lastChargedKey) return false;
-    return dateKeyToValue(todayStr) >= dateKeyToValue(p.dueDate);
-  }
-
-  // 定期（日本時間の曜日・日付で判定）
-  const j = japanParts(now);
-  if (p.interval === 'weekly') {
-    return (p.days || []).map(Number).includes(j.weekday);
-  }
-  if (p.interval === 'monthly') {
-    const last = new Date(Date.UTC(j.year, j.month, 0)).getUTCDate();
-    return (p.days || []).map(Number).some(d => Math.min(d, last) === j.day);
-  }
-  return false;
-}
-
 async function processScheduledPayments() {
   if (!state.familyCode || isProcessingPayments) return;
   if (!Array.isArray(state.scheduledPayments) || state.scheduledPayments.length === 0) return;
@@ -364,12 +343,13 @@ async function processScheduledPayments() {
 
   try {
     for (const p of state.scheduledPayments) {
-      if (!isScheduledPaymentDue(p, now, todayStr)) continue;
+      if (!isScheduledPaymentDue(p, todayStr)) continue;
+      const dueKey = lastScheduledPaymentDueKey(p, todayStr) || todayStr;
 
       const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
       if (amount <= 0) {
         try {
-          const updates = { lastChargedKey: todayStr };
+          const updates = { lastChargedKey: dueKey };
           if (p.mode === 'once') updates.status = 'done';
           else if (p.countMode === 'finite') {
             const left = Math.max(0, (p.remainingCount ?? 1) - 1);
@@ -383,7 +363,7 @@ async function processScheduledPayments() {
         continue;
       }
 
-      const chargeId = `${p.id}_${todayStr}`;
+      const chargeId = `${p.id}_${dueKey}`;
       const chargeRef = doc(db, "paymentLogs", chargeId);
       const famRef = doc(db, "families", state.familyCode);
       const payRef = doc(db, "scheduledPayments", p.id);
@@ -404,7 +384,7 @@ async function processScheduledPayments() {
           if (!paySnap.exists()) return;
           const payData = paySnap.data();
           if (payData.status !== 'active') return;
-          if (payData.lastChargedKey === todayStr) return;
+          if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) return;
 
           const nextPts = pts - amount;
           wentNegative = nextPts < 0;
@@ -414,13 +394,15 @@ async function processScheduledPayments() {
             paymentId: p.id,
             title: payData.title || p.title,
             amount,
+            points: amount,
             chargedAt: Date.now(),
             createdAt: Date.now(),
+            chargeKey: dueKey,
             wentNegative: wentNegative || undefined
           });
           tx.update(famRef, { points: nextPts });
 
-          const updates = { lastChargedKey: todayStr };
+          const updates = { lastChargedKey: dueKey };
           if (payData.mode === 'once') {
             updates.status = 'done';
           } else if (payData.countMode === 'finite') {
@@ -795,7 +777,7 @@ function setupListeners() {
   const w = (c, k) => { 
     const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { 
       const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); 
-      a.sort((a, b) => (b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.at || a.createdAt || a.boughtAt || a.approvedAt || 0)); 
+      a.sort((a, b) => (b.chargedAt || b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.chargedAt || a.at || a.createdAt || a.boughtAt || a.approvedAt || 0)); 
       
       if (!state.isInitialLoad) {
         s.docChanges().forEach(change => {
@@ -2102,8 +2084,8 @@ window.addScheduledPayment = async () => {
   if (mode === 'once') {
     const due = document.getElementById('pay-due-date')?.value;
     if (!due) return showAlert("引落日を選んでください");
-    const d = new Date(due + 'T00:00:00');
-    data.dueDate = `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    const jDue = japanParts(new Date(`${due}T12:00:00+09:00`));
+    data.dueDate = `${jDue.year}-${jDue.month}-${jDue.day}`;
   } else {
     const interval = window.payInterval || 'monthly';
     let days = [];
@@ -2301,6 +2283,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=213').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=214').catch(err => console.warn('SW登録失敗:', err));
   });
 }
