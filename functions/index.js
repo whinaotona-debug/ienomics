@@ -751,14 +751,24 @@ async function runProcessScheduledPayments() {
     try {
       let didCharge = false;
       await db.runTransaction(async (tx) => {
+        didCharge = false;
         const chargeSnap = await tx.get(chargeRef);
-        if (chargeSnap.exists) return;
         const famSnap = await tx.get(famRef);
-        if (!famSnap.exists) return;
         const paySnap = await tx.get(payDoc.ref);
         if (!paySnap.exists) return;
         const payData = paySnap.data();
         if (payData.status !== 'active') return;
+
+        if (chargeSnap.exists) {
+          if (!(payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey))) {
+            const sync = { lastChargedKey: dueKey };
+            if (payData.mode === 'once') sync.status = 'done';
+            tx.update(payDoc.ref, sync);
+          }
+          return;
+        }
+
+        if (!famSnap.exists) return;
         if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) return;
 
         const pts = Number(famSnap.data().points) || 0;
@@ -775,7 +785,6 @@ async function runProcessScheduledPayments() {
           createdAt: Date.now(),
           chargeKey: dueKey
         };
-        // Firestore は undefined を拒否する。true のときだけ書く
         if (wentNegative) chargeRow.wentNegative = true;
         tx.set(chargeRef, chargeRow);
         tx.update(famRef, { points: nextPts });

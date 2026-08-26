@@ -1,10 +1,10 @@
-import { state } from './state.js?v=216';
-import { render } from './ui.js?v=216';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=216';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=216';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=216';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=216';
-import { db, auth } from './firebase.js?v=216';
+import { state } from './state.js?v=217';
+import { render } from './ui.js?v=217';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=217';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=217';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=217';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=217';
+import { db, auth } from './firebase.js?v=217';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -345,7 +345,106 @@ function paymentDoneUpdates(payData, dueKey) {
   return updates;
 }
 
-async function processScheduledPayments() {
+/**
+ * 1件の支払いを期日どおり落とす。
+ * 戻り値: 'charged' | 'synced' | 'skipped' | 'zero'
+ * 失敗時は throw（呼び出し側で見せる）。
+ */
+async function chargeOneScheduledPayment(p, todayStr = todayKeyString(), now = new Date()) {
+  if (!state.familyCode || !p?.id) return 'skipped';
+  if (!isScheduledPaymentDue(p, todayStr)) return 'skipped';
+
+  const dueKey = lastScheduledPaymentDueKey(p, todayStr) || todayStr;
+  const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
+
+  if (amount <= 0) {
+    await updateDoc(doc(db, "scheduledPayments", p.id), paymentDoneUpdates(p, dueKey));
+    return 'zero';
+  }
+
+  const chargeRef = doc(db, "paymentLogs", `${p.id}_${dueKey}`);
+  const famRef = doc(db, "families", state.familyCode);
+  const payRef = doc(db, "scheduledPayments", p.id);
+
+  let result = 'skipped';
+  let wentNegative = false;
+  let chargedAmount = amount;
+  let title = p.title || '支払い';
+
+  await runTransaction(db, async (tx) => {
+    result = 'skipped';
+    wentNegative = false;
+
+    const chargeSnap = await tx.get(chargeRef);
+    const famSnap = await tx.get(famRef);
+    const paySnap = await tx.get(payRef);
+    if (!paySnap.exists()) return;
+
+    const payData = paySnap.data();
+    title = payData.title || p.title || '支払い';
+    if (payData.status !== 'active') return;
+
+    // 履歴だけある → 設定側を引落済みに揃える（二重減算しない）
+    if (chargeSnap.exists()) {
+      const alreadyMarked = payData.lastChargedKey
+        && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey);
+      if (!alreadyMarked) {
+        // 回数は減らさない（実引落は済んでいる）。キーと単発完了だけ揃える
+        const sync = { lastChargedKey: dueKey };
+        if (payData.mode === 'once') sync.status = 'done';
+        tx.update(payRef, sync);
+      }
+      result = 'synced';
+      return;
+    }
+
+    if (!famSnap.exists()) {
+      throw new Error('口座データが見つかりません');
+    }
+    if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) {
+      return;
+    }
+
+    const pts = Number(famSnap.data().points) || 0;
+    const nextPts = pts - amount;
+    wentNegative = nextPts < 0;
+    chargedAmount = amount;
+
+    const chargeRow = {
+      familyCode: state.familyCode,
+      paymentId: p.id,
+      title,
+      amount,
+      points: amount,
+      chargedAt: Date.now(),
+      createdAt: Date.now(),
+      chargeKey: dueKey
+    };
+    if (wentNegative) chargeRow.wentNegative = true;
+
+    tx.set(chargeRef, chargeRow);
+    tx.update(famRef, { points: nextPts });
+    tx.update(payRef, paymentDoneUpdates(payData, dueKey));
+    result = 'charged';
+  });
+
+  if (result === 'charged') {
+    if (wentNegative) {
+      localNotify(
+        "支払い引落（残高不足）",
+        `「${title}」 −${chargedAmount}円。口座がマイナスになりました`
+      );
+    } else {
+      localNotify(
+        "支払いが引き落とされました",
+        `「${title}」 −${chargedAmount}円`
+      );
+    }
+  }
+  return result;
+}
+
+async function processScheduledPayments({ notifyError = false } = {}) {
   if (!state.familyCode) return;
   if (!Array.isArray(state.scheduledPayments) || state.scheduledPayments.length === 0) return;
   if (isProcessingPayments) {
@@ -356,93 +455,20 @@ async function processScheduledPayments() {
   isProcessingPayments = true;
   const now = new Date();
   const todayStr = todayKeyString();
+  const errors = [];
 
   try {
     for (const p of state.scheduledPayments) {
       if (!isScheduledPaymentDue(p, todayStr)) continue;
-      const dueKey = lastScheduledPaymentDueKey(p, todayStr) || todayStr;
-
-      const amount = scheduledPaymentAmount(p, state.tasks, state.balloons, now);
-      if (amount <= 0) {
-        try {
-          await updateDoc(doc(db, "scheduledPayments", p.id), paymentDoneUpdates(p, dueKey));
-        } catch (err) {
-          console.error("支払い0円処理エラー:", err);
-        }
-        continue;
-      }
-
-      const chargeId = `${p.id}_${dueKey}`;
-      const chargeRef = doc(db, "paymentLogs", chargeId);
-      const famRef = doc(db, "families", state.familyCode);
-      const payRef = doc(db, "scheduledPayments", p.id);
-
       try {
-        let charged = false;
-        let wentNegative = false;
-        let alreadyCharged = false;
-
-        await runTransaction(db, async (tx) => {
-          const chargeSnap = await tx.get(chargeRef);
-          const famSnap = await tx.get(famRef);
-          const paySnap = await tx.get(payRef);
-          if (!paySnap.exists()) return;
-          const payData = paySnap.data();
-          if (payData.status !== 'active') return;
-
-          // 履歴だけ先に残っていて未同期のとき、引落済みに揃える
-          if (chargeSnap.exists()) {
-            if (!(payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey))) {
-              tx.update(payRef, paymentDoneUpdates(payData, dueKey));
-            }
-            alreadyCharged = true;
-            return;
-          }
-
-          if (!famSnap.exists()) return;
-          if (payData.lastChargedKey && dateKeyToValue(payData.lastChargedKey) >= dateKeyToValue(dueKey)) return;
-
-          const pts = famSnap.data().points || 0;
-          const nextPts = pts - amount;
-          wentNegative = nextPts < 0;
-
-          const chargeRow = {
-            familyCode: state.familyCode,
-            paymentId: p.id,
-            title: payData.title || p.title,
-            amount,
-            points: amount,
-            chargedAt: Date.now(),
-            createdAt: Date.now(),
-            chargeKey: dueKey
-          };
-          // Firestore は undefined を拒否する。残高OKのときに落ちないよう true のときだけ書く
-          if (wentNegative) chargeRow.wentNegative = true;
-
-          tx.set(chargeRef, chargeRow);
-          tx.update(famRef, { points: nextPts });
-          tx.update(payRef, paymentDoneUpdates(payData, dueKey));
-          charged = true;
-        });
-
-        if (charged) {
-          if (wentNegative) {
-            localNotify(
-              "支払い引落（残高不足）",
-              `「${p.title}」 −${amount}円。口座がマイナスになりました`
-            );
-          } else {
-            localNotify(
-              "支払いが引き落とされました",
-              `「${p.title}」 −${amount}円`
-            );
-          }
-        } else if (alreadyCharged) {
-          // no-op: 状態だけ同期
-        }
+        await chargeOneScheduledPayment(p, todayStr, now);
       } catch (err) {
-        console.error("支払い処理エラー:", err);
+        console.error("支払い処理エラー:", p.id, err);
+        errors.push(err);
       }
+    }
+    if (notifyError && errors.length) {
+      await showAlert(friendlyError(errors[0]), { title: '支払いの引落に失敗しました' });
     }
   } finally {
     isProcessingPayments = false;
@@ -904,6 +930,10 @@ window.setView = (viewName) => {
   }
   state.view = viewName;
   render();
+  // 支払い画面を開いたタイミングでも未引落を拾う
+  if (viewName === 'payments') {
+    setTimeout(() => { processScheduledPayments({ notifyError: true }); }, 0);
+  }
 };
 
 window.setInvestRange = (range) => {
@@ -2141,12 +2171,33 @@ window.addScheduledPayment = async () => {
   }
 
   await guard('addScheduledPayment', async () => {
-    await addDoc(collection(db, "scheduledPayments"), data);
-    setView('payments');
-    showToast("支払いを設定しました");
-    // スナップショット到着前でも、到着直後の競合でも落とせるよう少し遅らせて再実行
-    await processScheduledPayments();
-    setTimeout(() => { processScheduledPayments(); }, 400);
+    const ref = await addDoc(collection(db, "scheduledPayments"), data);
+    // state 反映を待たず、作った支払いをその場で落とす（当日設定が空振りしない）
+    const created = { id: ref.id, ...data };
+    try {
+      const result = await chargeOneScheduledPayment(created);
+      setView('payments');
+      if (result === 'charged') {
+        showToast(`「${data.title}」を引き落としました`);
+      } else if (result === 'zero') {
+        showToast("支払いを設定しました（今回の金額は0円）");
+      } else {
+        showToast("支払いを設定しました");
+        // 期日が未来などのときは通常の巡回に任せる
+        paymentProcessQueued = true;
+        processScheduledPayments();
+      }
+    } catch (err) {
+      console.error('[addScheduledPayment charge]', err);
+      setView('payments');
+      showToast("支払いを設定しました");
+      await showAlert(
+        `${friendlyError(err)}\n設定は保存済みです。更新してもう一度お試しください。`,
+        { title: '引落に失敗しました' }
+      );
+      paymentProcessQueued = true;
+      processScheduledPayments({ notifyError: true });
+    }
   }, { busyLabel: '設定しています...' });
 };
 
@@ -2315,6 +2366,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=216').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=217').catch(err => console.warn('SW登録失敗:', err));
   });
 }
