@@ -1,7 +1,7 @@
-import { state } from './state.js?v=222';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=222';
-import { refreshTutorial } from './tutorial.js?v=222';
-import { auth } from './firebase.js?v=222';
+import { state } from './state.js?v=223';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getChartMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=223';
+import { refreshTutorial } from './tutorial.js?v=223';
+import { auth } from './firebase.js?v=223';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -155,9 +155,9 @@ export function render() {
   bottomNav.innerHTML = `
     <div class="ie-nav-shell" role="tablist" aria-label="メインメニュー">
       ${rightTab}
-      <button type="button" onclick="setView('history')" data-tour="nav-history" aria-current="${state.view==='history'?'page':'false'}" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
-      <button type="button" onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab nav-tab-home ${state.view==='home'?'active':''}" aria-label="ホーム">${getIcon('home')}<span>ホーム</span></button>
       <button type="button" onclick="setView('tickets')" data-tour="nav-tickets" aria-current="${state.view==='tickets'?'page':'false'}" class="nav-tab ${state.view==='tickets'?'active':''}">${getIcon('ticket')}<span>チケット</span></button>
+      <button type="button" onclick="setView('home')" data-tour="nav-home" aria-current="${state.view==='home'?'page':'false'}" class="nav-tab nav-tab-home ${state.view==='home'?'active':''}" aria-label="ホーム">${getIcon('home')}<span>ホーム</span></button>
+      <button type="button" onclick="setView('history')" data-tour="nav-history" aria-current="${state.view==='history'?'page':'false'}" class="nav-tab ${state.view==='history'?'active':''}">${getIcon('history')}<span>${rb('履歴','りれき')}</span></button>
       <button type="button" onclick="setView('settings')" data-tour="nav-settings" aria-current="${state.view==='settings'?'page':'false'}" class="nav-tab ${state.view==='settings'?'active':''}">${getIcon('settings')}<span>${rb('設定','せってい')}</span></button>
     </div>
   `;
