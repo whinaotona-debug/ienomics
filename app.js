@@ -1,10 +1,10 @@
-import { state } from './state.js?v=233';
-import { render, drawInvestChart } from './ui.js?v=233';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=233';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=233';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=233';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=233';
-import { db, auth } from './firebase.js?v=233';
+import { state } from './state.js?v=234';
+import { render, drawInvestChart } from './ui.js?v=234';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=234';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=234';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=234';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=234';
+import { db, auth } from './firebase.js?v=234';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -569,8 +569,10 @@ let bootStarted = false;
 let authListenerAttached = false;
 
 /**
- * 起動処理は一度だけ。window.onload 取りこぼし対策のため、
- * モジュール評価直後にも呼び、load でも再試行する（二重実行は bootStarted で防ぐ）。
+ * 起動処理は一度だけ。
+ * v233でモジュール評価直後に boot すると、Auth 永続化の復元前に
+ * user===null を拾って起動が壊れることがあるため、load 完了後に開始する（v232相当）。
+ * __ieBootReady による15秒保険の完了判定は維持する。
  */
 async function boot() {
   if (bootStarted) return;
@@ -578,7 +580,6 @@ async function boot() {
   setBootPhase('boot');
   startBootWatchdog();
   bootLog('boot start', { role: state.role, familyCode: state.familyCode });
-  // 認証と競合しないよう、ニュースは起動後に非同期取得（待たない）
   loadMarketNews();
 
   const params = new URLSearchParams(window.location.search);
@@ -644,63 +645,76 @@ async function boot() {
       await showAlert(friendlyError(error), { title: 'ログインできませんでした' });
       render();
     }
-  } else {
-    setBootPhase('await-auth');
-    if (authListenerAttached) return;
-    authListenerAttached = true;
-    auth.onAuthStateChanged(async (user) => {
-      setBootPhase(user ? (user.isAnonymous ? 'auth-anon' : 'auth-user') : 'auth-null');
-      bootLog('onAuthStateChanged', { uid: user?.uid || null, role: state.role });
-      try {
-        if (state.role === 'parent') {
-          if (user && !user.isAnonymous) {
-            await runMigrationAndLoadChildren(user.uid);
-          } else {
-            localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
-            state.role = null; state.familyCode = null; render();
-          }
-        } else if (state.role === 'child' && state.familyCode) {
-          // 子供端末は匿名ログインしてからデータを読む
-          if (!user) {
-            try {
-              await ensureAnonymousAuth();
-            } catch (error) {
-              console.error('[boot] 匿名ログイン失敗:', error);
-              await showAlert(friendlyError(error), { title: '接続できませんでした' });
-              render();
-            }
-            return; // ログイン成功時はこのリスナーがもう一度呼ばれる
-          }
-          try {
-            setBootPhase('claim-member');
-            await claimChildMembership(state.familyCode);
-          } catch (error) {
-            console.warn('[boot] メンバー登録を再試行できませんでした:', error);
-          }
-          setBootPhase('setup-listeners');
-          setupListeners();
+    return;
+  }
+
+  setBootPhase('await-auth');
+  if (authListenerAttached) return;
+  authListenerAttached = true;
+
+  // 永続セッション復元前の「一時的な null」で親ログインを消さない
+  try {
+    setBootPhase('auth-ready');
+    await withTimeout(auth.authStateReady(), BOOT_AWAIT_MS, '認証の準備');
+    bootLog('authStateReady', { uid: auth.currentUser?.uid || null });
+  } catch (error) {
+    bootLog('authStateReady failed', error);
+  }
+
+  auth.onAuthStateChanged(async (user) => {
+    setBootPhase(user ? (user.isAnonymous ? 'auth-anon' : 'auth-user') : 'auth-null');
+    bootLog('onAuthStateChanged', { uid: user?.uid || null, role: state.role });
+    try {
+      if (state.role === 'parent') {
+        if (user && !user.isAnonymous) {
+          await runMigrationAndLoadChildren(user.uid);
         } else {
-          render();
+          localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
+          state.role = null; state.familyCode = null; render();
         }
-      } catch (error) {
-        console.error('[boot] onAuthStateChanged failed', error);
-        await showAlert(friendlyError(error), { title: '読み込みに失敗しました' });
+      } else if (state.role === 'child' && state.familyCode) {
+        if (!user) {
+          try {
+            await ensureAnonymousAuth();
+          } catch (error) {
+            console.error('[boot] 匿名ログイン失敗:', error);
+            await showAlert(friendlyError(error), { title: '接続できませんでした' });
+            render();
+          }
+          return;
+        }
+        try {
+          setBootPhase('claim-member');
+          await claimChildMembership(state.familyCode);
+        } catch (error) {
+          console.warn('[boot] メンバー登録を再試行できませんでした:', error);
+        }
+        setBootPhase('setup-listeners');
+        setupListeners();
+      } else {
         render();
       }
-    });
-  }
+    } catch (error) {
+      console.error('[boot] onAuthStateChanged failed', error);
+      await showAlert(friendlyError(error), { title: '読み込みに失敗しました' });
+      render();
+    }
+  });
 }
 
-boot().catch((error) => {
-  console.error('[boot] fatal', error);
-  showBootSlowScreen();
-});
-window.addEventListener('load', () => {
+function queueBoot() {
   boot().catch((error) => {
-    console.error('[boot] fatal(load)', error);
+    console.error('[boot] fatal', error);
     showBootSlowScreen();
   });
-});
+}
+
+// v232同様、load 後に起動（取りこぼし時は即時）
+if (document.readyState === 'complete') {
+  queueBoot();
+} else {
+  window.addEventListener('load', queueBoot, { once: true });
+}
 
 async function runMigrationAndLoadChildren(uid) {
   setBootPhase('migrate-load-children');
@@ -2541,6 +2555,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=233').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=234').catch(err => console.warn('SW登録失敗:', err));
   });
 }
