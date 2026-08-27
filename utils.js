@@ -1,4 +1,4 @@
-import { state } from './state.js?v=228';
+import { state } from './state.js?v=229';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1289,9 +1289,34 @@ export function buildInvestmentEodRows(investments, logs, dayKey) {
 
 /**
  * いま保有中の1銘柄について、追加購入を日付ごとに分けたロット。
- * 売買ログの買いがあればそれを使い、無い／足りない分だけ createdAt に載せる
- * （追加購入分を購入前の日付へ遡らせない）。
+ * 口数は必ず principal / 健全な買値 で求める（ログの shares や壊れた buyRate=1 を信用しない）。
+ * 追加購入分を購入前の日付へ遡らせない。
  */
+function saneMarketRate(candidate, refRate) {
+  const n = Number(candidate);
+  const ref = Number(refRate);
+  if (!(n > 0)) return null;
+  // カード側 getBuyRate と同じ：相場と桁が違う買値は捨てる
+  if (ref > 0 && (n < ref / 8 || n > ref * 8)) return null;
+  return n;
+}
+
+function lotBuyRate(inv, atMs, logRate) {
+  const name = inv?.name;
+  const sheetAt = atMs > 0 ? sheetRateAt(name, atMs) : null;
+  const latest = sheetLatestRate(name);
+  const ref = (sheetAt > 0 ? sheetAt : null) || (latest > 0 ? latest : null) || 1;
+  const invested = Number(inv?.investedPoints) || 0;
+  const docShares = Number(inv?.shares);
+  const implied = invested > 0 && docShares > 0 ? invested / docShares : null;
+  return saneMarketRate(logRate, ref)
+    || saneMarketRate(inv?.buyRate, ref)
+    || saneMarketRate(implied, ref)
+    || saneMarketRate(sheetAt, ref)
+    || saneMarketRate(latest, ref)
+    || ref;
+}
+
 function buyLotsForActiveInv(inv, logs) {
   const name = inv?.name;
   const heldPts = Number(inv?.investedPoints) || 0;
@@ -1308,24 +1333,25 @@ function buyLotsForActiveInv(inv, logs) {
   for (const b of buys) {
     const pts = Number(b.investedPoints) || 0;
     if (!(pts > 0)) continue;
-    const rate = Number(b.rate) || Number(inv.buyRate) || 0;
-    const sh = Number(b.shares) > 0 ? Number(b.shares) : (rate > 0 ? pts / rate : 0);
-    lots.push({ at: Number(b.at), principal: pts, shares: sh });
+    const at = Number(b.at) || 0;
+    const rate = lotBuyRate(inv, at, b.rate);
+    const sh = rate > 0 ? pts / rate : 0;
+    if (!(sh > 0)) continue;
+    lots.push({ at, principal: pts, shares: sh });
   }
 
   let loggedPts = lots.reduce((sum, l) => sum + l.principal, 0);
   if (heldPts > loggedPts + 0.5) {
     const gap = heldPts - loggedPts;
-    const rate = Number(inv.buyRate) || sheetLatestRate(name) || 1;
-    lots.unshift({
-      at: created > 0 ? created : Date.now(),
-      principal: gap,
-      shares: rate > 0 ? gap / rate : 0
-    });
-    lots.sort((a, b) => (a.at || 0) - (b.at || 0));
-    loggedPts = heldPts;
+    const at = created > 0 ? created : Date.now();
+    const rate = lotBuyRate(inv, at, inv.buyRate);
+    const sh = rate > 0 ? gap / rate : 0;
+    if (sh > 0) {
+      lots.unshift({ at, principal: gap, shares: sh });
+      lots.sort((a, b) => (a.at || 0) - (b.at || 0));
+    }
+    loggedPts = lots.reduce((sum, l) => sum + l.principal, 0);
   } else if (loggedPts > heldPts + 0.5) {
-    // ログ合計が保有を超えるときは新しいロットから削り、保有口数に合わせる
     let excess = loggedPts - heldPts;
     for (let i = lots.length - 1; i >= 0 && excess > 0.5; i--) {
       const take = Math.min(lots[i].principal, excess);
@@ -1338,9 +1364,10 @@ function buyLotsForActiveInv(inv, logs) {
   }
 
   if (!lots.length) {
-    const rate = Number(inv.buyRate) || sheetLatestRate(name) || 1;
+    const at = created > 0 ? created : Date.now();
+    const rate = lotBuyRate(inv, at, inv.buyRate);
     lots.push({
-      at: created > 0 ? created : Date.now(),
+      at,
       principal: heldPts,
       shares: rate > 0 ? heldPts / rate : 0
     });
@@ -1418,9 +1445,14 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
     let a = 0;
     for (const n of loopNames) {
       const pos = positionFromBuyLots(lotsByName.get(n) || [], ms);
-      const price = sheetRateAt(n, ms) ?? 1;
+      const price = sheetRateAt(n, ms) ?? sheetLatestRate(n);
       p += pos.principal;
-      a += pos.shares * price;
+      if (price > 0 && pos.shares > 0) {
+        a += pos.shares * price;
+      } else {
+        // 相場が取れない日は、評価を元本に揃えて桁違いを出さない
+        a += pos.principal;
+      }
     }
     principal.push(Math.round(p));
     assets.push(Math.round(a));
