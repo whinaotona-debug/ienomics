@@ -1,10 +1,10 @@
-import { state } from './state.js?v=231';
-import { render } from './ui.js?v=231';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=231';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=231';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=231';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=231';
-import { db, auth } from './firebase.js?v=231';
+import { state } from './state.js?v=232';
+import { render, drawInvestChart } from './ui.js?v=232';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=232';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=232';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=232';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=232';
+import { db, auth } from './firebase.js?v=232';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -24,6 +24,20 @@ function taskGeneratedKey(t) {
 } 
 let unsubscribes = [];
 
+/**
+ * Firestore の複数 onSnapshot が同じタイミングで来ても、
+ * 全画面 render を1フレームにまとめる（リアルタイム性は維持）。
+ * ユーザー操作は従来どおり即 render() を呼ぶ。
+ */
+let renderRaf = 0;
+function scheduleRender() {
+  if (renderRaf) return;
+  renderRaf = requestAnimationFrame(() => {
+    renderRaf = 0;
+    render();
+  });
+}
+
 /* ===== 起動ウォッチドッグ =====
  * index.html の「よみこみ中...」は render() が走るまで残る。
  * auth / getDoc / onSnapshot が止まったときに永久停止しないようにする。 */
@@ -34,8 +48,8 @@ let bootWatchTimer = null;
 let bootPhase = 'script';
 
 function bootLog(msg, detail) {
-  if (detail !== undefined) console.warn(`[boot] ${bootPhase}: ${msg}`, detail);
-  else console.warn(`[boot] ${bootPhase}: ${msg}`);
+  if (detail !== undefined) console.log(`[boot] ${bootPhase}: ${msg}`, detail);
+  else console.log(`[boot] ${bootPhase}: ${msg}`);
 }
 
 function setBootPhase(phase) {
@@ -58,6 +72,7 @@ function showBootSlowScreen() {
   const app = document.getElementById('app');
   if (!app) return;
   bootLog('slow UI shown — still waiting for Firebase');
+  console.warn('[boot] slow: still waiting after', BOOT_SLOW_MS, 'ms, phase=', bootPhase);
   app.innerHTML = `
     <div class="h-full flex flex-col items-center justify-center gap-4 px-6 text-center font-bold text-[#5f7970]" role="status">
       <div class="ie-boot-spinner" aria-hidden="true"></div>
@@ -528,7 +543,7 @@ async function processScheduledPayments() {
         if (!firstError) firstError = err;
       }
     }
-    if (chargedAny) render();
+    if (chargedAny) scheduleRender();
     if (firstError) {
       const t = Date.now();
       if (t - lastPaymentErrorToastAt > 60000) {
@@ -546,12 +561,13 @@ async function processScheduledPayments() {
 }
 
 applyFuriganaState();
-loadMarketNews();
 
 window.onload = async () => {
   setBootPhase('onload');
   startBootWatchdog();
   bootLog('window.onload start', { role: state.role, familyCode: state.familyCode });
+  // 認証と競合しないよう、ニュースは onload 後に非同期取得（待たない）
+  loadMarketNews();
 
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
@@ -713,10 +729,10 @@ function loadParentChildren(parentUid) {
       if (state.familyCode !== prevCode || unsubscribes.length === 0) {
         setupListeners();
       } else {
-        render();
+        scheduleRender();
       }
     } else {
-      state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false; render();
+      state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false; scheduleRender();
     }
   }, (err) => {
     console.error('[boot] children onSnapshot error', err);
@@ -724,7 +740,7 @@ function loadParentChildren(parentUid) {
     if (state.familyCode && unsubscribes.length === 0) {
       try { setupListeners(); } catch (e) { console.error('[boot] setupListeners after children error', e); }
     }
-    render();
+    scheduleRender();
   });
 }
 
@@ -912,22 +928,23 @@ function setupListeners() {
       state.childLinked = data.childLinked !== false; 
       if (state.role === 'child') state.childName = data.childName || 'こども'; 
       applyMarketSheetUrl(data.marketSheetUrl || '');
-      render(); 
+      scheduleRender(); 
     }
     // 親がこの口座を削除した。子供の端末に古い残高を見せ続けないよう初期設定へ戻す。
     // 親の端末は、口座一覧の変化を見て自動で別の子に移るのでここでは何もしない。
     else if (state.role === 'child') handleFamilyRemoved();
-    else render();
+    else scheduleRender();
   }, (err) => {
     console.error('[boot] family onSnapshot error', err);
-    render();
+    scheduleRender();
   });
   unsubscribes.push(unsubFamily);
 
   const unsubTemp = onSnapshot(query(collection(db, "taskTemplates"), where("familyCode", "==", state.familyCode)), (s) => {
     const list = []; s.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.taskTemplates = list;
-    checkAndGenerateRepeatedTasks(); 
+    checkAndGenerateRepeatedTasks();
+    scheduleRender();
   });
   unsubscribes.push(unsubTemp);
 
@@ -1023,9 +1040,9 @@ function setupListeners() {
         processScheduledPayments();
       }
       if (k === "investments" || k === "investmentLogs") {
-        backfillInvestmentBuyLogs();
+        scheduleBackfillInvestmentBuyLogs();
       }
-      render(); 
+      scheduleRender(); 
     });
     unsubscribes.push(unsub);
   };
@@ -1438,6 +1455,14 @@ window.useTicket = async (id) => guard(`useTicket:${id}`, async () => {
 
 /** いま持っている株に売買ログが無いとき、買った日のログを1件作る（グラフ用） */
 let investmentLogBackfillBusy = false;
+let investmentLogBackfillTimer = 0;
+function scheduleBackfillInvestmentBuyLogs() {
+  if (investmentLogBackfillTimer) return;
+  investmentLogBackfillTimer = setTimeout(() => {
+    investmentLogBackfillTimer = 0;
+    backfillInvestmentBuyLogs();
+  }, 0);
+}
 async function backfillInvestmentBuyLogs() {
   if (!state.familyCode || investmentLogBackfillBusy) return;
   const invs = getActiveInvestments(state.investments);
@@ -1821,6 +1846,17 @@ function defaultMarketCsvUrl() {
 const MARKET_SHEET_RELOAD_MS = 15 * 60 * 1000;
 let marketSheetTimer = null;
 let marketSheetLoadedUrl = null;
+let marketSheetLastSig = '';
+
+function marketSheetSignature(series) {
+  if (!series) return '';
+  return MARKET_ORDER.map(name => {
+    const pts = series[name];
+    if (!pts?.length) return `${name}:`;
+    const last = pts[pts.length - 1];
+    return `${name}:${last.ms}:${last.rate}`;
+  }).join('|');
+}
 
 /** 家族データのURLが変わったときだけ読み直す。空／旧シートなら標準CSVを使う */
 function applyMarketSheetUrl(url) {
@@ -1837,10 +1873,10 @@ function applyMarketSheetUrl(url) {
     clearInterval(marketSheetTimer);
     marketSheetTimer = null;
   }
-  loadMarketSheet(next);
+  loadMarketSheet(next, { quiet: false });
   loadMarketNews();
   marketSheetTimer = setInterval(() => {
-    loadMarketSheet(next);
+    loadMarketSheet(next, { quiet: true });
     loadMarketNews();
   }, MARKET_SHEET_RELOAD_MS);
 }
@@ -1897,37 +1933,49 @@ async function loadMarketNews() {
     state.marketNewsUpdatedAt = updatedAt;
     state.marketNewsKind = kind;
     state.marketNewsDisclaimer = disclaimer;
-    render();
+    scheduleRender();
   } catch {
     // ニュースが無くても相場は動かす
   }
 }
 
-async function loadMarketSheet(url) {
-  state.marketSheetStatus = 'loading';
-  state.marketSheetError = '';
-  render();
+async function loadMarketSheet(url, { quiet = false } = {}) {
+  if (!quiet) {
+    state.marketSheetStatus = 'loading';
+    state.marketSheetError = '';
+    scheduleRender();
+  }
   try {
     const res = await fetch(normalizeSheetUrl(url), { cache: 'no-store' });
     if (!res.ok) throw new Error(`表を読めませんでした（${res.status}）`);
     const series = parseMarketSheetCsv(await res.text());
+    const sig = marketSheetSignature(series);
+    const changed = sig !== marketSheetLastSig;
+    marketSheetLastSig = sig;
     setMarketSheetSeries(series);
     state.marketSheetStatus = 'ok';
     state.marketSheetMarkets = Object.keys(series);
     state.marketSheetUpdatedAt = Date.now();
+    if (!quiet || changed) {
+      scheduleRender();
+    } else if (state.view === 'home' || state.view === 'invest') {
+      // 画面はそのまま、グラフだけ最新レートへ
+      setTimeout(() => drawInvestChart(), 0);
+    }
   } catch (error) {
     console.error('[marketSheet]', error);
     setMarketSheetSeries(null);
+    marketSheetLastSig = '';
     state.marketSheetStatus = 'error';
     state.marketSheetMarkets = [];
     state.marketSheetError = error?.message || '表を読めませんでした';
+    scheduleRender();
   }
-  render();
 }
 
 /** 相場の表を読み直す（設定画面のボタン用） */
 window.reloadMarketSheet = () => {
-  loadMarketSheet(state.marketSheetUrl || defaultMarketCsvUrl());
+  loadMarketSheet(state.marketSheetUrl || defaultMarketCsvUrl(), { quiet: false });
 };
 
 /**
@@ -2468,6 +2516,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=231').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=232').catch(err => console.warn('SW登録失敗:', err));
   });
 }

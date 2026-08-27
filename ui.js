@@ -1,12 +1,13 @@
-import { state } from './state.js?v=231';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=231';
-import { refreshTutorial } from './tutorial.js?v=231';
-import { auth } from './firebase.js?v=231';
+import { state } from './state.js?v=232';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=232';
+import { refreshTutorial } from './tutorial.js?v=232';
+import { auth } from './firebase.js?v=232';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
 const bottomNav = document.getElementById('bottom-nav');
 let investChartInstance = null;
+let lastInvestChartKey = '';
 
 /** ヘッダーptのスロット風カウント用 */
 let displayedPoints = null;
@@ -204,7 +205,9 @@ export function render() {
   bindSwipeRows(appDiv);
   bindChildPickOutsideClose();
   tickJapanClock();
-  if (state.view === 'home' || state.view === 'invest') setTimeout(drawInvestChart, 50);
+  if (state.view === 'home' || state.view === 'invest') {
+    requestAnimationFrame(() => drawInvestChart());
+  }
   // 画面が作り直されたので、ガイドの枠を測り直す
   refreshTutorial();
 }
@@ -1420,6 +1423,7 @@ export function drawInvestChart() {
       investChartInstance.destroy();
       investChartInstance = null;
     }
+    lastInvestChartKey = '';
     return;
   }
 
@@ -1445,10 +1449,30 @@ export function drawInvestChart() {
       investChartInstance.destroy();
       investChartInstance = null;
     }
+    lastInvestChartKey = '';
     return;
   }
   const meta = MARKET_META[chartName];
   const color = (chartName === CHART_TOTAL ? '#2f8f82' : meta?.color) || '#2f8f82';
+  const chartKey = [
+    isDetail ? 'd' : 'h',
+    range,
+    chartName,
+    history.labels.join('\0'),
+    history.assets.join(','),
+    history.principal.join(','),
+    color
+  ].join('|');
+  // 同じデータ・同じ canvas なら Chart を作り直さない（計算結果は変えない）
+  if (
+    investChartInstance &&
+    lastInvestChartKey === chartKey &&
+    investChartInstance.canvas === canvas &&
+    document.body.contains(canvas)
+  ) {
+    return;
+  }
+  lastInvestChartKey = chartKey;
   const ctx = canvas.getContext('2d');
 
   if (investChartInstance) investChartInstance.destroy();
