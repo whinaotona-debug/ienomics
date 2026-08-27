@@ -1,4 +1,4 @@
-import { state } from './state.js?v=225';
+import { state } from './state.js?v=226';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1033,7 +1033,7 @@ function firstInvestMs(investments, logs, name = null) {
 
 /**
  * 市場レートの時系列。
- * range: 'week' | 'month' | 'all'
+ * range: 'day' | 'week' | 'month'
  * opts.fromMs: 運用開始日。これより前の日はグラフに出さない。
  */
 export function getMarketRates(range = 'month', opts = {}) {
@@ -1066,39 +1066,9 @@ export function getMarketRates(range = 'month', opts = {}) {
   const end = japanDayStartMs(now);
   const fromFloor = opts.fromMs != null ? japanDayStartMs(new Date(opts.fromMs)) : null;
 
-  if (range === 'all') {
-    let start = fromFloor != null
-      ? fromFloor
-      : (reference?.[0]?.ms ?? end);
-    if (start > end) start = end;
-
-    const dayPoints = [];
-    for (let ms = start; ms <= end; ms += 86400000) {
-      dayPoints.push({ ms });
-    }
-    let points = dayPoints;
-    if (reference?.length) {
-      const fromSheet = reference.filter(p => p.ms >= start && p.ms <= end + 86399999);
-      if (fromSheet.length >= 2) {
-        const sheetStart = fromSheet[0].ms;
-        if (sheetStart > start) {
-          const head = [];
-          for (let ms = start; ms < sheetStart; ms += 86400000) head.push({ ms });
-          points = thinSeries(head.concat(fromSheet), 56);
-        } else {
-          points = thinSeries(fromSheet, 56);
-        }
-      } else {
-        points = thinSeries(dayPoints, 56);
-      }
-    } else {
-      points = thinSeries(dayPoints, 56);
-    }
-    return fillRates(points);
-  }
-
   let steps = 30;
-  if (range === 'week') steps = 7;
+  if (range === 'day') steps = 1;
+  else if (range === 'week') steps = 7;
   else if (range === 'month') steps = 30;
 
   let points;
@@ -1281,9 +1251,84 @@ export function buildInvestmentEodRows(investments, logs, dayKey) {
 }
 
 /**
+ * いま保有中の1銘柄について、追加購入を日付ごとに分けたロット。
+ * 売買ログの買いがあればそれを使い、無い／足りない分だけ createdAt に載せる
+ * （追加購入分を購入前の日付へ遡らせない）。
+ */
+function buyLotsForActiveInv(inv, logs) {
+  const name = inv?.name;
+  const heldPts = Number(inv?.investedPoints) || 0;
+  if (!name || !(heldPts > 0)) return [];
+
+  const created = Number(inv.createdAt) || 0;
+  const createdDay = created > 0 ? japanDayStartMs(new Date(created)) : 0;
+  const buys = (logs || [])
+    .filter(l => l.name === name && l.type === 'buy' && Number(l.at) > 0)
+    .filter(l => !createdDay || japanDayStartMs(new Date(l.at)) >= createdDay)
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+
+  const lots = [];
+  for (const b of buys) {
+    const pts = Number(b.investedPoints) || 0;
+    if (!(pts > 0)) continue;
+    const rate = Number(b.rate) || Number(inv.buyRate) || 0;
+    const sh = Number(b.shares) > 0 ? Number(b.shares) : (rate > 0 ? pts / rate : 0);
+    lots.push({ at: Number(b.at), principal: pts, shares: sh });
+  }
+
+  let loggedPts = lots.reduce((sum, l) => sum + l.principal, 0);
+  if (heldPts > loggedPts + 0.5) {
+    const gap = heldPts - loggedPts;
+    const rate = Number(inv.buyRate) || sheetLatestRate(name) || 1;
+    lots.unshift({
+      at: created > 0 ? created : Date.now(),
+      principal: gap,
+      shares: rate > 0 ? gap / rate : 0
+    });
+    lots.sort((a, b) => (a.at || 0) - (b.at || 0));
+    loggedPts = heldPts;
+  } else if (loggedPts > heldPts + 0.5) {
+    // ログ合計が保有を超えるときは新しいロットから削り、保有口数に合わせる
+    let excess = loggedPts - heldPts;
+    for (let i = lots.length - 1; i >= 0 && excess > 0.5; i--) {
+      const take = Math.min(lots[i].principal, excess);
+      const prev = lots[i].principal;
+      lots[i].principal = prev - take;
+      if (prev > 0) lots[i].shares *= lots[i].principal / prev;
+      excess -= take;
+      if (!(lots[i].principal > 0.5)) lots.splice(i, 1);
+    }
+  }
+
+  if (!lots.length) {
+    const rate = Number(inv.buyRate) || sheetLatestRate(name) || 1;
+    lots.push({
+      at: created > 0 ? created : Date.now(),
+      principal: heldPts,
+      shares: rate > 0 ? heldPts / rate : 0
+    });
+  }
+  return lots;
+}
+
+/** ある日までに有効なロット合計（追加購入前の日には後からの口数を載せない） */
+function positionFromBuyLots(lots, dayMs) {
+  const dayStart = japanDayStartMs(new Date(dayMs));
+  let principal = 0;
+  let shares = 0;
+  for (const lot of lots || []) {
+    const at = Number(lot.at) || 0;
+    if (!at || japanDayStartMs(new Date(at)) > dayStart) continue;
+    principal += Number(lot.principal) || 0;
+    shares += Number(lot.shares) || 0;
+  }
+  return { principal, shares };
+}
+
+/**
  * いま保有中の運用資産の、期間内の評価額・元本の推移。
- * 各時点: その日までに持っていた口数 × その日の相場（架空の相場線は出さない）。
- * 保有が無いときは empty: true（ラベルも空）。
+ * 評価額 = その日までに購入済みの口数 × その日の相場。
+ * 保有が無いときは empty: true（相場だけの線は出さない）。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
   const list = getActiveInvestments(investments);
@@ -1305,19 +1350,37 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   };
   if (!names.length) return empty;
 
-  const fromMs = firstInvestMs(list, logList, isTotal ? null : targetName);
-  const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
-  const principal = [];
-  const assets = [];
   const loopNames = isTotal ? names : (targetName && names.includes(targetName) ? [targetName] : []);
   if (!loopNames.length) return empty;
+
+  const lotsByName = new Map();
+  for (const n of loopNames) {
+    const invs = list.filter(inv => inv.name === n);
+    const lots = [];
+    for (const inv of invs) lots.push(...buyLotsForActiveInv(inv, logList));
+    lots.sort((a, b) => (a.at || 0) - (b.at || 0));
+    lotsByName.set(n, lots);
+  }
+
+  let fromMs = null;
+  for (const lots of lotsByName.values()) {
+    for (const lot of lots) {
+      const at = Number(lot.at) || 0;
+      if (at > 0 && (fromMs == null || at < fromMs)) fromMs = at;
+    }
+  }
+
+  const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'week';
+  const rates = getMarketRates(safeRange, fromMs != null ? { fromMs } : {});
+  const principal = [];
+  const assets = [];
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
     let p = 0;
     let a = 0;
     for (const n of loopNames) {
-      const pos = positionAtDay(list, logList, n, ms);
+      const pos = positionFromBuyLots(lotsByName.get(n) || [], ms);
       const price = sheetRateAt(n, ms) ?? 1;
       p += pos.principal;
       a += pos.shares * price;

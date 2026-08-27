@@ -1,7 +1,7 @@
-import { state } from './state.js?v=225';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=225';
-import { refreshTutorial } from './tutorial.js?v=225';
-import { auth } from './firebase.js?v=225';
+import { state } from './state.js?v=226';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=226';
+import { refreshTutorial } from './tutorial.js?v=226';
+import { auth } from './firebase.js?v=226';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -852,7 +852,9 @@ function renderInvest() {
   const stockValue = getInvestmentPortfolioValue(activeInvs, curRates, stockCap);
   const investmentValues = getInvestmentValues(activeInvs, curRates, stockCap);
   const capReached = stockCap != null && rawStockValue >= stockCap;
-  const range = state.investRange || 'week';
+  const range = state.investRange === 'day' || state.investRange === 'week' || state.investRange === 'month'
+    ? state.investRange
+    : 'week';
   const rangeBtn = (id, label) => {
     const on = range === id;
     return `<button type="button" onclick="setInvestRange('${id}')" class="flex-1 py-2 rounded-xl text-[10px] font-black tracking-wide transition ${on ? 'bg-[#2f8f82] text-white shadow-sm' : 'bg-white text-[#5a726a] border border-[#eaf1ee] hover:bg-[#f7fbf9]'}">${label}</button>`;
@@ -923,9 +925,9 @@ function renderInvest() {
     ` : ''}
     ${activeInvs.length ? `
     <div class="flex gap-1.5 mb-3 p-1 rounded-2xl bg-[#f4f9f7] border border-[#eaf1ee]">
+      ${rangeBtn('day', '1日')}
       ${rangeBtn('week', '1週間')}
       ${rangeBtn('month', '1か月')}
-      ${rangeBtn('all', '全期間')}
     </div>` : ''}
     ${chartBlock}
     ${stockCap != null ? `
@@ -1411,7 +1413,9 @@ export function drawInvestChart() {
   }
 
   const isDetail = state.view === 'invest';
-  const range = isDetail ? (state.investRange || 'week') : 'week';
+  const range = state.investRange === 'day' || state.investRange === 'week' || state.investRange === 'month'
+    ? state.investRange
+    : (isDetail ? 'week' : 'week');
   const names = getHeldMarketNames(state.investments);
   const chartName = isDetail
     ? (!state.investChartName || state.investChartName === CHART_TOTAL || !names.includes(state.investChartName)
@@ -1420,7 +1424,7 @@ export function drawInvestChart() {
     : CHART_TOTAL;
   const history = getPortfolioHistory(
     state.investments,
-    range,
+    isDetail ? range : 'week',
     chartName,
     state.investmentLogs
   );
@@ -1437,9 +1441,7 @@ export function drawInvestChart() {
 
   if (investChartInstance) investChartInstance.destroy();
 
-  const maxTicks = range === 'all'
-    ? Math.min(8, Math.max(3, history.labels.length))
-    : (range === 'month' ? 6 : 7);
+  const maxTicks = range === 'month' ? 6 : (range === 'week' ? 7 : 4);
   const fewPoints = history.labels.length <= 3;
   const pointRadius = isDetail ? (fewPoints ? 4 : (history.labels.length > 40 ? 0 : 2)) : 0;
   investChartInstance = new Chart(ctx, {
@@ -1506,7 +1508,7 @@ export function drawInvestChart() {
             color: '#94a3b8',
             maxTicksLimit: maxTicks,
             autoSkip: true,
-            maxRotation: range === 'all' ? 0 : 0
+            maxRotation: 0
           }
         },
         y: {
