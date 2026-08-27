@@ -632,9 +632,38 @@ body.furigana-on .nav-tab span {
 .ie-news-kicker {
   font-size: 10px;
   font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #2f8f82;
+  letter-spacing: 0.04em;
+  color: #7a8f88;
   margin-bottom: 4px;
+}
+.ie-news-disclaimer {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.55;
+  color: #5f7970;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #e4efe9;
+  background: #f7fbf9;
+}
+.ie-news-section {
+  margin-top: 10px;
+}
+.ie-news-section-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  color: #2f8f82;
+  margin-bottom: 3px;
+}
+.ie-news-section-body {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.55;
+  color: #334540;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 /* 左右ラベルを同じ行高に揃えて、残高と同期IDの位置がズレないようにする */
 .ie-hero-label {

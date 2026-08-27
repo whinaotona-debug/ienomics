@@ -1,4 +1,4 @@
-import { state } from './state.js?v=226';
+import { state } from './state.js?v=227';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -894,6 +894,14 @@ export const NEWS_ABOUT_BY_MARKET = {
   金: '金'
 };
 
+/** ニュース見出し名 → 相場表の銘柄名 */
+export const MARKET_BY_NEWS_ABOUT = {
+  日経平均: '日本',
+  S&P500: 'アメリカ',
+  原油: '原油',
+  金: '金'
+};
+
 /** 表の直近2日の変化率（%）。取れなければ null */
 export function getMarketMovePct(name) {
   const points = sheetSeries?.[name];
@@ -904,21 +912,46 @@ export function getMarketMovePct(name) {
   return ((b - a) / a) * 100;
 }
 
-/** 5秒で読める1行。ニュースの blurb があれば優先。なければ値動きから作る */
+/**
+ * 学習用ニュースの「何が起きた？」1文。
+ * アプリの相場表の直近変化だけを述べ、架空の事件は書かない。
+ */
+export function getNewsWhatHappened(about) {
+  const market = MARKET_BY_NEWS_ABOUT[about];
+  const label = about || market || '';
+  if (!market) {
+    return label
+      ? `${label}について、経済のつながりを学ぶための解説です。`
+      : '経済のつながりを学ぶための解説です。';
+  }
+  const pct = getMarketMovePct(market);
+  if (!Number.isFinite(pct)) {
+    return `アプリの相場では、いま ${label} の直近の変化をまだ読めません。下の「なぜ？」「くらし」で仕組みを見てみましょう。`;
+  }
+  const abs = Math.abs(pct).toFixed(1);
+  if (pct > 0.4) {
+    return `アプリの相場では、${label}が前日より約${abs}% 上がりました。`;
+  }
+  if (pct < -0.4) {
+    return `アプリの相場では、${label}が前日より約${abs}% 下がりました。`;
+  }
+  return `アプリの相場では、${label}は前日とほぼ同じ動きでした（変化は約${abs}%）。`;
+}
+
+/** 5秒で読める1行。値動き＋短い学習ヒント（実在速報には見せない） */
 export function getMarketFlashLine(marketName, newsItems) {
   const about = NEWS_ABOUT_BY_MARKET[marketName] || marketName;
   const pct = getMarketMovePct(marketName);
   const hit = (newsItems || []).find(n => n.about === about);
-  if (hit?.blurb) return hit.blurb;
-  if (hit?.title && Number.isFinite(pct)) {
-    const arrow = pct > 0.4 ? '↑' : pct < -0.4 ? '↓' : '→';
-    return `${about}${arrow} 約${Math.abs(pct).toFixed(1)}%　${hit.title}`;
+  const hint = hit?.blurb ? `　${hit.blurb}` : '';
+  if (Number.isFinite(pct)) {
+    if (pct > 0.4) return `${about}↑ 約${pct.toFixed(1)}%${hint}`;
+    if (pct < -0.4) return `${about}↓ 約${Math.abs(pct).toFixed(1)}%${hint}`;
+    return `${about}→ ほぼ横ばい${hint}`;
   }
+  if (hit?.blurb) return hit.blurb;
   if (hit?.title) return hit.title;
-  if (!Number.isFinite(pct)) return '';
-  if (pct > 0.4) return `${about}が約${pct.toFixed(1)}% 上がった`;
-  if (pct < -0.4) return `${about}が約${Math.abs(pct).toFixed(1)}% 下がった`;
-  return `${about}はほぼ横ばい`;
+  return '';
 }
 
 export function rateForMarket(rates, name) {

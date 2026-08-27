@@ -36,9 +36,10 @@ export const state = {
   marketSheetMarkets: [],   // 表から読めた市場名
   marketSheetUpdatedAt: null,
   marketSheetError: '',
-  marketNews: [], // { about, title, body, url, source } 解説文は自前。リンクは学びの参考にした発表。
+  marketNews: [], // 学習用解説 { about, title, what/why/life/stocks, body, url, source }
   marketNewsUpdatedAt: '',
   marketNewsKind: 'market',
+  marketNewsDisclaimer: '',
   childLinked: true,
   tasks: [],
   taskTemplates: [],

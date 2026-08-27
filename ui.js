@@ -1,7 +1,7 @@
-import { state } from './state.js?v=226';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct } from './utils.js?v=226';
-import { refreshTutorial } from './tutorial.js?v=226';
-import { auth } from './firebase.js?v=226';
+import { state } from './state.js?v=227';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=227';
+import { refreshTutorial } from './tutorial.js?v=227';
+import { auth } from './firebase.js?v=227';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1583,10 +1583,10 @@ function renderNews() {
   const weekendItems = all.filter(n => weekendAbout.includes(n.about) || (n.about && !marketAbout.has(n.about)));
   const useWeekend = weekendNow || state.marketNewsKind === 'weekend' || weekendItems.length >= 2;
   const fallback = [
-    { about: '宇宙', title: '昼間でも星はある。見えにくいだけ', blurb: '昼の空が明るくて星が見えない', topics: ['星は昼も出ている', '空気が光を散らす', '暗い場所だと数が見える'], body: '星は昼も出ている。太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうだけだ。月のない暗い場所へ行くと、同じ目でも星の数がぐっと増えて見える。\n\n宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがある。まぶしい太陽を隠せば、背景はほぼ真っ黒だからだ。', url: 'https://www.nao.ac.jp/faq/' },
-    { about: '自然', title: '台風の「目」は、なぜ静かなのか', blurb: '台風の真ん中は一時的に穏やか', topics: ['目では空気が下りる', '目の外側が一番強い', '通り過ぎたあと再び強まる'], body: '台風は巨大な空気の渦だ。外側では雨風が強いのに、まんなかの「目」では空気が下に降りて雲が消え、比較的穏やかになることがある。目のすぐ外側が一番風が強い。少し晴れただけで安心はできない。目が通り過ぎると、反対側から再び強い風が吹く。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
-    { about: 'くらし', title: 'プラスチックは石油からできることが多い', blurb: 'ペットボトルのもとは原油の一部', topics: ['原油を分けて材料にする', '分子をつなげてプラスチックに', '分解しにくいのが課題'], body: 'ペットボトルもレジ袋も、もとをたどると原油の一部からできていることが多い。原油を加熱して分けると、ガソリンなど性質の違う液体になる。その小さな分子をつなげると、細長いプラスチックの鎖になる。便利さの裏側で、自然には分解しにくい。', url: 'https://www.env.go.jp/recycle/plastic/' },
-    { about: 'お金', title: '銀行は預かったお金を全部しまっていない', blurb: '預金の一部は貸し出しに回る', topics: ['引き出し用に一部を残す', '残りは企業や家へ貸す', '利息はそのお礼の一部'], body: '銀行に預けたお金は、金庫に全額眠っているわけではない。一部は引き出しに備え、残りは企業や家への貸し出しに回る。貸し出した先が利息を払い、その一部が預金者の利息になる。土日は株の取引所が閉まる。お金の置き場所を考える練習日にできる。', url: 'https://www.boj.or.jp/about/education/index.htm' }
+    { about: '宇宙', title: '昼間でも星はある。見えにくいだけ', what: '昼間の空でも星は出ていますが、見えにくくなっています。', why: 'よくある説明：太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうからです。', life: '暗い場所へ行くと、同じ目でも星の数がぐっと増えて見えます。', body: '宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがあります。まぶしい太陽を隠せば、背景はほぼ真っ黒だからです。', url: 'https://www.nao.ac.jp/faq/' },
+    { about: '自然', title: '台風の「目」は、なぜ静かなのか', what: '台風のまんなか（目）では、一時的に穏やかになることがあります。', why: 'よくある説明：目では空気が下に降りて雲が消えやすい一方、目のすぐ外側が一番風が強いからです。', life: '少し晴れただけで安心はできません。目が通り過ぎると、反対側から再び強い風が吹くことがあります。', body: '台風は巨大な空気の渦です。外側では雨風が強いのに、まんなかの「目」では比較的穏やかになることがあります。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
+    { about: 'くらし', title: 'プラスチックは石油からできることが多い', what: 'ペットボトルやレジ袋のもとをたどると、原油の一部からできていることが多いです。', why: 'よくある説明：原油を分けた材料の分子をつなげると、細長いプラスチックの鎖になるからです。', life: '便利さの裏側で、自然には分解しにくいという課題があります。', body: '原油を加熱して分けると、ガソリンなど性質の違う液体になります。その一部がプラスチックの材料になります。', url: 'https://www.env.go.jp/recycle/plastic/' },
+    { about: 'お金', title: '銀行は預かったお金を全部しまっていない', what: '銀行に預けたお金は、金庫に全額眠っているわけではありません。', why: 'よくある説明：一部は引き出しに備え、残りは企業や家への貸し出しに回る仕組みだからです。', life: '貸し出した先が利息を払い、その一部が預金者の利息になる、と説明されることが多いです。土日は株の取引所が休みなので、お金の置き場所を考える練習日にもできます。', body: '銀行は預かったお金の一部を貸し出しに回します。これが経済の血液のように働く、という見方があります。', url: 'https://www.boj.or.jp/about/education/index.htm' }
   ];
 
   const order = useWeekend ? weekendAbout : ['日経平均', 'S&P500', '金', '原油'];
@@ -1599,20 +1599,39 @@ function renderNews() {
   })).filter(g => g.items.length);
 
   const sectionWord = useWeekend ? 'トピックス' : 'ニュース';
+  const newsSection = (label, text) => {
+    if (!text) return '';
+    return `<div class="ie-news-section">
+      <p class="ie-news-section-label">${esc(label)}</p>
+      <p class="ie-news-section-body">${esc(text)}</p>
+    </div>`;
+  };
   const blocks = groups.length
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}のニュース`;
+        const what = useWeekend
+          ? (n.what || '')
+          : (n.what || getNewsWhatHappened(g.about));
+        const structured = n.why || n.life || n.stocks || what;
         const topics = Array.isArray(n.topics) ? n.topics.filter(Boolean).slice(0, 5) : [];
-        const topicHtml = topics.length
+        const topicHtml = !structured && topics.length
           ? `<ul class="ie-news-topics">${topics.map(t => `<li class="ie-news-topic">${esc(t)}</li>`).join('')}</ul>`
           : '';
-        const body = n.body ? `<p class="text-[12px] font-bold text-slate-600 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : '';
+        const detail = structured
+          ? `${newsSection('何が起きた？', what)}
+             ${newsSection('なぜ？（よくある理由の例）', n.why)}
+             ${newsSection('くらしへの影響', n.life)}
+             ${n.stocks ? newsSection('株への影響（可能性）', n.stocks) : ''}
+             ${n.body ? `<p class="text-[11px] font-bold text-slate-500 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : ''}`
+          : (n.body
+            ? `<p class="text-[12px] font-bold text-slate-600 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>`
+            : '');
         return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100">
-          <p class="ie-news-kicker">${esc(g.about)}</p>
+          <p class="ie-news-kicker">${esc(g.about)}・学習用</p>
           <p class="text-[14px] font-black text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>
           ${topicHtml}
-          ${body}
+          ${detail}
         </article>`;
       }).join('');
       return `<section class="mb-5"><h3 class="text-[11px] font-black text-slate-500 mb-2 tracking-wide">${esc(g.about)}の${sectionWord}</h3><div class="space-y-2">${rows}</div></section>`;
@@ -1625,16 +1644,16 @@ function renderNews() {
     const j = japanParts(new Date(at));
     updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
   }
-  const weekendHint = useWeekend
+  const learnHint = useWeekend
     ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けのトピックスをまとめています。</p>`
-    : '';
+    : `<p class="ie-news-disclaimer mb-3">${esc(state.marketNewsDisclaimer || '実在の速報ニュースではありません。アプリの相場の動きを手がかりに、経済のつながりを学ぶための解説です。')}</p>`;
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-[#c47a20] shrink-0">${getIcon('news')}</div>
       ${rb('ニュース','にゅーす')}
     </h2>
-    ${weekendHint}
+    ${learnHint}
     ${updatedLine}
     ${blocks}
   `;

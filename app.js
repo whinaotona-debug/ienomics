@@ -1,10 +1,10 @@
-import { state } from './state.js?v=226';
-import { render } from './ui.js?v=226';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=226';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=226';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=226';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=226';
-import { db, auth } from './firebase.js?v=226';
+import { state } from './state.js?v=227';
+import { render } from './ui.js?v=227';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=227';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=227';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=227';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=227';
+import { db, auth } from './firebase.js?v=227';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1778,19 +1778,30 @@ async function loadMarketNews() {
           .map(t => String(t || '').trim())
           .filter(Boolean)
           .slice(0, 5),
+        what: String(row?.what || '').trim().slice(0, 400),
+        why: String(row?.why || '').trim().slice(0, 800),
+        life: String(row?.life || '').trim().slice(0, 800),
+        stocks: String(row?.stocks || '').trim().slice(0, 800),
         body: String(row?.body || '').trim().slice(0, 4000),
         url: String(row?.url || '').trim(),
         source: String(row?.source || row?.domain || '').replace(/^www\./, '').slice(0, 80)
       }))
       .filter(row => row.about && isNewsHttpUrl(row.url));
-    const updatedAt = String(json?.updatedAt || json?.updatedAt || '').trim();
+    const updatedAt = String(json?.updatedAt || '').trim();
     const kind = json?.kind === 'weekend' ? 'weekend' : 'market';
-    const next = JSON.stringify({ items, updatedAt, kind });
-    const prev = JSON.stringify({ items: state.marketNews || [], updatedAt: state.marketNewsUpdatedAt || '', kind: state.marketNewsKind || '' });
+    const disclaimer = String(json?.disclaimer || '').trim().slice(0, 240);
+    const next = JSON.stringify({ items, updatedAt, kind, disclaimer });
+    const prev = JSON.stringify({
+      items: state.marketNews || [],
+      updatedAt: state.marketNewsUpdatedAt || '',
+      kind: state.marketNewsKind || '',
+      disclaimer: state.marketNewsDisclaimer || ''
+    });
     if (next === prev) return;
     state.marketNews = items;
     state.marketNewsUpdatedAt = updatedAt;
     state.marketNewsKind = kind;
+    state.marketNewsDisclaimer = disclaimer;
     render();
   } catch {
     // ニュースが無くても相場は動かす
@@ -2362,6 +2373,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=226').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=227').catch(err => console.warn('SW登録失敗:', err));
   });
 }
