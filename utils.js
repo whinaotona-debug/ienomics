@@ -1,4 +1,4 @@
-import { state } from './state.js?v=227';
+import { state } from './state.js?v=228';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -913,8 +913,9 @@ export function getMarketMovePct(name) {
 }
 
 /**
- * 学習用ニュースの「何が起きた？」1文。
+ * 学習用ニュースの「何が起きている？」1文。
  * アプリの相場表の直近変化だけを述べ、架空の事件は書かない。
+ * 固定の％は news.json に書かず、ここで表から補完する。
  */
 export function getNewsWhatHappened(about) {
   const market = MARKET_BY_NEWS_ABOUT[about];
@@ -926,30 +927,33 @@ export function getNewsWhatHappened(about) {
   }
   const pct = getMarketMovePct(market);
   if (!Number.isFinite(pct)) {
-    return `アプリの相場では、いま ${label} の直近の変化をまだ読めません。下の「なぜ？」「くらし」で仕組みを見てみましょう。`;
+    return `${label}の直近の動きは、いま表からまだ読めません。下の「なぜ？」「くらしには？」で仕組みを見てみましょう。`;
   }
   const abs = Math.abs(pct).toFixed(1);
   if (pct > 0.4) {
-    return `アプリの相場では、${label}が前日より約${abs}% 上がりました。`;
+    return `${label}の価格が上がっています（アプリの相場・前日比 約${abs}%）。`;
   }
   if (pct < -0.4) {
-    return `アプリの相場では、${label}が前日より約${abs}% 下がりました。`;
+    return `${label}の価格が下がっています（アプリの相場・前日比 約${abs}%）。`;
   }
-  return `アプリの相場では、${label}は前日とほぼ同じ動きでした（変化は約${abs}%）。`;
+  return `${label}の価格はほぼ横ばいです（アプリの相場・前日比 約${abs}%）。`;
 }
 
-/** 5秒で読める1行。値動き＋短い学習ヒント（実在速報には見せない） */
+/** 5秒で読める1行。blurb があれば使い、値動きも添える（実在速報には見せない） */
 export function getMarketFlashLine(marketName, newsItems) {
   const about = NEWS_ABOUT_BY_MARKET[marketName] || marketName;
   const pct = getMarketMovePct(marketName);
   const hit = (newsItems || []).find(n => n.about === about);
-  const hint = hit?.blurb ? `　${hit.blurb}` : '';
-  if (Number.isFinite(pct)) {
-    if (pct > 0.4) return `${about}↑ 約${pct.toFixed(1)}%${hint}`;
-    if (pct < -0.4) return `${about}↓ 約${Math.abs(pct).toFixed(1)}%${hint}`;
-    return `${about}→ ほぼ横ばい${hint}`;
-  }
+  const move = Number.isFinite(pct)
+    ? (pct > 0.4
+      ? `${about}↑ 約${pct.toFixed(1)}%`
+      : pct < -0.4
+        ? `${about}↓ 約${Math.abs(pct).toFixed(1)}%`
+        : `${about}→ ほぼ横ばい`)
+    : '';
+  if (hit?.blurb && move) return `${move}　${hit.blurb}`;
   if (hit?.blurb) return hit.blurb;
+  if (move) return move;
   if (hit?.title) return hit.title;
   return '';
 }

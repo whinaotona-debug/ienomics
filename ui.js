@@ -1,7 +1,7 @@
-import { state } from './state.js?v=227';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=227';
-import { refreshTutorial } from './tutorial.js?v=227';
-import { auth } from './firebase.js?v=227';
+import { state } from './state.js?v=228';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=228';
+import { refreshTutorial } from './tutorial.js?v=228';
+import { auth } from './firebase.js?v=228';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1610,20 +1610,20 @@ function renderNews() {
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}のニュース`;
+        // 平日の what は表から補完（news.json の固定％は使わない）
         const what = useWeekend
           ? (n.what || '')
-          : (n.what || getNewsWhatHappened(g.about));
+          : getNewsWhatHappened(g.about);
         const structured = n.why || n.life || n.stocks || what;
         const topics = Array.isArray(n.topics) ? n.topics.filter(Boolean).slice(0, 5) : [];
         const topicHtml = !structured && topics.length
           ? `<ul class="ie-news-topics">${topics.map(t => `<li class="ie-news-topic">${esc(t)}</li>`).join('')}</ul>`
           : '';
         const detail = structured
-          ? `${newsSection('何が起きた？', what)}
-             ${newsSection('なぜ？（よくある理由の例）', n.why)}
-             ${newsSection('くらしへの影響', n.life)}
-             ${n.stocks ? newsSection('株への影響（可能性）', n.stocks) : ''}
-             ${n.body ? `<p class="text-[11px] font-bold text-slate-500 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>` : ''}`
+          ? `${newsSection('何が起きている？', what)}
+             ${newsSection('なぜ？', n.why)}
+             ${newsSection('くらしには？', n.life)}
+             ${n.stocks ? newsSection('株には？', n.stocks) : ''}`
           : (n.body
             ? `<p class="text-[12px] font-bold text-slate-600 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>`
             : '');
@@ -1646,7 +1646,7 @@ function renderNews() {
   }
   const learnHint = useWeekend
     ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けのトピックスをまとめています。</p>`
-    : `<p class="ie-news-disclaimer mb-3">${esc(state.marketNewsDisclaimer || '実在の速報ニュースではありません。アプリの相場の動きを手がかりに、経済のつながりを学ぶための解説です。')}</p>`;
+    : `<p class="ie-news-disclaimer mb-3">${esc(state.marketNewsDisclaimer || '※これは実際の速報ではなく、経済を学ぶための解説です。')}</p>`;
 
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
