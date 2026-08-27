@@ -1,7 +1,7 @@
-import { state } from './state.js?v=230';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=230';
-import { refreshTutorial } from './tutorial.js?v=230';
-import { auth } from './firebase.js?v=230';
+import { state } from './state.js?v=231';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=231';
+import { refreshTutorial } from './tutorial.js?v=231';
+import { auth } from './firebase.js?v=231';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -121,9 +121,13 @@ window.togglePassword = (inputId, eyeIconId) => {
 };
 
 export function render() {
+  const markReady = (reason) => {
+    if (typeof window.__ieMarkBootReady === 'function') window.__ieMarkBootReady(reason);
+  };
   if (state.resetPasswordCode || state.setupMode === 'password_reset_form') {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordResetForm()}</div>`;
+    markReady('password-reset');
     return;
   }
   if (state.requirePasswordSetup) {
@@ -133,18 +137,24 @@ export function render() {
     } else {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordSetup()}</div>`;
     }
+    markReady('password-setup');
     return;
   }
   if (!state.role || !state.familyCode) {
     bottomNav.classList.add('hidden');
-    if(!isSignInWithEmailLink(auth, window.location.href)) {
+    // メールリンク認証中も「よみこみ中」のままにせず、必ず何か描画する
+    if (isSignInWithEmailLink(auth, window.location.href)) {
+      appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetupLoading('ログインを確認しています...')}</div>`;
+    } else {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetup()}</div>`;
     }
+    markReady('setup');
     return;
   }
   if (state.role === 'parent' && !state.childLinked) {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderWaitingChild()}</div>`;
+    markReady('waiting-child');
     return;
   }
 
@@ -189,6 +199,7 @@ export function render() {
   }
 
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
+  markReady('app');
   animatePointsDisplay();
   bindSwipeRows(appDiv);
   bindChildPickOutsideClose();

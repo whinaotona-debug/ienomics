@@ -1,10 +1,10 @@
-import { state } from './state.js?v=230';
-import { render } from './ui.js?v=230';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=230';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=230';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=230';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=230';
-import { db, auth } from './firebase.js?v=230';
+import { state } from './state.js?v=231';
+import { render } from './ui.js?v=231';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=231';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=231';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=231';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=231';
+import { db, auth } from './firebase.js?v=231';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -23,6 +23,70 @@ function taskGeneratedKey(t) {
   return t?.generatedKey || t?.generatedKey || '';
 } 
 let unsubscribes = [];
+
+/* ===== 起動ウォッチドッグ =====
+ * index.html の「よみこみ中...」は render() が走るまで残る。
+ * auth / getDoc / onSnapshot が止まったときに永久停止しないようにする。 */
+const BOOT_SLOW_MS = 12000;
+const BOOT_AWAIT_MS = 25000;
+let bootReady = false;
+let bootWatchTimer = null;
+let bootPhase = 'script';
+
+function bootLog(msg, detail) {
+  if (detail !== undefined) console.warn(`[boot] ${bootPhase}: ${msg}`, detail);
+  else console.warn(`[boot] ${bootPhase}: ${msg}`);
+}
+
+function setBootPhase(phase) {
+  bootPhase = phase;
+  bootLog('phase');
+}
+
+function markBootReady(reason) {
+  if (bootReady) return;
+  bootReady = true;
+  if (bootWatchTimer) {
+    clearTimeout(bootWatchTimer);
+    bootWatchTimer = null;
+  }
+  console.log(`[boot] ready (${reason}) phase=${bootPhase}`);
+}
+
+function showBootSlowScreen() {
+  if (bootReady) return;
+  const app = document.getElementById('app');
+  if (!app) return;
+  bootLog('slow UI shown — still waiting for Firebase');
+  app.innerHTML = `
+    <div class="h-full flex flex-col items-center justify-center gap-4 px-6 text-center font-bold text-[#5f7970]" role="status">
+      <div class="ie-boot-spinner" aria-hidden="true"></div>
+      <p class="text-sm text-[#2c3d38]">読み込みに時間がかかっています</p>
+      <p class="text-[11px] leading-relaxed text-[#7a8f88]">通信状況を確認してもう一度お試しください。<br>しばらくしてから自動で進む場合もあります。</p>
+      <button type="button" onclick="reloadApp()" class="solid-btn primary-btn px-5 py-3 text-xs font-bold mt-1">もう一度読み込む</button>
+    </div>`;
+}
+
+function startBootWatchdog() {
+  if (bootWatchTimer) clearTimeout(bootWatchTimer);
+  bootWatchTimer = setTimeout(() => {
+    if (bootReady) return;
+    showBootSlowScreen();
+  }, BOOT_SLOW_MS);
+}
+
+function withTimeout(promise, ms, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}がタイムアウトしました`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/** ui.js の render が実画面を描いたときに呼ぶ */
+window.__ieMarkBootReady = markBootReady;
 
 /**
  * 同じ処理が同時に走らないようにする。
@@ -80,7 +144,8 @@ async function generateFamilyCode() {
 /** 子供端末は匿名アカウントでログインする（Firestoreのルールで守るため） */
 async function ensureAnonymousAuth() {
   if (auth.currentUser) return auth.currentUser;
-  const cred = await signInAnonymously(auth);
+  setBootPhase('anon-auth');
+  const cred = await withTimeout(signInAnonymously(auth), BOOT_AWAIT_MS, '匿名ログイン');
   return cred.user;
 }
 
@@ -484,6 +549,10 @@ applyFuriganaState();
 loadMarketNews();
 
 window.onload = async () => {
+  setBootPhase('onload');
+  startBootWatchdog();
+  bootLog('window.onload start', { role: state.role, familyCode: state.familyCode });
+
   const params = new URLSearchParams(window.location.search);
   const mode = params.get('mode');
   const oobCode = params.get('oobCode');
@@ -491,6 +560,7 @@ window.onload = async () => {
   // パスワード再設定メールのリンクから戻ってきた場合
   if (mode === 'resetPassword' && oobCode) {
     try {
+      setBootPhase('password-reset');
       await verifyPasswordResetCode(auth, oobCode);
       state.resetPasswordCode = oobCode;
       state.setupMode = 'password_reset_form';
@@ -498,6 +568,7 @@ window.onload = async () => {
       render();
       return;
     } catch (error) {
+      bootLog('password reset failed', error);
       await showAlert("パスワード再設定リンクが無効、または期限切れです。もう一度お試しください。", { title: 'リンクが使えません' });
       window.history.replaceState(null, null, window.location.pathname);
       state.setupMode = 'parent_forgot';
@@ -507,6 +578,7 @@ window.onload = async () => {
   }
 
   if (isSignInWithEmailLink(auth, window.location.href)) {
+    setBootPhase('email-link');
     let email = window.localStorage.getItem('emailForSignIn');
     if (!email) {
       email = await showPrompt("セキュリティ確認のため、登録したメールアドレスをもう一度入力してください。", {
@@ -519,10 +591,14 @@ window.onload = async () => {
       render(); return;
     }
     try {
-      const result = await signInWithEmailLink(auth, email, window.location.href);
+      const result = await withTimeout(
+        signInWithEmailLink(auth, email, window.location.href),
+        BOOT_AWAIT_MS,
+        'メールリンクログイン'
+      );
       window.localStorage.removeItem('emailForSignIn');
       const uid = result.user.uid;
-      const userDoc = await getDoc(doc(db, "users", uid));
+      const userDoc = await withTimeout(getDoc(doc(db, "users", uid)), BOOT_AWAIT_MS, 'ユーザー情報の取得');
       
       if (!userDoc.exists()) {
         state.requirePasswordSetup = true;
@@ -535,47 +611,70 @@ window.onload = async () => {
         window.history.replaceState(null, null, window.location.pathname);
         await runMigrationAndLoadChildren(uid);
       }
-    } catch (error) { await showAlert(friendlyError(error), { title: 'ログインできませんでした' }); render(); }
+    } catch (error) {
+      bootLog('email-link failed', error);
+      await showAlert(friendlyError(error), { title: 'ログインできませんでした' });
+      render();
+    }
   } else {
+    setBootPhase('await-auth');
     auth.onAuthStateChanged(async (user) => {
-      if (state.role === 'parent') {
-        if (user && !user.isAnonymous) { await runMigrationAndLoadChildren(user.uid); } 
-        else {
-          localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
-          state.role = null; state.familyCode = null; render();
-        }
-      } else if (state.role === 'child' && state.familyCode) {
-        // 子供端末は匿名ログインしてからデータを読む
-        if (!user) {
-          try {
-            await ensureAnonymousAuth();
-          } catch (error) {
-            console.error("匿名ログイン失敗:", error);
-            await showAlert(friendlyError(error), { title: '接続できませんでした' });
-            render();
+      setBootPhase(user ? (user.isAnonymous ? 'auth-anon' : 'auth-user') : 'auth-null');
+      bootLog('onAuthStateChanged', { uid: user?.uid || null, role: state.role });
+      try {
+        if (state.role === 'parent') {
+          if (user && !user.isAnonymous) {
+            await runMigrationAndLoadChildren(user.uid);
+          } else {
+            localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
+            state.role = null; state.familyCode = null; render();
           }
-          return; // ログイン成功時はこのリスナーがもう一度呼ばれる
+        } else if (state.role === 'child' && state.familyCode) {
+          // 子供端末は匿名ログインしてからデータを読む
+          if (!user) {
+            try {
+              await ensureAnonymousAuth();
+            } catch (error) {
+              console.error('[boot] 匿名ログイン失敗:', error);
+              await showAlert(friendlyError(error), { title: '接続できませんでした' });
+              render();
+            }
+            return; // ログイン成功時はこのリスナーがもう一度呼ばれる
+          }
+          try {
+            setBootPhase('claim-member');
+            await claimChildMembership(state.familyCode);
+          } catch (error) {
+            console.warn('[boot] メンバー登録を再試行できませんでした:', error);
+          }
+          setBootPhase('setup-listeners');
+          setupListeners();
+        } else {
+          render();
         }
-        try {
-          await claimChildMembership(state.familyCode);
-        } catch (error) {
-          console.warn('メンバー登録を再試行できませんでした:', error);
-        }
-        setupListeners();
-      } 
-      else { render(); }
+      } catch (error) {
+        console.error('[boot] onAuthStateChanged failed', error);
+        await showAlert(friendlyError(error), { title: '読み込みに失敗しました' });
+        render();
+      }
     });
   }
 };
 
 async function runMigrationAndLoadChildren(uid) {
-  const userDoc = await getDoc(doc(db, "users", uid));
-  if (userDoc.exists() && userDoc.data().familyCode) {
-    const oldCode = userDoc.data().familyCode;
-    const familyDoc = await getDoc(doc(db, "families", oldCode));
-    if (familyDoc.exists() && !familyDoc.data().parentUid) {
-      await updateDoc(doc(db, "families", oldCode), { parentUid: uid, childName: "メイン口座" });
+  setBootPhase('migrate-load-children');
+  try {
+    const userDoc = await withTimeout(getDoc(doc(db, "users", uid)), BOOT_AWAIT_MS, 'ユーザー情報の取得');
+    if (userDoc.exists() && userDoc.data().familyCode) {
+      const oldCode = userDoc.data().familyCode;
+      const familyDoc = await withTimeout(getDoc(doc(db, "families", oldCode)), BOOT_AWAIT_MS, '家族データの取得');
+      if (familyDoc.exists() && !familyDoc.data().parentUid) {
+        await updateDoc(doc(db, "families", oldCode), { parentUid: uid, childName: "メイン口座" });
+      }
     }
+  } catch (error) {
+    bootLog('migration getDoc failed', error);
+    // 一覧購読は続けて試し、完全停止は避ける
   }
   loadParentChildren(uid);
 }
@@ -596,9 +695,11 @@ function applyActiveChild() {
 }
 
 function loadParentChildren(parentUid) {
+  setBootPhase('parent-children-snap');
   const q = query(collection(db, "families"), where("parentUid", "==", parentUid));
   if (window.unsubChildren) window.unsubChildren();
   window.unsubChildren = onSnapshot(q, (snapshot) => {
+    bootLog('children snapshot', { size: snapshot.size });
     const list = [];
     snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.children = list.sort((a, b) => a.createdAt - b.createdAt);
@@ -617,6 +718,13 @@ function loadParentChildren(parentUid) {
     } else {
       state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false; render();
     }
+  }, (err) => {
+    console.error('[boot] children onSnapshot error', err);
+    // 権限エラー等で初回が来ないと「よみこみ中」のままになる
+    if (state.familyCode && unsubscribes.length === 0) {
+      try { setupListeners(); } catch (e) { console.error('[boot] setupListeners after children error', e); }
+    }
+    render();
   });
 }
 
@@ -787,6 +895,8 @@ async function handleFamilyRemoved() {
 
 function setupListeners() {
   if (!state.familyCode) return;
+  setBootPhase('listeners');
+  bootLog('setupListeners', { familyCode: state.familyCode, role: state.role });
   
   unsubscribes.forEach(unsub => unsub()); 
   unsubscribes = [];
@@ -808,7 +918,10 @@ function setupListeners() {
     // 親の端末は、口座一覧の変化を見て自動で別の子に移るのでここでは何もしない。
     else if (state.role === 'child') handleFamilyRemoved();
     else render();
-  }, () => render());
+  }, (err) => {
+    console.error('[boot] family onSnapshot error', err);
+    render();
+  });
   unsubscribes.push(unsubFamily);
 
   const unsubTemp = onSnapshot(query(collection(db, "taskTemplates"), where("familyCode", "==", state.familyCode)), (s) => {
@@ -2355,6 +2468,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=230').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=231').catch(err => console.warn('SW登録失敗:', err));
   });
 }
