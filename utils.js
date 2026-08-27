@@ -1,4 +1,4 @@
-import { state } from './state.js?v=229';
+import { state } from './state.js?v=230';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1391,10 +1391,11 @@ function positionFromBuyLots(lots, dayMs) {
 
 /**
  * いま保有中の運用資産の、期間内の評価額・元本の推移。
- * 評価額 = その日までに購入済みの口数 × その日の相場。
+ * 評価額 = その日までに購入済みの口数 × その日の相場（stockCap があれば評価額の上限として適用）。
+ * 元本は投資したptの累計（上限では変えない）。
  * 保有が無いときは empty: true（相場だけの線は出さない）。
  */
-export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
+export function getPortfolioHistory(investments, range = 'week', name = null, logs = null, stockCap = null) {
   const list = getActiveInvestments(investments);
   const logList = logs || [];
   const names = getHeldMarketNames(list);
@@ -1418,7 +1419,7 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   if (!loopNames.length) return empty;
 
   const lotsByName = new Map();
-  for (const n of loopNames) {
+  for (const n of names) {
     const invs = list.filter(inv => inv.name === n);
     const lots = [];
     for (const inv of invs) lots.push(...buyLotsForActiveInv(inv, logList));
@@ -1438,22 +1439,28 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
   const rates = getMarketRates(safeRange, fromMs != null ? { fromMs } : {});
   const principal = [];
   const assets = [];
+  const cap = Number(stockCap);
+  const applyCap = Number.isFinite(cap) && cap > 0;
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
     let p = 0;
-    let a = 0;
-    for (const n of loopNames) {
+    let totalRaw = 0;
+    const rawByName = {};
+    for (const n of names) {
       const pos = positionFromBuyLots(lotsByName.get(n) || [], ms);
       const price = sheetRateAt(n, ms) ?? sheetLatestRate(n);
-      p += pos.principal;
-      if (price > 0 && pos.shares > 0) {
-        a += pos.shares * price;
-      } else {
-        // 相場が取れない日は、評価を元本に揃えて桁違いを出さない
-        a += pos.principal;
-      }
+      let v = 0;
+      if (price > 0 && pos.shares > 0) v = pos.shares * price;
+      else v = pos.principal;
+      rawByName[n] = v;
+      totalRaw += v;
+      if (loopNames.includes(n)) p += pos.principal;
     }
+    // 上限は運用資産（評価額）の天井。銘柄別表示も合計と同じ比率で抑える
+    const scale = applyCap && totalRaw > cap ? cap / totalRaw : 1;
+    let a = 0;
+    for (const n of loopNames) a += (rawByName[n] || 0) * scale;
     principal.push(Math.round(p));
     assets.push(Math.round(a));
   }

@@ -1,6 +1,6 @@
-// 標準の alert / confirm / prompt を、アプリの見た目に合わせたダイアログに置き換える。
-// render() が #app を作り直しても消えないよう、専用のルート要素に描画する。
-import { esc } from './utils.js?v=229';
+// ??? alert / confirm / prompt ??????????????????????????
+// render() ? #app ????????????????????????????
+import { esc } from './utils.js?v=230';
 
 let dialogRoot = null;
 let busyRoot = null;
@@ -37,7 +37,7 @@ function onKeyDown(e) {
 /**
  * @param {object} opts
  * @param {'alert'|'confirm'|'prompt'} opts.type
- * @returns {Promise<boolean|string|null>} alert:true / confirm:真偽 / prompt:文字列かnull
+ * @returns {Promise<boolean|string|null>} alert:true / confirm:?? / prompt:????null
  */
 function openDialog(opts) {
   const {
@@ -45,19 +45,19 @@ function openDialog(opts) {
     title = '',
     message = '',
     okLabel,
-    cancelLabel = 'キャンセル',
+    cancelLabel = '?????',
     placeholder = '',
     defaultValue = '',
     tone = 'normal'
   } = opts;
 
-  // 前のダイアログが開いたままなら閉じる
+  // ??????????????????
   if (closeActive) closeActive(null);
 
   dialogRoot = ensureRoot('ie-dialog-root');
   lastFocused = document.activeElement;
 
-  const okText = okLabel || (type === 'alert' ? 'OK' : 'はい');
+  const okText = okLabel || (type === 'alert' ? 'OK' : '??');
   const bodyLines = String(message ?? '')
     .split('\n')
     .map(line => (line ? `<p class="ie-dialog-line">${esc(line)}</p>` : '<p class="ie-dialog-gap"></p>'))
@@ -94,7 +94,7 @@ function openDialog(opts) {
       resolve(value);
     };
 
-    // Escape / 背景タップ時の既定値
+    // Escape / ??????????
     closeActive = () => finish(type === 'confirm' ? false : (type === 'prompt' ? null : true));
 
     const input = dialogRoot.querySelector('[data-dialog-input]');
@@ -130,7 +130,7 @@ export function showPrompt(message, opts = {}) {
   return openDialog({ ...opts, type: 'prompt', message });
 }
 
-/** 画面下に数秒だけ出る軽い通知。成功メッセージ向け。 */
+/** ????????????????????????? */
 export function showToast(message, tone = 'ok') {
   toastRoot = ensureRoot('ie-toast-root');
   const el = document.createElement('div');
@@ -142,8 +142,8 @@ export function showToast(message, tone = 'ok') {
   setTimeout(() => el.remove(), 2600);
 }
 
-/** 通信中の全画面ローディング。ネストしても正しく消えるよう参照カウントで管理。 */
-export function setBusy(on, label = '通信中...') {
+/** ?????????????????????????????????????? */
+export function setBusy(on, label = '???...') {
   busyRoot = ensureRoot('ie-busy-root');
   busyCount = Math.max(0, busyCount + (on ? 1 : -1));
   if (busyCount > 0) {

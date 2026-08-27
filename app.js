@@ -1,10 +1,10 @@
-import { state } from './state.js?v=229';
-import { render } from './ui.js?v=229';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=229';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=229';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=229';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=229';
-import { db, auth } from './firebase.js?v=229';
+import { state } from './state.js?v=230';
+import { render } from './ui.js?v=230';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=230';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=230';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=230';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=230';
+import { db, auth } from './firebase.js?v=230';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -1521,24 +1521,6 @@ window.investCustom = async (n) => {
     return showAlert(`表に「${dbName}」の列がありません`, { title: 'この市場は買えません' });
   }
   const meta = MARKET_META[dbName];
-  const currentStockValue = getInvestmentPortfolioValue(
-    getActiveInvestments(state.investments),
-    getCurrentMarketRates(),
-    null
-  );
-  const stockCap = Number(state.stockCap) || 0;
-  if (stockCap > 0 && currentStockValue >= stockCap) {
-    return showAlert(
-      `運用は上限の ${stockCap.toLocaleString()}円 に達しています。これ以上は買えません。`,
-      { title: '運用上限に達しています' }
-    );
-  }
-  if (stockCap > 0 && currentStockValue + a > stockCap) {
-    return showAlert(
-      `運用はあと ${(stockCap - currentStockValue).toLocaleString()}円 まで買えます。金額を減らしてください。`,
-      { title: '運用上限を超えます' }
-    );
-  }
 
   await guard(`invest:${n}`, async () => {
     const cur = getCurrentMarketRates();
@@ -2373,6 +2355,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=229').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=230').catch(err => console.warn('SW登録失敗:', err));
   });
 }

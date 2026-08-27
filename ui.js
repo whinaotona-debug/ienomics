@@ -1,7 +1,7 @@
-import { state } from './state.js?v=229';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=229';
-import { refreshTutorial } from './tutorial.js?v=229';
-import { auth } from './firebase.js?v=229';
+import { state } from './state.js?v=230';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=230';
+import { refreshTutorial } from './tutorial.js?v=230';
+import { auth } from './firebase.js?v=230';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -936,7 +936,7 @@ function renderInvest() {
           <span class="${capReached ? 'text-amber-700' : 'text-[#5f7970]'}">${rb('運用上限','うんようじょうげん')}</span>
           <span class="${capReached ? 'text-amber-700' : 'text-[#1c2b27]'}">${stockValue.toLocaleString()} / ${stockCap.toLocaleString()} 円</span>
         </div>
-        <p class="text-[10px] font-bold mt-1 ${capReached ? 'text-amber-600' : 'text-[#7a8f88]'}">${capReached ? '上限に達したため、運用資産はこれ以上増えません' : `あと ${(stockCap - stockValue).toLocaleString()}円 まで増えます`}</p>
+        <p class="text-[10px] font-bold mt-1 ${capReached ? 'text-amber-600' : 'text-[#7a8f88]'}">${capReached ? '上限に達したため、運用資産はこれ以上増えません' : `運用資産はあと ${(stockCap - stockValue).toLocaleString()}円 まで増えます`}</p>
       </div>
     ` : ''}
     ${state.role === 'child' ? (
@@ -1346,7 +1346,7 @@ function renderSettings() {
     ${isChild ? '' : `
       <div class="p-4 bg-white rounded-2xl border border-slate-100 mb-6 text-left">
         <p class="text-[10px] font-bold text-slate-500 tracking-wide mb-1"><span class="ie-ruby-pair"><span class="ie-ruby-plain">${esc(state.childName || 'こども')}の</span>${rb('運用上限','うんようじょうげん')}</span></p>
-        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">運用全体がこの金額に達したら、値上がりしてもこれ以上増えません。初期値は 10000円。0 で制限なし。</p>
+        <p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">運用資産（評価額）が増える上限です。元本の上限ではありません。値上がりしてもこの金額を超えません。初期値は 10000円。0 で制限なし。</p>
         <div class="flex gap-2 items-center">
           <input type="number" id="stock-cap-input" inputmode="numeric" min="0" step="1"
                  value="${state.stockCap == null ? 0 : Number(state.stockCap)}"
@@ -1426,7 +1426,8 @@ export function drawInvestChart() {
     state.investments,
     isDetail ? range : 'week',
     chartName,
-    state.investmentLogs
+    state.investmentLogs,
+    state.stockCap
   );
   if (history.empty || !history.labels.length) {
     if (investChartInstance) {

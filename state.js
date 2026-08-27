@@ -30,7 +30,7 @@ export const state = {
   
   // Firebaseから取得するデータ
   points: 0,
-  stockCap: null, // 親が決める運用全体の評価額上限。未設定・新規は 10000。0 を保存すると制限なし
+  stockCap: null, // 親が決める運用資産（評価額）の上限。元本上限ではない。未設定・新規は 10000。0 を保存すると制限なし
   marketSheetUrl: '',      // 相場を読むスプレッドシートのURL
   marketSheetStatus: 'off', // 'off' | 'loading' | 'ok' | 'error'
   marketSheetMarkets: [],   // 表から読めた市場名
