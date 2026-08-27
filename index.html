@@ -48,7 +48,7 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="style.css?v=232">
+  <link rel="stylesheet" href="style.css?v=233">
 </head>
 <body class="font-sans">
 
@@ -70,21 +70,26 @@
   </noscript>
 
 <script>
-  // app.js が読めない／起動しないときの保険（通常は app 側の watchdog が担当）
+  // app.js 未読込／起動未完了の保険。完了判定は boolean のみ（関数の有無では見ない）
   setTimeout(function () {
-    if (window.__ieMarkBootReady) return;
+    if (window.__ieBootReady === true) return;
     var app = document.getElementById('app');
     if (!app) return;
-    var text = (app.textContent || '').replace(/\s+/g, '');
-    if (text.indexOf('よみこみ中') === -1) return;
     app.innerHTML = '<div class="h-full flex flex-col items-center justify-center gap-4 px-6 text-center font-bold text-[#5f7970]" role="status">'
       + '<p class="text-sm text-[#2c3d38]">読み込みに時間がかかっています</p>'
       + '<p class="text-[11px] leading-relaxed text-[#7a8f88]">通信状況を確認してもう一度お試しください。</p>'
-      + '<button type="button" onclick="location.reload()" class="solid-btn primary-btn px-5 py-3 text-xs font-bold mt-1">もう一度読み込む</button>'
+      + '<button type="button" class="solid-btn primary-btn px-5 py-3 text-xs font-bold mt-1" id="ie-boot-reload">もう一度読み込む</button>'
       + '</div>';
+    var btn = document.getElementById('ie-boot-reload');
+    if (btn) {
+      btn.onclick = function () {
+        if (typeof window.reloadApp === 'function') window.reloadApp();
+        else location.reload();
+      };
+    }
   }, 15000);
 </script>
-<script type="module" src="app.js?v=232"></script>
+<script type="module" src="app.js?v=233"></script>
 
 </body>
 </html>
