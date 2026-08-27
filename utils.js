@@ -1,4 +1,4 @@
-import { state } from './state.js?v=224';
+import { state } from './state.js?v=225';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1123,7 +1123,7 @@ export function getActiveInvestments(investments) {
   return (investments || []).filter(inv => inv.status !== 'sold');
 }
 
-/** グラフに出せる銘柄（いま持っている + 売却済みの履歴があるもの） */
+/** グラフに出せる銘柄（いま持っている + 売却済みの履歴があるもの）。EOD用など */
 export function getChartMarketNames(investments, logs) {
   const names = new Set();
   for (const inv of investments || []) {
@@ -1131,6 +1131,15 @@ export function getChartMarketNames(investments, logs) {
   }
   for (const log of logs || []) {
     if (MARKET_ORDER.includes(log.name)) names.add(log.name);
+  }
+  return MARKET_ORDER.filter(n => names.has(n));
+}
+
+/** いま保有中の銘柄だけ（自分の資産推移グラフ用） */
+export function getHeldMarketNames(investments) {
+  const names = new Set();
+  for (const inv of getActiveInvestments(investments)) {
+    if (MARKET_ORDER.includes(inv.name)) names.add(inv.name);
   }
   return MARKET_ORDER.filter(n => names.has(n));
 }
@@ -1272,23 +1281,36 @@ export function buildInvestmentEodRows(investments, logs, dayKey) {
 }
 
 /**
- * 指定した銘柄の、その日の元本と運用資産。
- * name が CHART_TOTAL のときは全銘柄の合計。
+ * いま保有中の運用資産の、期間内の評価額・元本の推移。
+ * 各時点: その日までに持っていた口数 × その日の相場（架空の相場線は出さない）。
+ * 保有が無いときは empty: true（ラベルも空）。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null) {
-  const list = investments || [];
+  const list = getActiveInvestments(investments);
   const logList = logs || [];
-  const names = getChartMarketNames(list, logList);
+  const names = getHeldMarketNames(list);
   const wantTotal = name === CHART_TOTAL || name == null || name === '';
   const targetName = wantTotal
     ? CHART_TOTAL
     : ((name && names.includes(name)) ? name : CHART_TOTAL);
   const isTotal = targetName === CHART_TOTAL;
+  const empty = {
+    labels: [],
+    ms: [],
+    principal: [],
+    assets: [],
+    name: targetName,
+    isTotal,
+    empty: true
+  };
+  if (!names.length) return empty;
+
   const fromMs = firstInvestMs(list, logList, isTotal ? null : targetName);
   const rates = getMarketRates(range, fromMs != null ? { fromMs } : {});
   const principal = [];
   const assets = [];
   const loopNames = isTotal ? names : (targetName && names.includes(targetName) ? [targetName] : []);
+  if (!loopNames.length) return empty;
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
@@ -1303,7 +1325,7 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
     principal.push(Math.round(p));
     assets.push(Math.round(a));
   }
-  return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName, isTotal };
+  return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName, isTotal, empty: false };
 }
 
 /** 売買・評価用の現在レート（表示期間に依存しない）。表の実データだけ。 */
