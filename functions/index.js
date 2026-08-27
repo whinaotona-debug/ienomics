@@ -561,21 +561,21 @@ exports.generateRepeatedTasksCatchup = onSchedule(
 );
 
 /**
- * 期限が近いお仕事を知らせる。10分ごとに動く。
- * 1時間前（残り58〜70分）と30分前（残り28〜36分）だけ。
- * 残り45〜57分（52分付近）では出さない。
+ * 期限が近いお仕事を知らせる。1分ごとに動く。
+ * 「あと1時間」「あと30分」は、それぞれ残り59〜61分／29〜31分のときだけ送る
+ * （10分間隔＋広い枠だと、60分ちょうどを外して50分台で届くことがあった）。
  */
 exports.remindDeadlines = onSchedule(
-  { schedule: 'every 10 minutes', timeZone: 'Asia/Tokyo' },
+  { schedule: 'every 1 minutes', timeZone: 'Asia/Tokyo' },
   async () => {
     const now = Date.now();
     const minute = 60 * 1000;
     const slots = [
-      { id: '60', label: 'あと1時間', minMin: 58, maxMin: 70, field: 'deadlineRemind60For' },
-      { id: '30', label: 'あと30分', minMin: 28, maxMin: 36, field: 'deadlineRemind30For' }
+      { id: '60', label: 'あと1時間', minMin: 59, maxMin: 61, field: 'deadlineRemind60For' },
+      { id: '30', label: 'あと30分', minMin: 29, maxMin: 31, field: 'deadlineRemind30For' }
     ];
-    const from = now + 28 * minute;
-    const to = now + 70 * minute;
+    const from = now + 29 * minute;
+    const to = now + 61 * minute;
 
     const snap = await db.collection('tasks')
       .where('deadline', '>=', from)
@@ -588,7 +588,6 @@ exports.remindDeadlines = onSchedule(
       const t = d.data();
       if (!['open', 'accepted'].includes(t.status)) continue;
       const remainMin = Math.floor((t.deadline - now) / minute);
-      if (remainMin >= 45 && remainMin <= 57) continue;
 
       for (const slot of slots) {
         if (remainMin < slot.minMin || remainMin > slot.maxMin) continue;

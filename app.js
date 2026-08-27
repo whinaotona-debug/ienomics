@@ -1,10 +1,10 @@
-import { state } from './state.js?v=223';
-import { render } from './ui.js?v=223';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=223';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=223';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=223';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=223';
-import { db, auth } from './firebase.js?v=223';
+import { state } from './state.js?v=224';
+import { render } from './ui.js?v=224';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=224';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=224';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=224';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=224';
+import { db, auth } from './firebase.js?v=224';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -164,10 +164,10 @@ let midnightTimer = null;
 let watchedDayKey = null;
 const DEADLINE_CHECK_MS = 30 * 1000;
 const MINUTE = 60 * 1000;
-/** 1時間前: 残り58〜70分。52分帯（45〜57分）では出さない */
+/** 1時間前: 残り59〜61分。30分前: 残り29〜31分（サーバー remindDeadlines と同じ） */
 const DEADLINE_REMIND_SLOTS = [
-  { id: '60', label: 'あと1時間', minMin: 58, maxMin: 70 },
-  { id: '30', label: 'あと30分', minMin: 28, maxMin: 36 }
+  { id: '60', label: 'あと1時間', minMin: 59, maxMin: 61 },
+  { id: '30', label: 'あと30分', minMin: 29, maxMin: 31 }
 ];
 
 function getDeadlineNotifiedMap() {
@@ -183,7 +183,7 @@ function saveDeadlineNotifiedMap(map) {
 }
 
 function checkDeadlineReminders() {
-  // 期限の見張りはサーバー側（remindDeadlines）が10分ごとにやってくれる。
+  // 期限の見張りはサーバー側（remindDeadlines）が1分ごとにやってくれる。
   // アプリを閉じていても届くので、両方動くと二重になる。
   if (isPushActive()) return;
   if (!state.familyCode || !Array.isArray(state.tasks) || state.tasks.length === 0) return;
@@ -199,7 +199,6 @@ function checkDeadlineReminders() {
 
     const remaining = t.deadline - now;
     const remainMin = Math.floor(remaining / MINUTE);
-    if (remainMin >= 45 && remainMin <= 57) continue;
     for (const slot of DEADLINE_REMIND_SLOTS) {
       if (remainMin < slot.minMin || remainMin > slot.maxMin) continue;
       const key = `${t.id}:${slot.id}:${t.deadline}`;
@@ -2363,6 +2362,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=223').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=224').catch(err => console.warn('SW登録失敗:', err));
   });
 }
