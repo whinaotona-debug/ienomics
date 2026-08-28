@@ -1,7 +1,7 @@
-import { state } from './state.js?v=236';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=236';
-import { refreshTutorial } from './tutorial.js?v=236';
-import { auth } from './firebase.js?v=236';
+import { state } from './state.js?v=237';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=237';
+import { refreshTutorial } from './tutorial.js?v=237';
+import { auth } from './firebase.js?v=237';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -121,32 +121,41 @@ window.togglePassword = (inputId, eyeIconId) => {
   else { input.type = 'password'; icon.innerHTML = getIcon('eye'); }
 };
 
+function bootDebugLog(msg, detail) {
+  if (typeof window.__ieBootPerfLog === 'function') {
+    window.__ieBootPerfLog(msg, detail);
+    return;
+  }
+  if (detail !== undefined) console.log(`[boot-debug] ${msg}`, detail);
+  else console.log(`[boot-debug] ${msg}`);
+}
+
 export function render() {
-  console.log('[boot-debug] render start', { role: state.role, familyCode: state.familyCode, view: state.view });
+  bootDebugLog('render start', { role: state.role, familyCode: state.familyCode, view: state.view });
   try {
   const markReady = (reason) => {
-    console.log('[boot-debug] markBootReady', { reason });
+    bootDebugLog('markBootReady', { reason });
     if (typeof window.__ieMarkBootReady === 'function') window.__ieMarkBootReady(reason);
   };
   if (state.resetPasswordCode || state.setupMode === 'password_reset_form') {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordResetForm()}</div>`;
-    console.log('[boot-debug] render branch', { branch: 'password-reset' });
+    bootDebugLog('render branch', { branch: 'password-reset' });
     markReady('password-reset');
-    console.log('[boot-debug] render done');
+    bootDebugLog('render done');
     return;
   }
   if (state.requirePasswordSetup) {
     bottomNav.classList.add('hidden');
     if (state.isSending) {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetupLoading(state.setupLoadingMessage || '設定を保存しています...')}</div>`;
-      console.log('[boot-debug] render branch', { branch: 'password-setup-loading' });
+      bootDebugLog('render branch', { branch: 'password-setup-loading' });
     } else {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordSetup()}</div>`;
-      console.log('[boot-debug] render branch', { branch: 'password-setup' });
+      bootDebugLog('render branch', { branch: 'password-setup' });
     }
     markReady('password-setup');
-    console.log('[boot-debug] render done');
+    bootDebugLog('render done');
     return;
   }
   if (!state.role || !state.familyCode) {
@@ -154,21 +163,21 @@ export function render() {
     // メールリンク認証中も「よみこみ中」のままにせず、必ず何か描画する
     if (isSignInWithEmailLink(auth, window.location.href)) {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetupLoading('ログインを確認しています...')}</div>`;
-      console.log('[boot-debug] render branch', { branch: 'setup-email-link' });
+      bootDebugLog('render branch', { branch: 'setup-email-link' });
     } else {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetup()}</div>`;
-      console.log('[boot-debug] render branch', { branch: 'setup' });
+      bootDebugLog('render branch', { branch: 'setup' });
     }
     markReady('setup');
-    console.log('[boot-debug] render done');
+    bootDebugLog('render done');
     return;
   }
   if (state.role === 'parent' && !state.childLinked) {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderWaitingChild()}</div>`;
-    console.log('[boot-debug] render branch', { branch: 'waiting-child' });
+    bootDebugLog('render branch', { branch: 'waiting-child' });
     markReady('waiting-child');
-    console.log('[boot-debug] render done');
+    bootDebugLog('render done');
     return;
   }
 
@@ -213,7 +222,7 @@ export function render() {
   }
 
   appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${html}</div>`;
-  console.log('[boot-debug] render branch', { branch: 'app' });
+  bootDebugLog('render branch', { branch: 'app' });
   markReady('app');
   animatePointsDisplay();
   bindSwipeRows(appDiv);
@@ -224,9 +233,9 @@ export function render() {
   }
   // 画面が作り直されたので、ガイドの枠を測り直す
   refreshTutorial();
-  console.log('[boot-debug] render done');
+  bootDebugLog('render done');
   } catch (error) {
-    console.error('[boot-debug] render error', error);
+    bootDebugLog('render error', { error: String(error?.message || error) });
     throw error;
   }
 }

@@ -1,12 +1,15 @@
-import { state } from './state.js?v=236';
-import { render, drawInvestChart } from './ui.js?v=236';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=236';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=236';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=236';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=236';
-import { db, auth } from './firebase.js?v=236';
+import { state } from './state.js?v=237';
+import { render, drawInvestChart } from './ui.js?v=237';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=237';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=237';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=237';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=237';
+import { db, auth } from './firebase.js?v=237';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+
+const BOOT_PERF_MODULE_START = performance.now();
+let BOOT_PERF_BOOT_START = null;
 
 const DEFAULT_STOCK_CAP = 10000;
 function parseFamilyStockCap(data) {
@@ -52,12 +55,28 @@ function bootLog(msg, detail) {
   else console.log(`[boot] ${bootPhase}: ${msg}`);
 }
 
-function bootDebugLog(msg, detail) {
-  if (detail !== undefined) console.log(`[boot-debug] ${msg}`, detail);
-  else console.log(`[boot-debug] ${msg}`);
+function bootPerfSuffix() {
+  const now = performance.now();
+  const moduleMs = Math.round(now - BOOT_PERF_MODULE_START);
+  if (BOOT_PERF_BOOT_START == null) {
+    return ` +${moduleMs}ms (module)`;
+  }
+  const bootMs = Math.round(now - BOOT_PERF_BOOT_START);
+  return ` +${bootMs}ms (module +${moduleMs}ms)`;
 }
 
-console.log('[boot-debug] module evaluated');
+function bootDebugLog(msg, detail) {
+  const line = `[boot-debug] ${msg}${bootPerfSuffix()}`;
+  if (detail !== undefined) console.log(line, detail);
+  else console.log(line);
+}
+
+function markBootPerfBootStart() {
+  BOOT_PERF_BOOT_START = performance.now();
+}
+
+bootDebugLog('module evaluated');
+window.__ieBootPerfLog = bootDebugLog;
 
 let listenerSnapLogged = {};
 
@@ -586,6 +605,7 @@ let authListenerAttached = false;
 async function boot() {
   if (bootStarted) return;
   bootStarted = true;
+  markBootPerfBootStart();
   bootDebugLog('boot start', { bootStarted: true, role: state.role, familyCode: state.familyCode });
   setBootPhase('boot');
   startBootWatchdog();
@@ -2607,6 +2627,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=236').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=237').catch(err => console.warn('SW登録失敗:', err));
   });
 }
