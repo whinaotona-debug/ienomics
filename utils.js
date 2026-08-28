@@ -1,4 +1,4 @@
-import { state } from './state.js?v=235';
+import { state } from './state.js?v=236';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -897,7 +897,7 @@ export const NEWS_ABOUT_BY_MARKET = {
 /** ニュース見出し名 → 相場表の銘柄名 */
 export const MARKET_BY_NEWS_ABOUT = {
   日経平均: '日本',
-  S&P500: 'アメリカ',
+  'S&P500': 'アメリカ',
   原油: '原油',
   金: '金'
 };
