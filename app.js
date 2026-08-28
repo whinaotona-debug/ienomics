@@ -1,10 +1,10 @@
-import { state } from './state.js?v=237';
-import { render, drawInvestChart } from './ui.js?v=237';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=237';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=237';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=237';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=237';
-import { db, auth } from './firebase.js?v=237';
+import { state } from './state.js?v=238';
+import { render, drawInvestChart } from './ui.js?v=238';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=238';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=238';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=238';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=238';
+import { db, auth } from './firebase.js?v=238';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -79,6 +79,39 @@ bootDebugLog('module evaluated');
 window.__ieBootPerfLog = bootDebugLog;
 
 let listenerSnapLogged = {};
+let bootFamiliesSnapReady = false;
+let bootTasksSnapReady = false;
+let bootFirstRenderDone = false;
+let setupListenersPhase2Done = false;
+
+function resetBootRenderGate() {
+  bootFamiliesSnapReady = false;
+  bootTasksSnapReady = false;
+  bootFirstRenderDone = false;
+  setupListenersPhase2Done = false;
+}
+
+/** Phase1: families+tasks 初回到着まで render しない。以降は通常の scheduleRender */
+function scheduleBootAwareRender() {
+  if (bootFirstRenderDone) {
+    scheduleRender();
+    return;
+  }
+  if (bootFamiliesSnapReady && bootTasksSnapReady) {
+    bootFirstRenderDone = true;
+    bootDebugLog('boot first render gate open');
+    scheduleRender();
+    registerSetupListenersPhase2();
+  }
+}
+
+function registerSetupListenersPhase2() {
+  if (setupListenersPhase2Done || !state.familyCode) return;
+  setupListenersPhase2Done = true;
+  bootDebugLog('setupListeners phase2 start', { familyCode: state.familyCode });
+  attachSetupListenersPhase2();
+  bootDebugLog('setupListeners phase2 done');
+}
 
 function setBootPhase(phase) {
   bootPhase = phase;
@@ -1005,37 +1038,156 @@ async function handleFamilyRemoved() {
   familyRemovedHandled = false;
 }
 
+function attachFirestoreCollectionListener(c, k, { bootGated = false } = {}) {
+  const finishRender = bootGated ? scheduleBootAwareRender : scheduleRender;
+  const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => {
+    if (!listenerSnapLogged[c]) {
+      listenerSnapLogged[c] = true;
+      bootDebugLog('listener snapshot', { collection: c, size: s.size });
+      if (k === 'tasks') bootTasksSnapReady = true;
+    }
+    const a = [];
+    s.forEach(d => a.push({ id: d.id, ...d.data() }));
+    a.sort((a, b) => (b.chargedAt || b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.chargedAt || a.at || a.createdAt || a.boughtAt || a.approvedAt || 0));
+
+    if (!state.isInitialLoad) {
+      s.docChanges().forEach(change => {
+        if (k !== "tasks") return;
+        const t = change.doc.data();
+        if (!t || t.status === 'deleted') return;
+        const prev = state.tasks.find(x => x.id === change.doc.id);
+
+        if (change.type === "added") {
+          // 親が発注 → 子供へ
+          if (state.role === 'child' && t.status === 'open') {
+            localNotify(
+              "新しいお仕事！",
+              `「${t.title}」（${t.points}円）が発注されました！`
+            );
+          }
+          // 定期は受注なしで始まる → 子供へ
+          if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey || t.generatedKey)) {
+            localNotify(
+              "今日の定期のお仕事",
+              `「${t.title}」（${t.points}円）が始まりました！`
+            );
+          }
+          // 子供が見積り → 親へ
+          if (state.role === 'parent' && t.status === 'proposed') {
+            const name = state.childName || 'こども';
+            localNotify(
+              "見積りが届きました",
+              `${name}ちゃんから「${t.title}」（希望 ${t.points}円）`
+            );
+          }
+        }
+
+        if (change.type === "modified") {
+          // 親が見積りを承認して発注状態に → 子供へ
+          if (state.role === 'child' && t.status === 'open' && prev?.status === 'proposed') {
+            localNotify(
+              "見積りが承認されました！",
+              `「${t.title}」がお仕事として発注されました`
+            );
+          }
+          // 親が見積りを却下 → 子供へ
+          if (state.role === 'child' && t.status === 'proposal_rejected' && prev?.status === 'proposed') {
+            localNotify(
+              "見積りが却下されました",
+              `「${t.title}」の見積りは却下されました`
+            );
+          }
+          // 子供が完了報告 → 親へ
+          if (state.role === 'parent' && t.status === 'completed' && prev?.status !== 'completed') {
+            localNotify(
+              "お仕事完了！",
+              `${state.childName || 'こども'}ちゃんが「${t.title}」を完了しました！`
+            );
+          }
+          // 親が差し戻し → 子供へ
+          if (state.role === 'child' && t.status === 'accepted' && prev?.status === 'completed') {
+            localNotify(
+              "やり直し指示",
+              `「${t.title}」のやり直し（差し戻し）が届きました。`
+            );
+          }
+          // 親が付与・承認 → 子供へ
+          if (state.role === 'child' && t.status === 'approved' && prev?.status === 'completed') {
+            localNotify(
+              "お仕事が承認されました！",
+              `「${t.title}」で ${t.points}円 ゲット！`
+            );
+          }
+        }
+      });
+    }
+
+    state[k] = a;
+    if (k === "tasks") {
+      const firstLoad = state.isInitialLoad;
+      state.isInitialLoad = false;
+      state.tasksReady = true;
+      // 初回読込時のみ自動発注（削除のたびに再生成しない）
+      if (firstLoad) checkAndGenerateRepeatedTasks();
+      else dedupeRepeatedTasks();
+      checkDeadlineReminders();
+      cleanupExpiredDeadlineTasks();
+    }
+    if (k === "scheduledPayments") {
+      processScheduledPayments();
+    }
+    if (k === "investments" || k === "investmentLogs") {
+      scheduleBackfillInvestmentBuyLogs();
+    }
+    finishRender();
+  });
+  unsubscribes.push(unsub);
+}
+
+function attachSetupListenersPhase2() {
+  attachFirestoreCollectionListener("tickets", "tickets");
+  attachFirestoreCollectionListener("wishes", "wishes");
+  attachFirestoreCollectionListener("investments", "investments");
+  attachFirestoreCollectionListener("investmentLogs", "investmentLogs");
+  attachFirestoreCollectionListener("exchanges", "exchanges");
+  attachFirestoreCollectionListener("banks", "banks");
+  attachFirestoreCollectionListener("balloons", "balloons");
+  attachFirestoreCollectionListener("paymentLogs", "paymentLogs");
+}
+
 function setupListeners() {
   if (!state.familyCode) return;
   setBootPhase('listeners');
   bootLog('setupListeners', { familyCode: state.familyCode, role: state.role });
   bootDebugLog('setupListeners start', { familyCode: state.familyCode, role: state.role });
   listenerSnapLogged = {};
-  
-  unsubscribes.forEach(unsub => unsub()); 
+  resetBootRenderGate();
+
+  unsubscribes.forEach(unsub => unsub());
   unsubscribes = [];
   state.tasksReady = false;
   state.isInitialLoad = true;
   startDeadlineWatcher();
-  
+
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => {
     if (!listenerSnapLogged.families) {
       listenerSnapLogged.families = true;
+      bootFamiliesSnapReady = true;
       bootDebugLog('listener snapshot', { collection: 'families', size: d.exists() ? 1 : 0 });
     }
-    if (d.exists()) { 
+    if (d.exists()) {
       const data = d.data();
       state.points = data.points || 0;
       state.stockCap = parseFamilyStockCap(data);
-      state.childLinked = data.childLinked !== false; 
-      if (state.role === 'child') state.childName = data.childName || 'こども'; 
+      state.childLinked = data.childLinked !== false;
+      if (state.role === 'child') state.childName = data.childName || 'こども';
       applyMarketSheetUrl(data.marketSheetUrl || '');
-      scheduleRender(); 
+      scheduleBootAwareRender();
     }
     // 親がこの口座を削除した。子供の端末に古い残高を見せ続けないよう初期設定へ戻す。
     // 親の端末は、口座一覧の変化を見て自動で別の子に移るのでここでは何もしない。
     else if (state.role === 'child') handleFamilyRemoved();
-    else scheduleRender();
+    else scheduleBootAwareRender();
   }, (err) => {
     console.error('[boot] family onSnapshot error', err);
     scheduleRender();
@@ -1047,117 +1199,17 @@ function setupListeners() {
       listenerSnapLogged.taskTemplates = true;
       bootDebugLog('listener snapshot', { collection: 'taskTemplates', size: s.size });
     }
-    const list = []; s.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+    const list = [];
+    s.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.taskTemplates = list;
     checkAndGenerateRepeatedTasks();
-    scheduleRender();
+    scheduleBootAwareRender();
   });
   unsubscribes.push(unsubTemp);
 
-  const w = (c, k) => { 
-    const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => {
-      if (!listenerSnapLogged[c]) {
-        listenerSnapLogged[c] = true;
-        bootDebugLog('listener snapshot', { collection: c, size: s.size });
-      }
-      const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); 
-      a.sort((a, b) => (b.chargedAt || b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.chargedAt || a.at || a.createdAt || a.boughtAt || a.approvedAt || 0)); 
-      
-      if (!state.isInitialLoad) {
-        s.docChanges().forEach(change => {
-          if (k !== "tasks") return;
-          const t = change.doc.data();
-          if (!t || t.status === 'deleted') return;
-          const prev = state.tasks.find(x => x.id === change.doc.id);
-
-          if (change.type === "added") {
-            // 親が発注 → 子供へ
-            if (state.role === 'child' && t.status === 'open') {
-              localNotify(
-                "新しいお仕事！",
-                `「${t.title}」（${t.points}円）が発注されました！`
-              );
-            }
-            // 定期は受注なしで始まる → 子供へ
-            if (state.role === 'child' && t.status === 'accepted' && (t.autoAccepted || t.generatedKey || t.generatedKey)) {
-              localNotify(
-                "今日の定期のお仕事",
-                `「${t.title}」（${t.points}円）が始まりました！`
-              );
-            }
-            // 子供が見積り → 親へ
-            if (state.role === 'parent' && t.status === 'proposed') {
-              const name = state.childName || 'こども';
-              localNotify(
-                "見積りが届きました",
-                `${name}ちゃんから「${t.title}」（希望 ${t.points}円）`
-              );
-            }
-          }
-
-          if (change.type === "modified") {
-            // 親が見積りを承認して発注状態に → 子供へ
-            if (state.role === 'child' && t.status === 'open' && prev?.status === 'proposed') {
-              localNotify(
-                "見積りが承認されました！",
-                `「${t.title}」がお仕事として発注されました`
-              );
-            }
-            // 親が見積りを却下 → 子供へ
-            if (state.role === 'child' && t.status === 'proposal_rejected' && prev?.status === 'proposed') {
-              localNotify(
-                "見積りが却下されました",
-                `「${t.title}」の見積りは却下されました`
-              );
-            }
-            // 子供が完了報告 → 親へ
-            if (state.role === 'parent' && t.status === 'completed' && prev?.status !== 'completed') {
-              localNotify(
-                "お仕事完了！",
-                `${state.childName || 'こども'}ちゃんが「${t.title}」を完了しました！`
-              );
-            }
-            // 親が差し戻し → 子供へ
-            if (state.role === 'child' && t.status === 'accepted' && prev?.status === 'completed') {
-              localNotify(
-                "やり直し指示",
-                `「${t.title}」のやり直し（差し戻し）が届きました。`
-              );
-            }
-            // 親が付与・承認 → 子供へ
-            if (state.role === 'child' && t.status === 'approved' && prev?.status === 'completed') {
-              localNotify(
-                "お仕事が承認されました！",
-                `「${t.title}」で ${t.points}円 ゲット！`
-              );
-            }
-          }
-        });
-      }
-      
-      state[k] = a; 
-      if (k === "tasks") {
-        const firstLoad = state.isInitialLoad;
-        state.isInitialLoad = false;
-        state.tasksReady = true;
-        // 初回読込時のみ自動発注（削除のたびに再生成しない）
-        if (firstLoad) checkAndGenerateRepeatedTasks();
-        else dedupeRepeatedTasks();
-        checkDeadlineReminders();
-        cleanupExpiredDeadlineTasks();
-      }
-      if (k === "scheduledPayments") {
-        processScheduledPayments();
-      }
-      if (k === "investments" || k === "investmentLogs") {
-        scheduleBackfillInvestmentBuyLogs();
-      }
-      scheduleRender(); 
-    });
-    unsubscribes.push(unsub);
-  };
-  w("tasks", "tasks"); w("tickets", "tickets"); w("wishes", "wishes"); w("investments", "investments"); w("investmentLogs", "investmentLogs"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
-  bootDebugLog('setupListeners done');
+  attachFirestoreCollectionListener("tasks", "tasks", { bootGated: true });
+  attachFirestoreCollectionListener("scheduledPayments", "scheduledPayments", { bootGated: true });
+  bootDebugLog('setupListeners phase1 done');
 }
 
 window.setView = (viewName) => {
@@ -2627,6 +2679,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=237').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=238').catch(err => console.warn('SW登録失敗:', err));
   });
 }
