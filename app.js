@@ -1,10 +1,10 @@
-import { state } from './state.js?v=234';
-import { render, drawInvestChart } from './ui.js?v=234';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=234';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=234';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=234';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=234';
-import { db, auth } from './firebase.js?v=234';
+import { state } from './state.js?v=235';
+import { render, drawInvestChart } from './ui.js?v=235';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=235';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=235';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=235';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=235';
+import { db, auth } from './firebase.js?v=235';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -51,6 +51,15 @@ function bootLog(msg, detail) {
   if (detail !== undefined) console.log(`[boot] ${bootPhase}: ${msg}`, detail);
   else console.log(`[boot] ${bootPhase}: ${msg}`);
 }
+
+function bootDebugLog(msg, detail) {
+  if (detail !== undefined) console.log(`[boot-debug] ${msg}`, detail);
+  else console.log(`[boot-debug] ${msg}`);
+}
+
+console.log('[boot-debug] module evaluated');
+
+let listenerSnapLogged = {};
 
 function setBootPhase(phase) {
   bootPhase = phase;
@@ -577,6 +586,7 @@ let authListenerAttached = false;
 async function boot() {
   if (bootStarted) return;
   bootStarted = true;
+  bootDebugLog('boot start', { bootStarted: true, role: state.role, familyCode: state.familyCode });
   setBootPhase('boot');
   startBootWatchdog();
   bootLog('boot start', { role: state.role, familyCode: state.familyCode });
@@ -653,19 +663,30 @@ async function boot() {
   authListenerAttached = true;
 
   // 永続セッション復元前の「一時的な null」で親ログインを消さない
+  bootDebugLog('authStateReady start');
   try {
     setBootPhase('auth-ready');
     await withTimeout(auth.authStateReady(), BOOT_AWAIT_MS, '認証の準備');
     bootLog('authStateReady', { uid: auth.currentUser?.uid || null });
+    bootDebugLog('authStateReady done', { uid: auth.currentUser?.uid || null });
   } catch (error) {
     bootLog('authStateReady failed', error);
+    bootDebugLog('authStateReady error', { error: String(error?.message || error) });
   }
 
+  bootDebugLog('attaching auth listener');
   auth.onAuthStateChanged(async (user) => {
     setBootPhase(user ? (user.isAnonymous ? 'auth-anon' : 'auth-user') : 'auth-null');
     bootLog('onAuthStateChanged', { uid: user?.uid || null, role: state.role });
+    bootDebugLog('auth callback', {
+      uid: user?.uid || null,
+      isAnonymous: !!user?.isAnonymous,
+      role: state.role,
+      familyCode: state.familyCode
+    });
     try {
       if (state.role === 'parent') {
+        bootDebugLog('parent start');
         if (user && !user.isAnonymous) {
           await runMigrationAndLoadChildren(user.uid);
         } else {
@@ -673,9 +694,12 @@ async function boot() {
           state.role = null; state.familyCode = null; render();
         }
       } else if (state.role === 'child' && state.familyCode) {
+        bootDebugLog('child start');
         if (!user) {
+          bootDebugLog('anonymous auth start');
           try {
             await ensureAnonymousAuth();
+            bootDebugLog('anonymous auth done');
           } catch (error) {
             console.error('[boot] 匿名ログイン失敗:', error);
             await showAlert(friendlyError(error), { title: '接続できませんでした' });
@@ -685,12 +709,16 @@ async function boot() {
         }
         try {
           setBootPhase('claim-member');
+          bootDebugLog('claim membership start');
           await claimChildMembership(state.familyCode);
+          bootDebugLog('claim membership done');
         } catch (error) {
           console.warn('[boot] メンバー登録を再試行できませんでした:', error);
         }
         setBootPhase('setup-listeners');
+        bootDebugLog('child setupListeners start');
         setupListeners();
+        bootDebugLog('child setupListeners done');
       } else {
         render();
       }
@@ -718,11 +746,16 @@ if (document.readyState === 'complete') {
 
 async function runMigrationAndLoadChildren(uid) {
   setBootPhase('migrate-load-children');
+  bootDebugLog('migration start');
   try {
+    bootDebugLog('user getDoc start');
     const userDoc = await withTimeout(getDoc(doc(db, "users", uid)), BOOT_AWAIT_MS, 'ユーザー情報の取得');
+    bootDebugLog('user getDoc done', { exists: userDoc.exists() });
     if (userDoc.exists() && userDoc.data().familyCode) {
       const oldCode = userDoc.data().familyCode;
+      bootDebugLog('family migration getDoc start');
       const familyDoc = await withTimeout(getDoc(doc(db, "families", oldCode)), BOOT_AWAIT_MS, '家族データの取得');
+      bootDebugLog('family migration getDoc done', { exists: familyDoc.exists() });
       if (familyDoc.exists() && !familyDoc.data().parentUid) {
         await updateDoc(doc(db, "families", oldCode), { parentUid: uid, childName: "メイン口座" });
       }
@@ -751,10 +784,13 @@ function applyActiveChild() {
 
 function loadParentChildren(parentUid) {
   setBootPhase('parent-children-snap');
+  bootDebugLog('loadParentChildren start');
   const q = query(collection(db, "families"), where("parentUid", "==", parentUid));
   if (window.unsubChildren) window.unsubChildren();
+  bootDebugLog('parent children listener attached');
   window.unsubChildren = onSnapshot(q, (snapshot) => {
     bootLog('children snapshot', { size: snapshot.size });
+    bootDebugLog('parent children snapshot', { size: snapshot.size });
     const list = [];
     snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.children = list.sort((a, b) => a.createdAt - b.createdAt);
@@ -766,6 +802,7 @@ function loadParentChildren(parentUid) {
       // ポイント更新のたびにここが走る。毎回 setupListeners すると
       // 定期発注の判定が途中でキャンセルされて、仕事が出てこないことがある。
       if (state.familyCode !== prevCode || unsubscribes.length === 0) {
+        bootDebugLog('parent children before setupListeners');
         setupListeners();
       } else {
         scheduleRender();
@@ -952,6 +989,8 @@ function setupListeners() {
   if (!state.familyCode) return;
   setBootPhase('listeners');
   bootLog('setupListeners', { familyCode: state.familyCode, role: state.role });
+  bootDebugLog('setupListeners start', { familyCode: state.familyCode, role: state.role });
+  listenerSnapLogged = {};
   
   unsubscribes.forEach(unsub => unsub()); 
   unsubscribes = [];
@@ -959,7 +998,11 @@ function setupListeners() {
   state.isInitialLoad = true;
   startDeadlineWatcher();
   
-  const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => { 
+  const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => {
+    if (!listenerSnapLogged.families) {
+      listenerSnapLogged.families = true;
+      bootDebugLog('listener snapshot', { collection: 'families', size: d.exists() ? 1 : 0 });
+    }
     if (d.exists()) { 
       const data = d.data();
       state.points = data.points || 0;
@@ -980,6 +1023,10 @@ function setupListeners() {
   unsubscribes.push(unsubFamily);
 
   const unsubTemp = onSnapshot(query(collection(db, "taskTemplates"), where("familyCode", "==", state.familyCode)), (s) => {
+    if (!listenerSnapLogged.taskTemplates) {
+      listenerSnapLogged.taskTemplates = true;
+      bootDebugLog('listener snapshot', { collection: 'taskTemplates', size: s.size });
+    }
     const list = []; s.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.taskTemplates = list;
     checkAndGenerateRepeatedTasks();
@@ -988,7 +1035,11 @@ function setupListeners() {
   unsubscribes.push(unsubTemp);
 
   const w = (c, k) => { 
-    const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => { 
+    const unsub = onSnapshot(query(collection(db, c), where("familyCode", "==", state.familyCode)), (s) => {
+      if (!listenerSnapLogged[c]) {
+        listenerSnapLogged[c] = true;
+        bootDebugLog('listener snapshot', { collection: c, size: s.size });
+      }
       const a = []; s.forEach(d => a.push({ id: d.id, ...d.data() })); 
       a.sort((a, b) => (b.chargedAt || b.at || b.createdAt || b.boughtAt || b.approvedAt || 0) - (a.chargedAt || a.at || a.createdAt || a.boughtAt || a.approvedAt || 0)); 
       
@@ -1086,6 +1137,7 @@ function setupListeners() {
     unsubscribes.push(unsub);
   };
   w("tasks", "tasks"); w("tickets", "tickets"); w("wishes", "wishes"); w("investments", "investments"); w("investmentLogs", "investmentLogs"); w("exchanges", "exchanges"); w("banks", "banks"); w("balloons", "balloons"); w("scheduledPayments", "scheduledPayments"); w("paymentLogs", "paymentLogs");
+  bootDebugLog('setupListeners done');
 }
 
 window.setView = (viewName) => {
@@ -2555,6 +2607,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=234').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=235').catch(err => console.warn('SW登録失敗:', err));
   });
 }
