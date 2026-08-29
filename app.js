@@ -1,10 +1,10 @@
-import { state } from './state.js?v=242';
-import { render, drawInvestChart } from './ui.js?v=242';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=242';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=242';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=242';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=242';
-import { db, auth } from './firebase.js?v=242';
+import { state } from './state.js?v=241';
+import { render, drawInvestChart } from './ui.js?v=241';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=241';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=241';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=241';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=241';
+import { db, auth } from './firebase.js?v=241';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -76,7 +76,6 @@ function markBootPerfBootStart() {
 }
 
 bootDebugLog('module evaluated');
-bootDebugLog('eod self-test', selfTestInvestmentEodLogic());
 window.__ieBootPerfLog = bootDebugLog;
 
 let listenerSnapLogged = {};
@@ -1139,7 +1138,6 @@ function attachFirestoreCollectionListener(c, k, { bootGated = false } = {}) {
     }
     if (k === "investments" || k === "investmentLogs") {
       scheduleBackfillInvestmentBuyLogs();
-      scheduleInvestmentEodMigration();
     }
     // ホーム未使用のため、ホーム表示中は全画面renderを省略（stateは更新済み）
     if (state.view === 'home' && (k === 'tickets' || k === 'paymentLogs')) return;
@@ -1664,16 +1662,13 @@ async function backfillInvestmentBuyLogs() {
     // 壊れた買値で口数が爆発しないよう、今の相場の1/8〜8倍に収める
     const cur = rates[name] || safeRate;
     const buy = (safeRate >= cur / 8 && safeRate <= cur * 8) ? safeRate : cur;
-    // 部分ログがある不足分は「今」付与。createdAt へまとめると過去日を汚染する
-    const hasPartialLogs = net > 0.5;
-    const backfillAt = (!hasPartialLogs && created > 0) ? created : Date.now();
 
     missing.push({
       name,
       investedPoints: gap,
       shares: gap / buy,
       rate: buy,
-      at: backfillAt
+      at: created > 0 ? created : Date.now()
     });
   }
   if (!missing.length) return;
@@ -1707,30 +1702,22 @@ function eodLogDocId(familyCode, name, dayKey) {
   return `eod_${familyCode}_${safe}_${dayKey}`;
 }
 
-function eodRowNeedsWrite(existing, row) {
-  if (!existing) return true;
-  if (!existing.finalized) return true;
-  const sp = Math.round(Number(existing.investedPoints) || 0);
-  const ep = Math.round(Number(row.investedPoints) || 0);
-  const sa = Math.round(Number(existing.assets) || 0);
-  const ea = Math.round(Number(row.assets) || 0);
-  return Math.abs(sp - ep) > 0.5 || Math.abs(sa - ea) > 1;
-}
-
-/** 指定した日本日付の EOD。finalized でも buy/sell 再生と不一致なら上書き */
+/** 指定した日本日付の EOD。finalized 済みの行は上書きしない */
 async function writeInvestmentEodLogs(dayKey, finalized, { appendLogs = [] } = {}) {
   if (!state.familyCode || !dayKey || investmentEodBusy) return;
   const logs = [...(state.investmentLogs || []), ...appendLogs];
+  if (finalized && logs.some(l => l.type === 'eod' && l.dayKey === dayKey && l.finalized)) {
+    // 個別銘柄で finalized 済みは下の filter でスキップ
+  }
 
   const rows = buildInvestmentEodRows(state.investments, logs, dayKey, state.stockCap);
   if (!rows.length) return;
 
-  const toWrite = rows.filter(row => {
-    const existing = logs.find(l =>
-      l.type === 'eod' && l.dayKey === dayKey && l.name === row.name
-    );
-    return eodRowNeedsWrite(existing, row);
-  });
+  const toWrite = rows.filter(row =>
+    !logs.some(l =>
+      l.type === 'eod' && l.dayKey === dayKey && l.name === row.name && l.finalized
+    )
+  );
   if (!toWrite.length) return;
 
   investmentEodBusy = true;
@@ -1750,93 +1737,6 @@ async function writeInvestmentEodLogs(dayKey, finalized, { appendLogs = [] } = {
     console.warn('[investmentLogs eod]', e);
   } finally {
     investmentEodBusy = false;
-  }
-}
-
-let eodMigrationBusy = false;
-let eodMigrationScheduled = false;
-let eodMigrationWaitTicks = 0;
-
-function eodMigrationStorageKey(familyCode) {
-  return `ieEodMigrated_${familyCode}_${INVESTMENT_EOD_MIGRATION_KEY}`;
-}
-
-function scheduleInvestmentEodMigration() {
-  if (eodMigrationScheduled || !state.familyCode) return;
-  if (!Array.isArray(state.investmentLogs)) return;
-  eodMigrationScheduled = true;
-  setTimeout(() => {
-    eodMigrationScheduled = false;
-    runInvestmentEodMigrationIfNeeded();
-  }, 300);
-}
-
-/** 旧方式で汚染された EOD を buy/sell 再生で特定し、誤りだけ置換（finalized も対象） */
-async function runInvestmentEodMigrationIfNeeded() {
-  if (!state.familyCode || eodMigrationBusy) return;
-  const lsKey = eodMigrationStorageKey(state.familyCode);
-  if (localStorage.getItem(lsKey) === 'done') return;
-  if (!Array.isArray(state.investmentLogs)) return;
-
-  const sheetReady = state.marketSheetStatus === 'ok';
-  if (!sheetReady && eodMigrationWaitTicks < 20) {
-    eodMigrationWaitTicks += 1;
-    scheduleInvestmentEodMigration();
-    return;
-  }
-
-  eodMigrationBusy = true;
-  try {
-    const analysis = analyzeInvestmentEodMigration(
-      state.investments,
-      state.investmentLogs,
-      state.stockCap,
-      { sheetReady }
-    );
-
-    bootDebugLog('eod migration analysis', {
-      through: analysis.throughDayKey,
-      dayCount: analysis.dayKeys.length,
-      toFix: analysis.toFix.length,
-      unchanged: analysis.unchanged.length,
-      targetDays: [...new Set(analysis.toFix.map(f => f.dayKey))].sort(),
-      samples: analysis.toFix.slice(0, 25).map(f => ({
-        dayKey: f.dayKey,
-        name: f.name,
-        action: f.action,
-        stored: f.stored,
-        expected: { principal: f.row.investedPoints, assets: f.row.assets }
-      }))
-    });
-
-    if (!analysis.toFix.length) {
-      localStorage.setItem(lsKey, 'done');
-      return;
-    }
-
-    const todayKey = japanTodayKey();
-    await Promise.all(analysis.toFix.map(fix => setDoc(
-      doc(db, 'investmentLogs', eodLogDocId(state.familyCode, fix.name, fix.dayKey)),
-      {
-        familyCode: state.familyCode,
-        name: fix.name,
-        type: 'eod',
-        dayKey: fix.dayKey,
-        investedPoints: Math.round(Number(fix.row.investedPoints) || 0),
-        shares: Number(fix.row.shares) || 0,
-        assets: Math.round(Number(fix.row.assets) || 0),
-        at: fix.row.at,
-        finalized: fix.dayKey < todayKey
-      },
-      { merge: true }
-    )));
-
-    bootDebugLog('eod migration applied', { count: analysis.toFix.length });
-    localStorage.setItem(lsKey, 'done');
-  } catch (e) {
-    console.warn('[eod migration]', e);
-  } finally {
-    eodMigrationBusy = false;
   }
 }
 
@@ -2243,7 +2143,6 @@ async function loadMarketSheet(url, { quiet = false } = {}) {
     }
     if (state.familyCode) {
       refreshTodayInvestmentEod().catch(e => console.warn('[investmentLogs eod]', e));
-      scheduleInvestmentEodMigration();
     }
   } catch (error) {
     console.error('[marketSheet]', error);
@@ -2799,6 +2698,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=242').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=241').catch(err => console.warn('SW登録失敗:', err));
   });
 }

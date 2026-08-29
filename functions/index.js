@@ -489,62 +489,31 @@ async function runSnapshotInvestmentEod() {
     }
     let totalPrincipal = 0;
     for (const name of names) {
-      const pos = replayInvestmentPosition(bag.logs, name, end);
-      const existing = bag.logs.find(l =>
-        l.type === 'eod' && l.dayKey === yesterday && l.name === name && l.finalized
-      );
-      const ep = Math.round(pos.principal);
-      if (existing) {
-        const sp = Math.round(Number(existing.investedPoints) || 0);
-        const ss = Number(existing.shares) || 0;
-        if (Math.abs(sp - ep) > 0.5 || Math.abs(ss - pos.shares) > 1e-6) {
-          await db.collection('investmentLogs').doc(eodLogDocId(code, name, yesterday)).set({
-            familyCode: code,
-            name,
-            type: 'eod',
-            dayKey: yesterday,
-            investedPoints: ep,
-            shares: pos.shares,
-            at: end,
-            finalized: true
-          }, { merge: true });
-          wrote += 1;
-        }
-        if (ep > 0 || pos.shares > 0) totalPrincipal += ep;
+      const already = bag.logs.some(l => l.type === 'eod' && l.dayKey === yesterday && l.name === name && l.finalized);
+      if (already) {
+        const eod = bag.logs.find(l => l.type === 'eod' && l.dayKey === yesterday && l.name === name && l.finalized);
+        if (eod) totalPrincipal += Math.round(Number(eod.investedPoints) || 0);
         continue;
       }
+      const pos = replayInvestmentPosition(bag.logs, name, end);
       if (!(pos.principal > 0 || pos.shares > 0)) continue;
       await db.collection('investmentLogs').doc(eodLogDocId(code, name, yesterday)).set({
         familyCode: code,
         name,
         type: 'eod',
         dayKey: yesterday,
-        investedPoints: ep,
+        investedPoints: Math.round(pos.principal),
         shares: pos.shares,
         at: end,
         finalized: true
       }, { merge: true });
-      totalPrincipal += ep;
+      totalPrincipal += Math.round(pos.principal);
       wrote += 1;
     }
-    const totalExisting = bag.logs.find(l =>
+    const totalFinalized = bag.logs.some(l =>
       l.type === 'eod' && l.dayKey === yesterday && l.name === CHART_TOTAL && l.finalized
     );
-    if (totalExisting) {
-      const sp = Math.round(Number(totalExisting.investedPoints) || 0);
-      if (Math.abs(sp - totalPrincipal) > 0.5 && totalPrincipal > 0) {
-        await db.collection('investmentLogs').doc(eodLogDocId(code, CHART_TOTAL, yesterday)).set({
-          familyCode: code,
-          name: CHART_TOTAL,
-          type: 'eod',
-          dayKey: yesterday,
-          investedPoints: totalPrincipal,
-          shares: 0,
-          at: end,
-          finalized: true
-        }, { merge: true });
-      }
-    } else if (totalPrincipal > 0) {
+    if (!totalFinalized && totalPrincipal > 0) {
       await db.collection('investmentLogs').doc(eodLogDocId(code, CHART_TOTAL, yesterday)).set({
         familyCode: code,
         name: CHART_TOTAL,
