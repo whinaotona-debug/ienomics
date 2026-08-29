@@ -1,7 +1,7 @@
-import { state } from './state.js?v=247';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=247';
-import { refreshTutorial } from './tutorial.js?v=247';
-import { auth } from './firebase.js?v=247';
+import { state } from './state.js?v=248';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=248';
+import { refreshTutorial } from './tutorial.js?v=248';
+import { auth } from './firebase.js?v=248';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -193,10 +193,10 @@ export function render() {
     if (typeof window.__ieMarkBootReady === 'function') window.__ieMarkBootReady(reason);
   };
   const installGate = getInstallGateKind();
-  if (installGate) {
+  if (installGate || window.__ieInstallGateLine) {
     bottomNav.classList.add('hidden');
-    appDiv.innerHTML = renderInstallGate(installGate);
-    bootDebugLog('render branch', { branch: 'install-gate', kind: installGate });
+    if (installGate) appDiv.innerHTML = renderInstallGate(installGate);
+    bootDebugLog('render branch', { branch: 'install-gate', kind: installGate || 'line-inline' });
     markReady('install-gate');
     bootDebugLog('render done');
     return;

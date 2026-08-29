@@ -48,7 +48,7 @@
     }
   </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="style.css?v=247">
+  <link rel="stylesheet" href="style.css?v=248">
 </head>
 <body class="font-sans">
 
@@ -62,6 +62,35 @@
     <nav id="bottom-nav" class="flex-none z-20 hidden" aria-label="&#x30E1;&#x30A4;&#x30F3;&#x30E1;&#x30CB;&#x30E5;&#x30FC;">
     </nav>
   </div>
+
+  <script>
+    // LINE 内は app.js / Firebase より先に案内を出す（読み込み中で止まらないように）
+    (function () {
+      var ua = navigator.userAgent || '';
+      var ref = document.referrer || '';
+      var isLine = /\bLine\//i.test(ua) || /\bLIAPP\b/i.test(ua)
+        || /line\.me|line-apps\.com|l\.line-scdn\.net/i.test(ref);
+      if (!isLine) return;
+      window.__ieInstallGateLine = true;
+      var app = document.getElementById('app');
+      if (!app) return;
+      app.innerHTML = ''
+        + '<div class="ie-install-gate fade-in">'
+        + '<div class="ie-install-gate-card">'
+        + '<h1 class="ie-install-gate-title">ブラウザで開いてください</h1>'
+        + '<p class="ie-install-gate-lead">イエノミクスを使うには、まず通常のブラウザで開く必要があります。</p>'
+        + '<div class="ie-line-menu-demo" aria-hidden="true">'
+        + '<div class="ie-line-menu-phone">'
+        + '<span class="ie-line-menu-hint">右下</span>'
+        + '<span class="ie-line-menu-btn" title="メニュー"><span></span><span></span><span></span></span>'
+        + '</div></div>'
+        + '<div class="ie-install-gate-step">'
+        + '<p class="ie-install-gate-step-label">手順</p>'
+        + '<p class="ie-install-gate-step-text">画面<strong>右下</strong>の<strong>縦に3つ並んだ点</strong>（⋮）を押して、「<strong>ブラウザで開く</strong>」を選んでください</p>'
+        + '</div></div></div>';
+      window.__ieBootReady = true;
+    })();
+  </script>
 
   <noscript>
     <p style="padding:24px;font-weight:700;text-align:center">
@@ -89,7 +118,7 @@
     }
   }, 15000);
 </script>
-<script type="module" src="app.js?v=247"></script>
+<script type="module" src="app.js?v=248"></script>
 
 </body>
 </html>

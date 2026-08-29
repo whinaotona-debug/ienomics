@@ -1,4 +1,4 @@
-import { state } from './state.js?v=247';
+import { state } from './state.js?v=248';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -442,8 +442,7 @@ export function isStandalonePwa() {
   if (typeof window === 'undefined') return false;
   if (window.navigator?.standalone === true) return true;
   try {
-    return window.matchMedia('(display-mode: standalone)').matches
-      || window.matchMedia('(display-mode: fullscreen)').matches;
+    return window.matchMedia('(display-mode: standalone)').matches;
   } catch {
     return false;
   }
