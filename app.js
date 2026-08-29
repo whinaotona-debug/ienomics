@@ -1,10 +1,10 @@
-import { state } from './state.js?v=256';
-import { render, drawInvestChart } from './ui.js?v=256';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=256';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=256';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=256';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=256';
-import { db, auth } from './firebase.js?v=256';
+import { state } from './state.js?v=257';
+import { render, drawInvestChart } from './ui.js?v=257';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=257';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=257';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=257';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=257';
+import { db, auth } from './firebase.js?v=257';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -2875,7 +2875,16 @@ window.sendRealEmailLink = async () => {
     state.message = email;
     state.setupStep = 2;
   } catch (error) {
-    await showAlert(friendlyError(error), { title: 'メールを送れませんでした' });
+    const code = error?.code || '';
+    if (code === 'auth/email-already-in-use') {
+      const goLogin = await showConfirm(
+        'このメールアドレスはすでに登録されています。\nログインしてください。',
+        { title: '登録済みのメールアドレスです', okLabel: 'ログインへ', cancelLabel: '閉じる' }
+      );
+      if (goLogin) state.setupMode = 'parent_login';
+    } else {
+      await showAlert(friendlyError(error), { title: 'メールを送れませんでした' });
+    }
   } finally {
     state.isSending = false; render();
   }
@@ -2954,6 +2963,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=256').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=257').catch(err => console.warn('SW登録失敗:', err));
   });
 }

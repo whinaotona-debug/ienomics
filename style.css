@@ -1001,6 +1001,16 @@ body.furigana-on .ie-status-chip {
   box-shadow: var(--ie-shadow);
 }
 
+.ie-setup-first-steps {
+  list-style: none;
+  margin: 0;
+  padding: 14px 16px;
+  background: #f4faf8;
+  border: 1px solid #dff3ef;
+  border-radius: 14px;
+}
+.ie-setup-first-steps li + li { margin-top: 8px; }
+
 .ie-stamp-board {
   background: linear-gradient(180deg, var(--ie-warm-soft) 0%, #fff 70%);
   border: 1px solid #f3e0c8;
