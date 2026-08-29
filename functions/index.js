@@ -57,6 +57,26 @@ function japanTodayKey(date = new Date()) {
   return `${j.year}-${j.month}-${j.day}`;
 }
 
+function japanMonthKey(date = new Date()) {
+  const j = japanParts(date);
+  return `${j.year}-${j.month}`;
+}
+
+function monthKeyNum(key) {
+  const [y, m] = String(key || '').split('-').map(Number);
+  if (!y || !m) return 0;
+  return y * 12 + m;
+}
+
+function nextJapanMonthKey(key) {
+  const [y, m] = String(key || '').split('-').map(Number);
+  if (!y || !m) return japanMonthKey();
+  if (m >= 12) return `${y + 1}-1`;
+  return `${y}-${m + 1}`;
+}
+
+const BANK_MONTHLY_RATE = 0.005;
+
 function japanDeadlineMs(hours, minutes, date = new Date()) {
   const j = japanParts(date);
   const h = Number.isFinite(hours) ? hours : 19;
@@ -560,12 +580,48 @@ async function runSnapshotInvestmentEod() {
   if (wrote) console.log(`[snapshotInvestmentEod] ${wrote}件 ${yesterday}`);
 }
 
+/** 毎月1日、前月分の月利（0.5%）を預金残高へ加算 */
+async function runApplyBankMonthlyInterest() {
+  let snap;
+  try {
+    snap = await db.collection('banks').get();
+  } catch (e) {
+    console.warn('[bankInterest]', e?.message || e);
+    return;
+  }
+  if (snap.empty) return;
+
+  const thisMonth = japanMonthKey();
+  const updates = [];
+  for (const d of snap.docs) {
+    const b = d.data();
+    const createdAt = Number(b.createdAt) || Date.now();
+    let last = b.lastInterestKey || japanMonthKey(new Date(createdAt));
+    let amount = Math.round(Number(b.amount) || 0);
+    const principal = Math.round(Number(b.principal ?? amount));
+    let cur = last;
+    let steps = 0;
+    while (monthKeyNum(cur) < monthKeyNum(thisMonth)) {
+      cur = nextJapanMonthKey(cur);
+      amount += Math.floor(amount * BANK_MONTHLY_RATE);
+      steps += 1;
+    }
+    if (!steps) continue;
+    updates.push(d.ref.update({ amount, principal, lastInterestKey: cur }));
+  }
+  if (updates.length) {
+    await Promise.all(updates);
+    console.log(`[bankInterest] ${updates.length}件 ${thisMonth}`);
+  }
+}
+
 // 0:00ちょうど（日本時間）。アプリを落としていなくても、サーバー側で今日分が出る。
 exports.generateRepeatedTasks = onSchedule(
   { schedule: '0 0 * * *', timeZone: 'Asia/Tokyo' },
   async () => {
     await runGenerateRepeatedTasks();
     await runSnapshotInvestmentEod();
+    await runApplyBankMonthlyInterest();
   }
 );
 
@@ -581,6 +637,7 @@ exports.generateRepeatedTasksCatchup = onSchedule(
     await runGenerateRepeatedTasks();
     await runCleanupExpiredTasks();
     await runSnapshotInvestmentEod();
+    await runApplyBankMonthlyInterest();
     await runProcessScheduledPayments();
   }
 );

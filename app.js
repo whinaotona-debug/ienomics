@@ -1,10 +1,10 @@
-import { state } from './state.js?v=242';
-import { render, drawInvestChart } from './ui.js?v=242';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey } from './utils.js?v=242';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=242';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=242';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=242';
-import { db, auth } from './firebase.js?v=242';
+import { state } from './state.js?v=243';
+import { render, drawInvestChart } from './ui.js?v=243';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey } from './utils.js?v=243';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=243';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=243';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=243';
+import { db, auth } from './firebase.js?v=243';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -408,6 +408,7 @@ function scheduleMidnightTick() {
     const created = await checkAndGenerateRepeatedTasks();
     if (created > 0) showToast(`今日の定期のお仕事を${created}件追加しました`);
     await writeInvestmentEodLogs(japanYesterdayKey(), true);
+    await applyBankMonthlyInterest();
     scheduleMidnightTick();
   }, msUntilNextMidnight());
 }
@@ -432,6 +433,7 @@ if (typeof document !== 'undefined') {
       ensureTodayGeneration();
       scheduleMidnightTick();
       catchupInvestmentEodLogs();
+      applyBankMonthlyInterest().catch(e => console.warn('[bank interest]', e));
     }
   });
 }
@@ -1140,6 +1142,9 @@ function attachFirestoreCollectionListener(c, k, { bootGated = false } = {}) {
     if (k === "investments" || k === "investmentLogs") {
       scheduleBackfillInvestmentBuyLogs();
       scheduleInvestmentEodMigration();
+    }
+    if (k === "banks") {
+      applyBankMonthlyInterest().catch(e => console.warn('[bank interest]', e));
     }
     // ホーム未使用のため、ホーム表示中は全画面renderを省略（stateは更新済み）
     if (state.view === 'home' && (k === 'tickets' || k === 'paymentLogs')) return;
@@ -2073,13 +2078,52 @@ window.rejectExchange = async (id) => {
   await guard(`rejectExchange:${id}`, () => updateDoc(doc(db, "exchanges", id), { status: 'rejected' }));
 };
 
+/** 毎月1日に、前月分の月利（0.5%）を預金残高へ加算 */
+let bankInterestBusy = false;
+async function applyBankMonthlyInterest() {
+  if (!state.familyCode || bankInterestBusy || !state.banks?.length) return;
+  bankInterestBusy = true;
+  try {
+    const thisMonth = japanMonthKey();
+    const updates = [];
+    for (const b of state.banks) {
+      let last = b.lastInterestKey || japanMonthKey(new Date(Number(b.createdAt) || Date.now()));
+      let amount = bankDepositBalance(b);
+      const principal = Math.round(Number(b.principal ?? amount));
+      let cur = last;
+      let steps = 0;
+      while (monthKeyNum(cur) < monthKeyNum(thisMonth)) {
+        cur = nextJapanMonthKey(cur);
+        amount += Math.floor(amount * BANK_MONTHLY_RATE);
+        steps += 1;
+      }
+      if (!steps) continue;
+      updates.push(updateDoc(doc(db, 'banks', b.id), {
+        amount,
+        principal,
+        lastInterestKey: cur
+      }));
+    }
+    if (updates.length) await Promise.all(updates);
+  } finally {
+    bankInterestBusy = false;
+  }
+}
+
 window.depositBank = async () => {
   const a = parseInt(document.getElementById('bank-amount').value);
   if (!a || a <= 0) return showAlert("預ける金額を入力してください");
   if (state.points < a) return showAlert(`ポイントが足りません（所持: ${state.points}円）`);
   await guard('depositBank', async () => {
+    const at = Date.now();
     await updateDoc(doc(db, "families", state.familyCode), { points: increment(-a) });
-    await addDoc(collection(db, "banks"), { familyCode: state.familyCode, amount: a, createdAt: Date.now() });
+    await addDoc(collection(db, "banks"), {
+      familyCode: state.familyCode,
+      amount: a,
+      principal: a,
+      createdAt: at,
+      lastInterestKey: japanMonthKey(new Date(at))
+    });
     setView('bank');
     showToast(`${a}円 を預けました`);
   }, { busyLabel: '預けています...' });
@@ -2090,8 +2134,7 @@ window.withdrawBank = async () => {
   let total = 0;
   const deposits = state.banks.slice();
   for (const b of deposits) {
-    const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
-    total += b.amount + Math.floor(b.amount * (0.005 * months));
+    total += bankDepositBalance(b);
   }
   const ok = await showConfirm(
     "預金と利息をまとめてポイントに戻します。",
@@ -2799,6 +2842,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=242').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=243').catch(err => console.warn('SW登録失敗:', err));
   });
 }

@@ -1,4 +1,4 @@
-import { state } from './state.js?v=242';
+import { state } from './state.js?v=243';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -355,6 +355,48 @@ export function japanYesterdayKey(date = new Date()) {
   return japanTodayKey(new Date(japanDayStartMs(date) - 1));
 }
 
+/** 日本時間の年月キー（例: 2026-8） */
+export function japanMonthKey(date = new Date()) {
+  const j = japanParts(date);
+  return `${j.year}-${j.month}`;
+}
+
+export function monthKeyNum(key) {
+  const [y, m] = String(key || '').split('-').map(Number);
+  if (!y || !m) return 0;
+  return y * 12 + m;
+}
+
+export function nextJapanMonthKey(key) {
+  const [y, m] = String(key || '').split('-').map(Number);
+  if (!y || !m) return japanMonthKey();
+  if (m >= 12) return `${y + 1}-1`;
+  return `${y}-${m + 1}`;
+}
+
+/** 家庭内銀行の月利（0.5%）。毎月1日に前月分を残高へ加算 */
+export const BANK_MONTHLY_RATE = 0.005;
+
+export function bankDepositPrincipal(b) {
+  return Math.round(Number(b?.principal ?? b?.amount) || 0);
+}
+
+export function bankDepositBalance(b) {
+  return Math.round(Number(b?.amount) || 0);
+}
+
+export function bankDepositInterestEarned(b) {
+  return Math.max(0, bankDepositBalance(b) - bankDepositPrincipal(b));
+}
+
+export function bankTotalBalance(banks) {
+  return (banks || []).reduce((s, b) => s + bankDepositBalance(b), 0);
+}
+
+export function bankTotalInterest(banks) {
+  return (banks || []).reduce((s, b) => s + bankDepositInterestEarned(b), 0);
+}
+
 function msFromJapanDayKey(dayKey) {
   const [y, m, d] = String(dayKey || '').split('-').map(Number);
   if (!y || !m || !d) return japanDayStartMs();
@@ -647,7 +689,7 @@ export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs
     rows.push({
       kind: 'spend',
       label: '銀行へ預ける',
-      points: -(Number(b.amount) || 0),
+      points: -bankDepositPrincipal(b),
       at
     });
   }
