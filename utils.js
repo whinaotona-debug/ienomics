@@ -1,4 +1,4 @@
-import { state } from './state.js?v=248';
+import { state } from './state.js?v=249';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -459,15 +459,24 @@ export function isMobileInstallTarget() {
   return (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
 }
 
-/** 'line' | 'ask' | 'browser' | null — ゲート表示の種類 */
-export function getInstallGateKind() {
-  // LINE 内は常にブロック（以前「通過済み」でも必ず案内）
+/** LINE 内ブラウザ用（起動直後のみ） */
+export function getLineInstallGateKind() {
   if (isLineInAppBrowser()) return 'line';
+  return null;
+}
+
+/** 同期する画面用：'ask' | 'browser' | null */
+export function getSetupBrowserPromptKind() {
+  if (isLineInAppBrowser()) return null;
   if (!isMobileInstallTarget()) return null;
-  // ホーム画面アイコンから（スタンドアロン）だけ本編へ
   if (isStandalonePwa()) return null;
   if (isInstallBrowserHelpShown()) return 'browser';
   return 'ask';
+}
+
+/** @deprecated 起動直後ゲートは LINE のみ */
+export function getInstallGateKind() {
+  return getLineInstallGateKind();
 }
 
 export function isIosBrowser() {

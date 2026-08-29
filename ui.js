@@ -1,7 +1,7 @@
-import { state } from './state.js?v=248';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=248';
-import { refreshTutorial } from './tutorial.js?v=248';
-import { auth } from './firebase.js?v=248';
+import { state } from './state.js?v=249';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, isIosBrowser } from './utils.js?v=249';
+import { refreshTutorial } from './tutorial.js?v=249';
+import { auth } from './firebase.js?v=249';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -192,11 +192,11 @@ export function render() {
     bootDebugLog('markBootReady', { reason });
     if (typeof window.__ieMarkBootReady === 'function') window.__ieMarkBootReady(reason);
   };
-  const installGate = getInstallGateKind();
-  if (installGate || window.__ieInstallGateLine) {
+  const lineGate = getLineInstallGateKind();
+  if (lineGate || window.__ieInstallGateLine) {
     bottomNav.classList.add('hidden');
-    if (installGate) appDiv.innerHTML = renderInstallGate(installGate);
-    bootDebugLog('render branch', { branch: 'install-gate', kind: installGate || 'line-inline' });
+    if (lineGate) appDiv.innerHTML = renderInstallGate(lineGate);
+    bootDebugLog('render branch', { branch: 'install-gate', kind: lineGate || 'line-inline' });
     markReady('install-gate');
     bootDebugLog('render done');
     return;
@@ -2239,6 +2239,10 @@ function renderWaitingChild() {
 }
 
 function renderSetup() {
+  const browserPrompt = getSetupBrowserPromptKind();
+  if (browserPrompt) {
+    return `<div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">${renderInstallGate(browserPrompt)}</div>`;
+  }
   let content = '';
   if (state.isSending) { content = `<div class="w-full max-w-sm ie-setup-card p-12 text-center relative z-10"><div class="w-10 h-10 border-4 border-[#dff3ef] border-t-[#2f8f82] rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-[#7a8f88]">通信中...</p></div>`; } 
   else if (!state.setupMode) { content = `<div class="w-full max-w-sm ie-setup-card p-8 mb-6 relative z-10 text-center"><h3 class="font-black text-[#1c2b27] mb-6 text-lg">どちらで始めますか？</h3><button onclick="setSetupMode('parent_select')" class="solid-btn primary-btn w-full py-4 font-bold mb-3">親として開始</button><button onclick="setSetupMode('child')" class="solid-btn w-full py-4 font-bold text-[#3d524c]">子供として開始</button></div>`; } 
