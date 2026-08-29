@@ -1,4 +1,4 @@
-import { state } from './state.js?v=239';
+import { state } from './state.js?v=240';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1156,28 +1156,17 @@ function isTradeLog(log) {
   return t === 'buy' || t === 'sell';
 }
 
-function eodLogForDay(logs, name, dayMs) {
-  const key = japanTodayKey(new Date(dayMs));
-  let best = null;
-  for (const log of logs || []) {
-    if (log.type !== 'eod' || log.name !== name) continue;
-    if (String(log.dayKey || '') !== key) continue;
-    if (!best || (Number(log.at) || 0) > (Number(best.at) || 0)) best = log;
-  }
-  return best;
-}
-
-/** ある銘柄について、ある日までの売買を再生して元本と口数を出す */
-function positionFromLogs(logs, name, dayMs) {
-  const dayStart = japanDayStartMs(new Date(dayMs));
+/** ある銘柄について、untilMs までに発生した buy/sell を再生（EOD・グラフ用） */
+export function replayInvestmentPosition(logs, name, untilMs, { excludeBackfilled = true } = {}) {
   let principal = 0;
   let shares = 0;
   const events = (logs || [])
     .filter(l => l.name === name && isTradeLog(l))
-    .sort((a, b) => (a.at || 0) - (b.at || 0));
+    .filter(l => !excludeBackfilled || !l.backfilled)
+    .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
   for (const log of events) {
     const at = Number(log.at) || 0;
-    if (!at || japanDayStartMs(new Date(at)) > dayStart) continue;
+    if (!at || at > untilMs) continue;
     const pts = Number(log.investedPoints) || 0;
     const sh = Number(log.shares) || 0;
     if (log.type === 'buy') {
@@ -1191,101 +1180,143 @@ function positionFromLogs(logs, name, dayMs) {
   return { principal, shares };
 }
 
-/** 投資ドキュメントの購入日。無いときは売買ログの最初の買いを使う */
-function investmentStartMs(inv, logs) {
-  const created = Number(inv?.createdAt) || 0;
-  if (created > 0) return created;
-  const buys = (logs || [])
-    .filter(l => l.name === inv?.name && l.type === 'buy' && Number(l.at) > 0)
-    .sort((a, b) => (a.at || 0) - (b.at || 0));
-  return Number(buys[0]?.at) || 0;
+function eodLogForDay(logs, name, dayKey) {
+  let best = null;
+  for (const log of logs || []) {
+    if (log.type !== 'eod' || log.name !== name) continue;
+    if (String(log.dayKey || '') !== dayKey) continue;
+    if (!best || (Number(log.at) || 0) > (Number(best.at) || 0)) best = log;
+  }
+  return best;
 }
 
-/** 投資ドキュメント（売却済み含む）から、その日の元本と口数を出す */
-function positionFromInvestments(investments, logs, name, dayMs) {
-  const dayStart = japanDayStartMs(new Date(dayMs));
-  const price = sheetRateAt(name, dayMs) ?? 1;
-  let principal = 0;
-  let shares = 0;
-  for (const inv of investments || []) {
-    if (inv.name !== name) continue;
-    const start = investmentStartMs(inv, logs);
-    // 購入日が不明な持ち株は「今日」にだけ載せる（過去へは伸ばさない）
-    if (!start) {
-      if (dayStart < japanDayStartMs()) continue;
-    } else if (japanDayStartMs(new Date(start)) > dayStart) {
-      continue;
-    }
-    const soldAt = Number(inv.soldAt) || 0;
-    if (inv.status === 'sold' && soldAt && japanDayStartMs(new Date(soldAt)) <= dayStart) continue;
-    const pts = Number(inv.investedPoints) || 0;
-    if (!(pts > 0) && inv.status === 'sold') continue;
-    const buy = getBuyRate(inv, price);
-    principal += pts;
-    shares += pts > 0 && buy > 0 ? pts / buy : 0;
-  }
-  return { principal, shares };
+function applyEodCapToRows(rows, stockCap) {
+  const cap = Number(stockCap);
+  const totalRaw = rows.reduce((sum, r) => sum + (Number(r.assetsRaw) || 0), 0);
+  const scale = Number.isFinite(cap) && cap > 0 && totalRaw > cap ? cap / totalRaw : 1;
+  return rows.map(r => ({
+    name: r.name,
+    investedPoints: Math.round(Number(r.investedPoints) || 0),
+    shares: Number(r.shares) || 0,
+    assets: Math.round((Number(r.assetsRaw) || 0) * scale),
+    at: r.at
+  }));
 }
 
-export const CHART_TOTAL = '__total__';
-
-function positionAtDay(list, logList, name, ms) {
-  const todayStart = japanDayStartMs();
-  const dayStart = japanDayStartMs(new Date(ms));
-  const hasInvDocs = list.some(inv => inv.name === name);
-  const fromInv = hasInvDocs ? positionFromInvestments(list, logList, name, ms) : null;
-  const hasTrades = logList.some(l => l.name === name && isTradeLog(l));
-  const fromLogs = hasTrades ? positionFromLogs(logList, name, ms) : null;
-
-  // 1) 投資ドキュメントがある日はそれを正とする（過去へ元本が伸びるのを防ぐ）
-  if (fromInv && (fromInv.principal > 0 || fromInv.shares > 0)) {
-    // ログ再生がドキュメントより大幅に大きい＝重複買いログ。ドキュメントを使う
-    if (fromLogs && fromLogs.principal > fromInv.principal * 1.05 + 1) return fromInv;
-    return fromInv;
-  }
-
-  // 2) その日は持っていなかった（ドキュメント基準）→ 0。壊れたEODは無視
-  if (fromInv && fromInv.principal <= 0 && fromInv.shares <= 0) {
-    return { principal: 0, shares: 0 };
-  }
-
-  // 3) 過去日のEODは、ログ再生と大きく食い違うときだけ捨てる
-  if (dayStart < todayStart) {
-    const eod = eodLogForDay(logList, name, ms);
-    if (eod) {
-      const principal = Number(eod.investedPoints) || Number(eod.principal) || 0;
-      const shares = Number(eod.shares) || 0;
-      if (fromLogs && principal > fromLogs.principal * 1.05 + 1) {
-        return fromLogs;
-      }
-      if (principal > 0 || shares > 0) return { principal, shares };
-    }
-  }
-
-  if (fromLogs) return fromLogs;
-  return { principal: 0, shares: 0 };
+function eodAssetRaw(name, shares, principal, priceMs) {
+  const sh = Number(shares) || 0;
+  const price = sheetRateAt(name, priceMs) ?? sheetLatestRate(name) ?? 1;
+  if (sh > 0 && price > 0) return sh * price;
+  return Number(principal) || 0;
 }
 
-/** その日の終わり時点の銘柄別スナップショット（確定ログ用） */
-export function buildInvestmentEodRows(investments, logs, dayKey) {
+/** 日次EOD行（銘柄別 + __total__）。buy/sellログ再生のみ。investments累計は使わない */
+export function buildInvestmentEodRows(investments, logs, dayKey, stockCap = null) {
   const start = msFromJapanDayKey(dayKey);
   const end = start + 86400000 - 1;
   const names = getChartMarketNames(investments, logs);
-  const rows = [];
+  const perName = [];
   for (const name of names) {
-    const pos = positionAtDay(investments, logs, name, end);
+    const pos = replayInvestmentPosition(logs, name, end, { excludeBackfilled: true });
     if (!(pos.principal > 0 || pos.shares > 0)) continue;
-    const price = sheetRateAt(name, end) ?? 1;
-    rows.push({
+    perName.push({
       name,
       investedPoints: pos.principal,
       shares: pos.shares,
-      assets: pos.shares * price,
+      assetsRaw: eodAssetRaw(name, pos.shares, pos.principal, end),
       at: end
     });
   }
-  return rows;
+  const capped = applyEodCapToRows(perName, stockCap);
+  const totalPrincipal = capped.reduce((s, r) => s + r.investedPoints, 0);
+  const totalAssets = capped.reduce((s, r) => s + r.assets, 0);
+  if (totalPrincipal > 0 || totalAssets > 0) {
+    capped.push({
+      name: CHART_TOTAL,
+      investedPoints: totalPrincipal,
+      shares: 0,
+      assets: totalAssets,
+      at: end
+    });
+  }
+  return capped;
 }
+
+/** 今日のdraft（現在時点の buy/sell 再生 + 現在相場） */
+function buildTodayDraftSnapshot(investments, logs, stockCap) {
+  const endMs = Date.now();
+  const names = getChartMarketNames(investments, logs);
+  const perName = [];
+  for (const name of names) {
+    const pos = replayInvestmentPosition(logs, name, endMs, { excludeBackfilled: true });
+    if (!(pos.principal > 0 || pos.shares > 0)) continue;
+    perName.push({
+      name,
+      investedPoints: pos.principal,
+      shares: pos.shares,
+      assetsRaw: eodAssetRaw(name, pos.shares, pos.principal, endMs),
+      at: endMs
+    });
+  }
+  const capped = applyEodCapToRows(perName, stockCap);
+  const byName = new Map(capped.map(r => [r.name, r]));
+  const total = capped.reduce((acc, r) => ({
+    investedPoints: acc.investedPoints + r.investedPoints,
+    assets: acc.assets + r.assets
+  }), { investedPoints: 0, assets: 0 });
+  return { byName, total };
+}
+
+function aggregateEodForDay(logList, dayKey, names, stockCap, targetName, isTotal) {
+  const totalEod = eodLogForDay(logList, CHART_TOTAL, dayKey);
+  if (isTotal && totalEod) {
+    return {
+      principal: Math.round(Number(totalEod.investedPoints) || 0),
+      assets: Math.round(Number(totalEod.assets) || 0)
+    };
+  }
+  if (!isTotal) {
+    const eod = eodLogForDay(logList, targetName, dayKey);
+    if (eod) {
+      const ms = msFromJapanDayKey(dayKey) + 86400000 - 1;
+      let assets = Number(eod.assets);
+      if (!(assets > 0)) assets = eodAssetRaw(targetName, eod.shares, eod.investedPoints, ms);
+      return {
+        principal: Math.round(Number(eod.investedPoints) || 0),
+        assets: Math.round(assets)
+      };
+    }
+  }
+  const ms = msFromJapanDayKey(dayKey) + 86400000 - 1;
+  const rows = [];
+  for (const name of names) {
+    const eod = eodLogForDay(logList, name, dayKey);
+    if (!eod) continue;
+    let assetsRaw = Number(eod.assets);
+    if (!(assetsRaw > 0)) assetsRaw = eodAssetRaw(name, eod.shares, eod.investedPoints, ms);
+    rows.push({
+      name,
+      investedPoints: Number(eod.investedPoints) || 0,
+      shares: Number(eod.shares) || 0,
+      assetsRaw,
+      at: ms
+    });
+  }
+  if (!rows.length) return { principal: 0, assets: 0 };
+  const capped = applyEodCapToRows(rows, stockCap);
+  if (isTotal) {
+    return {
+      principal: capped.reduce((s, r) => s + r.investedPoints, 0),
+      assets: capped.reduce((s, r) => s + r.assets, 0)
+    };
+  }
+  const row = capped.find(r => r.name === targetName);
+  return row
+    ? { principal: row.investedPoints, assets: row.assets }
+    : { principal: 0, assets: 0 };
+}
+
+export const CHART_TOTAL = '__total__';
 
 /**
  * いま保有中の1銘柄について、追加購入を日付ごとに分けたロット。
@@ -1390,15 +1421,22 @@ function positionFromBuyLots(lots, dayMs) {
 }
 
 /**
- * いま保有中の運用資産の、期間内の評価額・元本の推移。
- * 評価額 = その日までに購入済みの口数 × その日の相場（stockCap があれば評価額の上限として適用）。
- * 元本は投資したptの累計（上限では変えない）。
- * 保有が無いときは empty: true（相場だけの線は出さない）。
+ * 運用資産の期間内推移。
+ * 過去日: 保存済み type:'eod' をそのまま使用（finalized は変更不可）。
+ * 今日: buy/sell ログ再生 + 現在相場の draft。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null, stockCap = null) {
-  const list = getActiveInvestments(investments);
   const logList = logs || [];
-  const names = getHeldMarketNames(list);
+  const list = getActiveInvestments(investments);
+  const nameSet = new Set(getHeldMarketNames(list));
+  for (const log of logList) {
+    if (log.type === 'eod' && log.name && log.name !== CHART_TOTAL && MARKET_ORDER.includes(log.name)) {
+      nameSet.add(log.name);
+    }
+    if (isTradeLog(log) && MARKET_ORDER.includes(log.name)) nameSet.add(log.name);
+  }
+  const names = MARKET_ORDER.filter(n => nameSet.has(n));
+
   const wantTotal = name === CHART_TOTAL || name == null || name === '';
   const targetName = wantTotal
     ? CHART_TOTAL
@@ -1413,57 +1451,70 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
     isTotal,
     empty: true
   };
-  if (!names.length) return empty;
 
-  const loopNames = isTotal ? names : (targetName && names.includes(targetName) ? [targetName] : []);
-  if (!loopNames.length) return empty;
-
-  const lotsByName = new Map();
-  for (const n of names) {
-    const invs = list.filter(inv => inv.name === n);
-    const lots = [];
-    for (const inv of invs) lots.push(...buyLotsForActiveInv(inv, logList));
-    lots.sort((a, b) => (a.at || 0) - (b.at || 0));
-    lotsByName.set(n, lots);
-  }
+  const hasEod = logList.some(l => l.type === 'eod');
+  const hasTrades = logList.some(l => isTradeLog(l) && !l.backfilled);
+  if (!names.length && !hasEod && !hasTrades) return empty;
 
   let fromMs = null;
-  for (const lots of lotsByName.values()) {
-    for (const lot of lots) {
-      const at = Number(lot.at) || 0;
+  for (const log of logList) {
+    if (log.type === 'eod' && log.dayKey) {
+      const ms = msFromJapanDayKey(log.dayKey);
+      if (ms > 0 && (fromMs == null || ms < fromMs)) fromMs = ms;
+    }
+    if (isTradeLog(log) && !log.backfilled) {
+      const at = Number(log.at) || 0;
       if (at > 0 && (fromMs == null || at < fromMs)) fromMs = at;
     }
   }
 
   const safeRange = ['day', 'week', 'month'].includes(range) ? range : 'week';
   const rates = getMarketRates(safeRange, fromMs != null ? { fromMs } : {});
+  const todayKey = japanTodayKey();
   const principal = [];
   const assets = [];
-  const cap = Number(stockCap);
-  const applyCap = Number.isFinite(cap) && cap > 0;
 
   for (let i = 0; i < rates.labels.length; i++) {
     const ms = rates.ms[i];
-    let p = 0;
-    let totalRaw = 0;
-    const rawByName = {};
-    for (const n of names) {
-      const pos = positionFromBuyLots(lotsByName.get(n) || [], ms);
-      const price = sheetRateAt(n, ms) ?? sheetLatestRate(n);
-      let v = 0;
-      if (price > 0 && pos.shares > 0) v = pos.shares * price;
-      else v = pos.principal;
-      rawByName[n] = v;
-      totalRaw += v;
-      if (loopNames.includes(n)) p += pos.principal;
+    const dayKey = japanTodayKey(new Date(ms));
+
+    if (dayKey === todayKey) {
+      const draft = buildTodayDraftSnapshot(investments, logList, stockCap);
+      if (isTotal) {
+        principal.push(draft.total.investedPoints);
+        assets.push(draft.total.assets);
+      } else {
+        const row = draft.byName.get(targetName) || { investedPoints: 0, assets: 0 };
+        principal.push(row.investedPoints);
+        assets.push(row.assets);
+      }
+    } else {
+      const hasPastEod = logList.some(l =>
+        l.type === 'eod' && l.dayKey === dayKey &&
+        (l.name === targetName || l.name === CHART_TOTAL || names.includes(l.name))
+      );
+      if (hasPastEod) {
+        const row = aggregateEodForDay(logList, dayKey, names, stockCap, targetName, isTotal);
+        principal.push(row.principal);
+        assets.push(row.assets);
+      } else {
+        const fallback = buildInvestmentEodRows(investments, logList, dayKey, stockCap);
+        if (isTotal) {
+          const total = fallback.find(r => r.name === CHART_TOTAL);
+          principal.push(total ? total.investedPoints : 0);
+          assets.push(total ? total.assets : 0);
+        } else {
+          const row = fallback.find(r => r.name === targetName);
+          principal.push(row ? row.investedPoints : 0);
+          assets.push(row ? row.assets : 0);
+        }
+      }
     }
-    // 上限は運用資産（評価額）の天井。銘柄別表示も合計と同じ比率で抑える
-    const scale = applyCap && totalRaw > cap ? cap / totalRaw : 1;
-    let a = 0;
-    for (const n of loopNames) a += (rawByName[n] || 0) * scale;
-    principal.push(Math.round(p));
-    assets.push(Math.round(a));
   }
+
+  const hasData = principal.some(p => p > 0) || assets.some(a => a > 0);
+  if (!hasData) return empty;
+
   return { labels: rates.labels, ms: rates.ms, principal, assets, name: targetName, isTotal, empty: false };
 }
 
