@@ -1,10 +1,10 @@
-import { state } from './state.js?v=257';
-import { render, drawInvestChart } from './ui.js?v=257';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=257';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=257';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=257';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=257';
-import { db, auth } from './firebase.js?v=257';
+import { state } from './state.js?v=258';
+import { render, drawInvestChart } from './ui.js?v=258';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=258';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=258';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=258';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=258';
+import { db, auth } from './firebase.js?v=258';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -2867,13 +2867,45 @@ window.sendRealEmailLink = async () => {
   if (!emailInput) return;
   const email = emailInput.value.trim();
   if (!email) return showAlert("メールアドレスを入力してください");
+  const maskEmailForLog = (addr) => {
+    const at = addr.indexOf('@');
+    if (at <= 0) return '***';
+    const local = addr.slice(0, at);
+    const domain = addr.slice(at);
+    return (local.length <= 2 ? `${local[0] || ''}***` : `${local.slice(0, 2)}***`) + domain;
+  };
   try {
     state.isSending = true; render();
-    const actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    let actionCodeSettings;
+    try {
+      actionCodeSettings = { url: APP_URL, handleCodeInApp: true };
+    } catch (preError) {
+      console.error('[auth-email-debug] BEFORE Firebase API ERROR');
+      console.error('[auth-email-debug] error.code:', preError?.code);
+      console.error('[auth-email-debug] error.message:', preError?.message);
+      console.error('[auth-email-debug] error.name:', preError?.name);
+      throw preError;
+    }
+    console.log('[auth-email-debug] sendSignInLinkToEmail start');
+    console.log('[auth-email-debug] email:', maskEmailForLog(email));
+    console.log('[auth-email-debug] actionCodeSettings.url:', actionCodeSettings.url);
+    console.log('[auth-email-debug] handleCodeInApp:', actionCodeSettings.handleCodeInApp);
+    try {
+      await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+    } catch (apiError) {
+      console.error('[auth-email-debug] sendSignInLinkToEmail ERROR');
+      console.error('[auth-email-debug] error.code:', apiError?.code);
+      console.error('[auth-email-debug] error.message:', apiError?.message);
+      console.error('[auth-email-debug] error.name:', apiError?.name);
+      if (apiError?.customData) console.error('[auth-email-debug] error.customData:', apiError.customData);
+      throw apiError;
+    }
+    console.log('[auth-email-debug] sendSignInLinkToEmail SUCCESS');
+    console.log('[auth-email-debug] success handling start');
     window.localStorage.setItem('emailForSignIn', email);
     state.message = email;
     state.setupStep = 2;
+    console.log('[auth-email-debug] success handling done');
   } catch (error) {
     const code = error?.code || '';
     if (code === 'auth/email-already-in-use') {
@@ -2963,6 +2995,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=257').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=258').catch(err => console.warn('SW登録失敗:', err));
   });
 }
