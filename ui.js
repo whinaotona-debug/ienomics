@@ -1,7 +1,7 @@
-import { state } from './state.js?v=253';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=253';
-import { refreshTutorial } from './tutorial.js?v=253';
-import { auth } from './firebase.js?v=253';
+import { state } from './state.js?v=254';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=254';
+import { refreshTutorial } from './tutorial.js?v=254';
+import { auth } from './firebase.js?v=254';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1483,7 +1483,8 @@ function renderSettings() {
     </button>
     ` : ''}
 
-    <div class="text-center mb-2">
+    <div class="text-center mb-2 flex flex-col items-center gap-3">
+      <button type="button" onclick="logoutAccount()" class="ie-logout-btn">${rb('ログアウト','ろぐあうと')}</button>
       <button type="button" onclick="unlinkAccount()" class="ie-unlink-btn">${rb('連携を解除する','れんけいをかいじょする')}</button>
     </div>
   `;
@@ -2215,7 +2216,7 @@ function renderWaitingChild() {
         <div class="flex items-center justify-center gap-2 mb-6 text-xs font-bold text-slate-400 animate-pulse">
           <div class="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>子供の接続を待機中...
         </div>
-        <button onclick="unlinkAccount()" class="text-[10px] text-slate-400 hover:text-red-500 font-bold underline">ログアウト</button>
+        <button onclick="logoutAccount()" class="text-[10px] text-slate-400 hover:text-slate-600 font-bold underline">ログアウト</button>
       </div>
     </div>
   `;

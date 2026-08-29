@@ -1,10 +1,10 @@
-import { state } from './state.js?v=253';
-import { render, drawInvestChart } from './ui.js?v=253';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=253';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=253';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=253';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=253';
-import { db, auth } from './firebase.js?v=253';
+import { state } from './state.js?v=254';
+import { render, drawInvestChart } from './ui.js?v=254';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=254';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=254';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=254';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=254';
+import { db, auth } from './firebase.js?v=254';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -2595,6 +2595,34 @@ window.deleteChild = async (code) => {
   if (next) switchActiveChild(next.id);
 };
 
+window.logoutAccount = async () => {
+  const ok = await showConfirm(
+    'この端末からログアウトします。家族との連携やデータは解除されません。',
+    { title: 'ログアウトしますか？', okLabel: 'ログアウト', cancelLabel: 'キャンセル' }
+  );
+  if (!ok) return;
+  await unregisterPush();
+  if (window.unsubChildren) window.unsubChildren();
+  unsubscribes.forEach(unsub => unsub());
+  unsubscribes = [];
+  stopDeadlineWatcher();
+  try { await signOut(auth); } catch (e) {}
+  localStorage.removeItem('ienomics_role');
+  localStorage.removeItem('ienomics_familyCode');
+  state.role = null;
+  state.familyCode = null;
+  state.setupMode = null;
+  state.setupStep = 1;
+  state.children = [];
+  state.childName = '';
+  state.points = 0;
+  state.stockCap = null;
+  state.childLinked = false;
+  state.view = 'home';
+  state.requirePasswordSetup = false;
+  render();
+};
+
 window.unlinkAccount = async () => {
   const ok = await showConfirm("この端末からデータが見えなくなります。同期IDを入れ直せば元に戻せます。", { title: '連携を解除しますか？', okLabel: '解除する', tone: 'danger' });
   if (!ok) return;
@@ -2925,6 +2953,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=253').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=254').catch(err => console.warn('SW登録失敗:', err));
   });
 }
