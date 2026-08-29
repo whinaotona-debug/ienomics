@@ -1,10 +1,10 @@
-import { state } from './state.js?v=246';
-import { render, drawInvestChart } from './ui.js?v=246';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, confirmInstallFromHome, showInstallBrowserHelp } from './utils.js?v=246';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=246';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=246';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=246';
-import { db, auth } from './firebase.js?v=246';
+import { state } from './state.js?v=247';
+import { render, drawInvestChart } from './ui.js?v=247';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, showInstallBrowserHelp, clearInstallBrowserHelp, isStandalonePwa } from './utils.js?v=247';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=247';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=247';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=247';
+import { db, auth } from './firebase.js?v=247';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -239,15 +239,33 @@ function localNotify(title, body) {
   sendPushNotification(title, body);
 }
 
-window.installGateAnswer = (inBrowser) => {
-  if (inBrowser) showInstallBrowserHelp();
-  else confirmInstallFromHome();
-  render();
+window.installGateAnswer = async (inBrowser) => {
+  if (inBrowser) {
+    showInstallBrowserHelp();
+    render();
+    return;
+  }
+  if (isStandalonePwa()) {
+    clearInstallBrowserHelp();
+    render();
+    return;
+  }
+  await showAlert(
+    'ホーム画面に追加したアイコンから開いてから、「いいえ（ホーム画面のアイコンから）」を選んでください。',
+    { title: 'まだブラウザで開いています' }
+  );
 };
 
-window.installGateContinue = () => {
-  confirmInstallFromHome();
-  render();
+window.installGateContinue = async () => {
+  if (isStandalonePwa()) {
+    clearInstallBrowserHelp();
+    render();
+    return;
+  }
+  await showAlert(
+    'ホーム画面に追加したら、アイコンから開き直してください。\n開き直したら「いいえ（ホーム画面のアイコンから）」を選べます。',
+    { title: 'まだブラウザのままです' }
+  );
 };
 
 /** 初回ガイド終了後に通知の許可を案内する（1回だけ） */
@@ -701,6 +719,7 @@ let authListenerAttached = false;
 async function boot() {
   if (bootStarted) return;
   bootStarted = true;
+  try { localStorage.removeItem('ienomics_install_ok'); } catch { /* 旧ゲート通過フラグを廃止 */ }
   markBootPerfBootStart();
   bootDebugLog('boot start', { bootStarted: true, role: state.role, familyCode: state.familyCode });
   setBootPhase('boot');
@@ -2902,6 +2921,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=246').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=247').catch(err => console.warn('SW登録失敗:', err));
   });
 }

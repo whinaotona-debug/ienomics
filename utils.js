@@ -1,4 +1,4 @@
-import { state } from './state.js?v=246';
+import { state } from './state.js?v=247';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -399,31 +399,24 @@ export function bankTotalInterest(banks) {
 
 /** LINE のアプリ内ブラウザか */
 export function isLineInAppBrowser() {
-  return /\bLine\//i.test(navigator.userAgent || '');
+  const ua = navigator.userAgent || '';
+  if (/\bLine\//i.test(ua) || /\bLIAPP\b/i.test(ua)) return true;
+  const ref = document.referrer || '';
+  if (/line\.me|line-apps\.com|l\.line-scdn\.net/i.test(ref)) return true;
+  return false;
 }
 
-const INSTALL_OK_KEY = 'ienomics_install_ok';
 const INSTALL_BROWSER_HELP_KEY = 'ienomics_install_browser_help';
-
-/** ホーム画面から開いたと確認済みか */
-export function isInstallConfirmed() {
-  try {
-    return localStorage.getItem(INSTALL_OK_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function confirmInstallFromHome() {
-  try {
-    localStorage.setItem(INSTALL_OK_KEY, '1');
-    localStorage.removeItem(INSTALL_BROWSER_HELP_KEY);
-  } catch { /* ignore */ }
-}
 
 export function showInstallBrowserHelp() {
   try {
     localStorage.setItem(INSTALL_BROWSER_HELP_KEY, '1');
+  } catch { /* ignore */ }
+}
+
+export function clearInstallBrowserHelp() {
+  try {
+    localStorage.removeItem(INSTALL_BROWSER_HELP_KEY);
   } catch { /* ignore */ }
 }
 
@@ -433,6 +426,15 @@ export function isInstallBrowserHelpShown() {
   } catch {
     return false;
   }
+}
+
+/** @deprecated ブラウザでは通過フラグを使わない（スタンドアロン検出のみでゲート解除） */
+export function isInstallConfirmed() {
+  return false;
+}
+
+export function confirmInstallFromHome() {
+  clearInstallBrowserHelp();
 }
 
 /** ホーム画面に追加して開いているか（PWA スタンドアロン） */
@@ -451,19 +453,20 @@ export function isStandalonePwa() {
 export function isMobileInstallTarget() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+  try {
+    if (window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 900) return true;
+  } catch { /* ignore */ }
   return (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
 }
 
 /** 'line' | 'ask' | 'browser' | null — ゲート表示の種類 */
 export function getInstallGateKind() {
-  if (!isMobileInstallTarget()) return null;
-  if (isInstallConfirmed()) return null;
-  if (isStandalonePwa()) {
-    confirmInstallFromHome();
-    return null;
-  }
+  // LINE 内は常にブロック（以前「通過済み」でも必ず案内）
   if (isLineInAppBrowser()) return 'line';
+  if (!isMobileInstallTarget()) return null;
+  // ホーム画面アイコンから（スタンドアロン）だけ本編へ
+  if (isStandalonePwa()) return null;
   if (isInstallBrowserHelpShown()) return 'browser';
   return 'ask';
 }
