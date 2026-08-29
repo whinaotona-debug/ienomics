@@ -1,4 +1,4 @@
-import { state } from './state.js?v=251';
+import { state } from './state.js?v=252';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -446,15 +446,20 @@ export function confirmInstallFromHome() {
   clearInstallBrowserHelp();
 }
 
-/** ホーム画面に追加して開いているか */
+/** ホーム画面に追加して開いているか（display-mode 本命 + iOS 補助） */
 export function isStandalonePwa() {
   if (typeof window === 'undefined') return false;
-  if (window.navigator?.standalone === true) return true;
   try {
-    return window.matchMedia('(display-mode: standalone)').matches;
-  } catch {
-    return false;
-  }
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+  } catch { /* ignore */ }
+  return window.navigator?.standalone === true;
+}
+
+/** ① PWA ② アプリ内 ③ 通常ブラウザ */
+export function getOpenContext() {
+  if (isStandalonePwa()) return 'pwa';
+  if (isLineInAppBrowser()) return 'in-app';
+  return 'browser';
 }
 
 /** スマホ・タブレット（同期画面でホーム追加を案内する対象） */
@@ -470,24 +475,23 @@ export function isMobileInstallTarget() {
   return false;
 }
 
-/** 同期する画面でホーム追加の案内が必要か */
+/** 同期する画面でホーム追加の案内が必要か（通常モバイルブラウザのみ） */
 export function needsSetupInstallPrompt() {
-  if (isLineInAppBrowser()) return false;
-  if (!isMobileInstallTarget()) return false;
-  if (isStandalonePwa()) return false;
-  return getInstallPhase() !== 'done';
+  const ctx = getOpenContext();
+  if (ctx !== 'browser') return false;
+  return isMobileInstallTarget();
 }
 
 /** LINE 内ブラウザ用（起動直後のみ） */
 export function getLineInstallGateKind() {
-  if (isLineInAppBrowser()) return 'line';
+  if (getOpenContext() === 'in-app') return 'line';
   return null;
 }
 
-/** 同期する画面用：'ask' | 'browser' | null */
+/** 同期する画面用：'browser' | null（通常ブラウザは自動判定で案内） */
 export function getSetupBrowserPromptKind() {
   if (!needsSetupInstallPrompt()) return null;
-  return getInstallPhase() === 'browser' ? 'browser' : 'ask';
+  return 'browser';
 }
 
 /** PWA 起動時に案内済みとして記録 */
