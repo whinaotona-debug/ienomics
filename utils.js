@@ -1,4 +1,4 @@
-import { state } from './state.js?v=249';
+import { state } from './state.js?v=250';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -397,47 +397,56 @@ export function bankTotalInterest(banks) {
   return (banks || []).reduce((s, b) => s + bankDepositInterestEarned(b), 0);
 }
 
-/** LINE のアプリ内ブラウザか */
+/** LINE のアプリ内ブラウザか（UA のみ。referrer は Safari 誤判定の原因になるため使わない） */
 export function isLineInAppBrowser() {
   const ua = navigator.userAgent || '';
-  if (/\bLine\//i.test(ua) || /\bLIAPP\b/i.test(ua)) return true;
-  const ref = document.referrer || '';
-  if (/line\.me|line-apps\.com|l\.line-scdn\.net/i.test(ref)) return true;
-  return false;
+  return /\bLine\//i.test(ua) || /\bLIAPP\b/i.test(ua);
 }
 
-const INSTALL_BROWSER_HELP_KEY = 'ienomics_install_browser_help';
+const INSTALL_PHASE_KEY = 'ie_install_phase';
 
-export function showInstallBrowserHelp() {
+function getInstallPhase() {
   try {
-    localStorage.setItem(INSTALL_BROWSER_HELP_KEY, '1');
-  } catch { /* ignore */ }
-}
-
-export function clearInstallBrowserHelp() {
-  try {
-    localStorage.removeItem(INSTALL_BROWSER_HELP_KEY);
-  } catch { /* ignore */ }
-}
-
-export function isInstallBrowserHelpShown() {
-  try {
-    return localStorage.getItem(INSTALL_BROWSER_HELP_KEY) === '1';
+    return sessionStorage.getItem(INSTALL_PHASE_KEY) || '';
   } catch {
-    return false;
+    return '';
   }
 }
 
-/** @deprecated ブラウザでは通過フラグを使わない（スタンドアロン検出のみでゲート解除） */
+function setInstallPhase(phase) {
+  try {
+    if (phase) sessionStorage.setItem(INSTALL_PHASE_KEY, phase);
+    else sessionStorage.removeItem(INSTALL_PHASE_KEY);
+  } catch { /* ignore */ }
+}
+
+/** @deprecated sessionStorage に移行 */
+const INSTALL_BROWSER_HELP_KEY = 'ienomics_install_browser_help';
+
+export function showInstallBrowserHelp() {
+  setInstallPhase('browser');
+  try { localStorage.removeItem(INSTALL_BROWSER_HELP_KEY); } catch { /* ignore */ }
+}
+
+export function clearInstallBrowserHelp() {
+  setInstallPhase('done');
+  try { localStorage.removeItem(INSTALL_BROWSER_HELP_KEY); } catch { /* ignore */ }
+}
+
+export function isInstallBrowserHelpShown() {
+  return getInstallPhase() === 'browser';
+}
+
+/** @deprecated */
 export function isInstallConfirmed() {
-  return false;
+  return getInstallPhase() === 'done';
 }
 
 export function confirmInstallFromHome() {
   clearInstallBrowserHelp();
 }
 
-/** ホーム画面に追加して開いているか（PWA スタンドアロン） */
+/** ホーム画面に追加して開いているか */
 export function isStandalonePwa() {
   if (typeof window === 'undefined') return false;
   if (window.navigator?.standalone === true) return true;
@@ -448,15 +457,25 @@ export function isStandalonePwa() {
   }
 }
 
-/** スマホ向けのホーム画面追加ゲートが必要か */
+/** スマホ・タブレット（同期画面でホーム追加を案内する対象） */
 export function isMobileInstallTarget() {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || '';
-  if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return true;
+  if (/Android|iPhone|iPod/i.test(ua)) return true;
+  if (/iPad/i.test(ua)) return true;
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
   try {
-    if (window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 900) return true;
+    if (window.matchMedia('(pointer: coarse)').matches && window.innerWidth < 1024) return true;
   } catch { /* ignore */ }
-  return (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+  return false;
+}
+
+/** 同期する画面でホーム追加の案内が必要か */
+export function needsSetupInstallPrompt() {
+  if (isLineInAppBrowser()) return false;
+  if (!isMobileInstallTarget()) return false;
+  if (isStandalonePwa()) return false;
+  return getInstallPhase() !== 'done';
 }
 
 /** LINE 内ブラウザ用（起動直後のみ） */
@@ -467,11 +486,13 @@ export function getLineInstallGateKind() {
 
 /** 同期する画面用：'ask' | 'browser' | null */
 export function getSetupBrowserPromptKind() {
-  if (isLineInAppBrowser()) return null;
-  if (!isMobileInstallTarget()) return null;
-  if (isStandalonePwa()) return null;
-  if (isInstallBrowserHelpShown()) return 'browser';
-  return 'ask';
+  if (!needsSetupInstallPrompt()) return null;
+  return getInstallPhase() === 'browser' ? 'browser' : 'ask';
+}
+
+/** PWA 起動時に案内済みとして記録 */
+export function markInstallPromptDoneIfStandalone() {
+  if (isStandalonePwa()) setInstallPhase('done');
 }
 
 /** @deprecated 起動直後ゲートは LINE のみ */
