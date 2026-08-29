@@ -1,4 +1,4 @@
-import { state } from './state.js?v=240';
+import { state } from './state.js?v=242';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1242,6 +1242,115 @@ export function buildInvestmentEodRows(investments, logs, dayKey, stockCap = nul
   return capped;
 }
 
+export const INVESTMENT_EOD_MIGRATION_KEY = '242';
+
+function collectEodMigrationDayKeys(logs, throughDayKey) {
+  const keys = new Set();
+  for (const log of logs || []) {
+    if (log.type === 'eod' && log.dayKey && log.dayKey <= throughDayKey) keys.add(log.dayKey);
+  }
+  let firstMs = null;
+  for (const log of logs || []) {
+    if ((log.type === 'buy' || log.type === 'sell') && !log.backfilled) {
+      const at = Number(log.at) || 0;
+      if (at > 0 && (firstMs == null || at < firstMs)) firstMs = at;
+    }
+  }
+  if (firstMs == null) return [...keys].sort();
+  const throughMs = msFromJapanDayKey(throughDayKey);
+  for (let ms = japanDayStartMs(new Date(firstMs)); ms <= throughMs; ms += 86400000) {
+    keys.add(japanTodayKey(new Date(ms)));
+  }
+  return [...keys].filter(k => k <= throughDayKey).sort();
+}
+
+/** 保存済み EOD と buy/sell 再生結果を比較（移行・グラフ検証用） */
+export function analyzeInvestmentEodMigration(investments, logs, stockCap, { throughDayKey = null, sheetReady = true } = {}) {
+  const through = throughDayKey || japanYesterdayKey();
+  const dayKeys = collectEodMigrationDayKeys(logs, through);
+  const toFix = [];
+  const unchanged = [];
+
+  for (const dayKey of dayKeys) {
+    const computed = buildInvestmentEodRows(investments, logs, dayKey, stockCap);
+    const computedByName = new Map(computed.map(r => [r.name, r]));
+    const existingEods = (logs || []).filter(l => l.type === 'eod' && l.dayKey === dayKey);
+    const nameSet = new Set([...computedByName.keys(), ...existingEods.map(e => e.name)]);
+
+    for (const name of nameSet) {
+      const endAt = msFromJapanDayKey(dayKey) + 86400000 - 1;
+      const expected = computedByName.get(name) || {
+        name,
+        investedPoints: 0,
+        shares: 0,
+        assets: 0,
+        at: endAt
+      };
+      const stored = existingEods.find(e => e.name === name);
+      const ep = Math.round(Number(expected.investedPoints) || 0);
+      const ea = Math.round(Number(expected.assets) || 0);
+
+      if (!stored) {
+        if (ep > 0 || ea > 0) {
+          toFix.push({ dayKey, name, action: 'create', row: expected });
+        }
+        continue;
+      }
+
+      const sp = Math.round(Number(stored.investedPoints) || 0);
+      const sa = Math.round(Number(stored.assets) || 0);
+      const principalMismatch = Math.abs(sp - ep) > 0.5;
+      const assetsMismatch = sheetReady && Math.abs(sa - ea) > 1;
+      if (principalMismatch || assetsMismatch) {
+        toFix.push({
+          dayKey,
+          name,
+          action: ep > 0 || ea > 0 ? 'replace' : 'zero',
+          row: expected,
+          stored: { principal: sp, assets: sa, finalized: !!stored.finalized }
+        });
+      } else {
+        unchanged.push({ dayKey, name });
+      }
+    }
+  }
+
+  return { toFix, unchanged, dayKeys, throughDayKey: through };
+}
+
+function eodMatchesReplay(stored, expected) {
+  if (!stored || !expected) return false;
+  const sp = Math.round(Number(stored.investedPoints) || 0);
+  const ep = Math.round(Number(expected.investedPoints) || 0);
+  const sa = Math.round(Number(stored.assets) || 0);
+  const ea = Math.round(Number(expected.assets) || 0);
+  return Math.abs(sp - ep) <= 0.5 && Math.abs(sa - ea) <= 1;
+}
+
+/** 過去日グラフ: 保存 EOD が buy/sell 再生と一致するときだけ採用、不一致は再生結果 */
+function getPastDayChartSnapshot(investments, logList, dayKey, stockCap, targetName, isTotal) {
+  const computedRows = buildInvestmentEodRows(investments, logList, dayKey, stockCap);
+  const expected = isTotal
+    ? (computedRows.find(r => r.name === CHART_TOTAL) || { investedPoints: 0, assets: 0 })
+    : (computedRows.find(r => r.name === targetName) || { investedPoints: 0, assets: 0 });
+
+  const storedEod = isTotal
+    ? eodLogForDay(logList, CHART_TOTAL, dayKey)
+    : eodLogForDay(logList, targetName, dayKey);
+
+  if (storedEod && eodMatchesReplay(storedEod, expected)) {
+    return {
+      principal: Math.round(Number(storedEod.investedPoints) || 0),
+      assets: Math.round(Number(storedEod.assets) || 0)
+    };
+  }
+
+  return {
+    principal: expected.investedPoints || 0,
+    assets: expected.assets || 0
+  };
+}
+
 /** 今日のdraft（現在時点の buy/sell 再生 + 現在相場） */
 function buildTodayDraftSnapshot(investments, logs, stockCap) {
   const endMs = Date.now();
@@ -1265,55 +1374,6 @@ function buildTodayDraftSnapshot(investments, logs, stockCap) {
     assets: acc.assets + r.assets
   }), { investedPoints: 0, assets: 0 });
   return { byName, total };
-}
-
-function aggregateEodForDay(logList, dayKey, names, stockCap, targetName, isTotal) {
-  const totalEod = eodLogForDay(logList, CHART_TOTAL, dayKey);
-  if (isTotal && totalEod) {
-    return {
-      principal: Math.round(Number(totalEod.investedPoints) || 0),
-      assets: Math.round(Number(totalEod.assets) || 0)
-    };
-  }
-  if (!isTotal) {
-    const eod = eodLogForDay(logList, targetName, dayKey);
-    if (eod) {
-      const ms = msFromJapanDayKey(dayKey) + 86400000 - 1;
-      let assets = Number(eod.assets);
-      if (!(assets > 0)) assets = eodAssetRaw(targetName, eod.shares, eod.investedPoints, ms);
-      return {
-        principal: Math.round(Number(eod.investedPoints) || 0),
-        assets: Math.round(assets)
-      };
-    }
-  }
-  const ms = msFromJapanDayKey(dayKey) + 86400000 - 1;
-  const rows = [];
-  for (const name of names) {
-    const eod = eodLogForDay(logList, name, dayKey);
-    if (!eod) continue;
-    let assetsRaw = Number(eod.assets);
-    if (!(assetsRaw > 0)) assetsRaw = eodAssetRaw(name, eod.shares, eod.investedPoints, ms);
-    rows.push({
-      name,
-      investedPoints: Number(eod.investedPoints) || 0,
-      shares: Number(eod.shares) || 0,
-      assetsRaw,
-      at: ms
-    });
-  }
-  if (!rows.length) return { principal: 0, assets: 0 };
-  const capped = applyEodCapToRows(rows, stockCap);
-  if (isTotal) {
-    return {
-      principal: capped.reduce((s, r) => s + r.investedPoints, 0),
-      assets: capped.reduce((s, r) => s + r.assets, 0)
-    };
-  }
-  const row = capped.find(r => r.name === targetName);
-  return row
-    ? { principal: row.investedPoints, assets: row.assets }
-    : { principal: 0, assets: 0 };
 }
 
 export const CHART_TOTAL = '__total__';
@@ -1422,7 +1482,7 @@ function positionFromBuyLots(lots, dayMs) {
 
 /**
  * 運用資産の期間内推移。
- * 過去日: 保存済み type:'eod' をそのまま使用（finalized は変更不可）。
+ * 過去日: buy/sell 再生と一致する保存 EOD。不一致は再生結果（investments 累計は使わない）。
  * 今日: buy/sell ログ再生 + 現在相場の draft。
  */
 export function getPortfolioHistory(investments, range = 'week', name = null, logs = null, stockCap = null) {
@@ -1489,26 +1549,9 @@ export function getPortfolioHistory(investments, range = 'week', name = null, lo
         assets.push(row.assets);
       }
     } else {
-      const hasPastEod = logList.some(l =>
-        l.type === 'eod' && l.dayKey === dayKey &&
-        (l.name === targetName || l.name === CHART_TOTAL || names.includes(l.name))
-      );
-      if (hasPastEod) {
-        const row = aggregateEodForDay(logList, dayKey, names, stockCap, targetName, isTotal);
-        principal.push(row.principal);
-        assets.push(row.assets);
-      } else {
-        const fallback = buildInvestmentEodRows(investments, logList, dayKey, stockCap);
-        if (isTotal) {
-          const total = fallback.find(r => r.name === CHART_TOTAL);
-          principal.push(total ? total.investedPoints : 0);
-          assets.push(total ? total.assets : 0);
-        } else {
-          const row = fallback.find(r => r.name === targetName);
-          principal.push(row ? row.investedPoints : 0);
-          assets.push(row ? row.assets : 0);
-        }
-      }
+      const row = getPastDayChartSnapshot(investments, logList, dayKey, stockCap, targetName, isTotal);
+      principal.push(row.principal);
+      assets.push(row.assets);
     }
   }
 
@@ -1528,4 +1571,31 @@ export function getCurrentMarketRates() {
 /** いま表から相場が取れる市場だけ */
 export function getTradeableMarkets() {
   return getMarketSheetMarkets().filter(name => MARKET_ORDER.includes(name));
+}
+
+/** buy/sell 再生・上限適用の自己検証（v242 EOD 修正） */
+export function selfTestInvestmentEodLogic() {
+  const endOf = (dayKey) => msFromJapanDayKey(dayKey) + 86400000 - 1;
+  const at = (dayKey, hour) => msFromJapanDayKey(dayKey) + hour * 3600000;
+  const logs = [
+    { type: 'buy', name: 'テスト株', investedPoints: 500, shares: 10, at: at('2026-08-24', 12) },
+    { type: 'buy', name: 'テスト株', investedPoints: 300, shares: 6, at: at('2026-08-26', 12) }
+  ];
+  const invDoc = { name: 'テスト株', investedPoints: 1000, shares: 20 };
+
+  const cases = [];
+  cases.push(['8/24=500', replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-24')).principal === 500]);
+  cases.push(['8/25=500', replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-25')).principal === 500]);
+  cases.push(['8/26=800', replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-26')).principal === 800]);
+  cases.push(['8/25 no extra buy', replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-25')).principal === 500]);
+  cases.push(['ignores inv doc', replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-24')).principal === 500 && invDoc.investedPoints === 1000]);
+  const capped = applyEodCapToRows([{ name: 'A', investedPoints: 800, shares: 8, assetsRaw: 1200, at: 0 }], 1000);
+  cases.push(['cap on assets only', capped[0].investedPoints === 800 && capped[0].assets === 1000]);
+  cases.push(['past stable after later buy',
+    replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-24')).principal === 500 &&
+    replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-25')).principal === 500
+  ]);
+
+  const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
+  return { ok: failed.length === 0, failed, cases: cases.map(([name, ok]) => ({ name, ok })) };
 }
