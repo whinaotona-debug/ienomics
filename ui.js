@@ -1,7 +1,7 @@
-import { state } from './state.js?v=252';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isIosBrowser } from './utils.js?v=252';
-import { refreshTutorial } from './tutorial.js?v=252';
-import { auth } from './firebase.js?v=252';
+import { state } from './state.js?v=253';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=253';
+import { refreshTutorial } from './tutorial.js?v=253';
+import { auth } from './firebase.js?v=253';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -152,10 +152,7 @@ function renderInstallGate(kind) {
       </div>
     </div>`;
   }
-  const ios = isIosBrowser();
-  const stepText = ios
-    ? '① 画面下の<strong>共有</strong>ボタン（□に↑）を押す<br>② ちょっと下にスクロールして「<strong>ホーム画面に追加</strong>」を選ぶ<br>③ 右上の「<strong>追加</strong>」を押す'
-    : 'メニュー（⋮）から「<strong>ホーム画面に追加</strong>」または「<strong>アプリをインストール</strong>」を選んでください';
+  const stepText = '画面下の<strong>共有</strong>ボタンを押して、少しスクロールすると出てくる「<strong>ホーム画面に追加</strong>」を押してください。<br>そのあと、右上の<strong>青い「追加」</strong>ボタンを押してください。';
   return `<div class="ie-install-gate fade-in">
     <div class="ie-install-gate-card">
       <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
