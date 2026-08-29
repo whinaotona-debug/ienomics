@@ -1,4 +1,4 @@
-import { state } from './state.js?v=243';
+import { state } from './state.js?v=244';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -395,6 +395,43 @@ export function bankTotalBalance(banks) {
 
 export function bankTotalInterest(banks) {
   return (banks || []).reduce((s, b) => s + bankDepositInterestEarned(b), 0);
+}
+
+/** LINE のアプリ内ブラウザか */
+export function isLineInAppBrowser() {
+  return /\bLine\//i.test(navigator.userAgent || '');
+}
+
+/** ホーム画面に追加して開いているか（PWA スタンドアロン） */
+export function isStandalonePwa() {
+  if (typeof window === 'undefined') return false;
+  if (window.navigator?.standalone === true) return true;
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches;
+  } catch {
+    return false;
+  }
+}
+
+/** スマホ向けのホーム画面追加ゲートが必要か */
+export function isMobileInstallTarget() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  return (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+}
+
+/** 'line' | 'browser' | null — ゲート表示の種類 */
+export function getInstallGateKind() {
+  if (!isMobileInstallTarget()) return null;
+  if (isStandalonePwa()) return null;
+  if (isLineInAppBrowser()) return 'line';
+  return 'browser';
+}
+
+export function isIosBrowser() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
 }
 
 function msFromJapanDayKey(dayKey) {

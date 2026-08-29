@@ -1,10 +1,10 @@
-import { state } from './state.js?v=243';
-import { render, drawInvestChart } from './ui.js?v=243';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey } from './utils.js?v=243';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=243';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=243';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=243';
-import { db, auth } from './firebase.js?v=243';
+import { state } from './state.js?v=244';
+import { render, drawInvestChart } from './ui.js?v=244';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey } from './utils.js?v=244';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=244';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=244';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=244';
+import { db, auth } from './firebase.js?v=244';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -239,6 +239,52 @@ function localNotify(title, body) {
   sendPushNotification(title, body);
 }
 
+/** 初回ガイド終了後に通知の許可を案内する（1回だけ） */
+const PUSH_ONBOARD_KEY = 'ienomics_push_onboard_asked';
+
+function onboardingTutorialFinish() {
+  promptPushOnboarding();
+}
+
+async function promptPushOnboarding() {
+  if (!state.familyCode || !state.role) return;
+  if (localStorage.getItem(PUSH_ONBOARD_KEY)) return;
+  localStorage.setItem(PUSH_ONBOARD_KEY, 'true');
+  if (!(await isPushSupported())) return;
+  if (Notification.permission !== 'default') return;
+
+  const ok = await showConfirm(
+    '新しいお仕事やギフトが届いたときなど、アプリを閉じていてもお知らせします。',
+    { title: 'イエノミクスは通知を出します。許可しますか？', okLabel: '許可する', cancelLabel: 'あとで' }
+  );
+  if (!ok) return;
+
+  const permission = await askPushPermission();
+  if (permission === 'denied') {
+    await showAlert(
+      '通知がブロックされています。\n\n端末の設定 → 通知（またはブラウザのサイト設定）から、イエノミクスの通知を許可してください。',
+      { title: '通知がオフになっています' }
+    );
+    return;
+  }
+  if (permission !== 'granted') return;
+
+  const pushOk = await initPush({ familyCode: state.familyCode, role: state.role });
+  render();
+  if (pushOk) {
+    await showAlert(
+      'アプリを閉じていても、新しいお仕事やギフトが通知センターに届きます。',
+      { title: '通知をオンにしました' }
+    );
+  } else {
+    const reason = getPushError();
+    await showAlert(
+      `通知の準備ができませんでした。\n\n理由: ${reason || '不明'}`,
+      { title: '通知をオンにできませんでした' }
+    );
+  }
+}
+
 /** 通知の受け取りを準備する。すでに許可済みならそのまま有効になる。 */
 async function setupPush() {
   if (!state.familyCode || !state.role) return;
@@ -429,11 +475,14 @@ async function ensureTodayGeneration() {
 // バックグラウンドから戻ったときも、日付またぎを拾う
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && state.familyCode) {
-      ensureTodayGeneration();
-      scheduleMidnightTick();
-      catchupInvestmentEodLogs();
-      applyBankMonthlyInterest().catch(e => console.warn('[bank interest]', e));
+    if (document.visibilityState === 'visible') {
+      render();
+      if (state.familyCode) {
+        ensureTodayGeneration();
+        scheduleMidnightTick();
+        catchupInvestmentEodLogs();
+        applyBankMonthlyInterest().catch(e => console.warn('[bank interest]', e));
+      }
     }
   });
 }
@@ -2746,7 +2795,7 @@ window.joinFamily = async () => {
     await showAlert("その同期IDの口座は見つかりませんでした。文字をもう一度確認してください。", { title: 'IDが違うようです' });
   } else if (joined && !hasSeenTutorial()) {
     // 初回だけ、つながった直後に使い方を案内する
-    setTimeout(() => startTutorial('child'), 700);
+    setTimeout(() => startTutorial('child', { onFinish: onboardingTutorialFinish }), 700);
   }
 };
 
@@ -2831,7 +2880,7 @@ window.loginParent = async () => {
     localStorage.setItem('ienomics_role', 'parent');
     applyFuriganaState();
     await runMigrationAndLoadChildren(result.user.uid);
-    if (!hasSeenTutorial()) setTimeout(() => startTutorial('parent'), 900);
+    if (!hasSeenTutorial()) setTimeout(() => startTutorial('parent', { onFinish: onboardingTutorialFinish }), 900);
   } catch (error) {
     await showAlert("パスワードまたはメールアドレスが違います", { title: 'ログインできませんでした' });
   } finally {
@@ -2842,6 +2891,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=243').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=244').catch(err => console.warn('SW登録失敗:', err));
   });
 }

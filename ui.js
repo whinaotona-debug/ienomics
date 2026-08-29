@@ -1,7 +1,7 @@
-import { state } from './state.js?v=243';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal } from './utils.js?v=243';
-import { refreshTutorial } from './tutorial.js?v=243';
-import { auth } from './firebase.js?v=243';
+import { state } from './state.js?v=244';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=244';
+import { refreshTutorial } from './tutorial.js?v=244';
+import { auth } from './firebase.js?v=244';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -130,6 +130,38 @@ function bootDebugLog(msg, detail) {
   else console.log(`[boot-debug] ${msg}`);
 }
 
+function renderInstallGate(kind) {
+  if (kind === 'line') {
+    return `<div class="ie-install-gate fade-in">
+      <div class="ie-install-gate-card">
+        <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
+        <h1 class="ie-install-gate-title">${rb('ブラウザで開いてください','ぶらうざでひらいてください')}</h1>
+        <p class="ie-install-gate-lead">イエノミクスを使うには、まず通常のブラウザで開く必要があります。</p>
+        <div class="ie-install-gate-step">
+          <p class="ie-install-gate-step-label">手順</p>
+          <p class="ie-install-gate-step-text">画面<strong>右下</strong>の「<strong>ブラウザで開く</strong>」を押してください</p>
+        </div>
+      </div>
+    </div>`;
+  }
+  const ios = isIosBrowser();
+  const stepText = ios
+    ? '画面下の<strong>共有</strong>ボタン（□に↑）から「<strong>ホーム画面に追加</strong>」を選び、追加されたアイコンから開いてください'
+    : 'メニュー（⋮）から「<strong>ホーム画面に追加</strong>」または「<strong>アプリをインストール</strong>」を選び、追加されたアイコンから開いてください';
+  return `<div class="ie-install-gate fade-in">
+    <div class="ie-install-gate-card">
+      <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
+      <h1 class="ie-install-gate-title">${rb('ホーム画面に追加してください','ほーむがめんについかしてください')}</h1>
+      <p class="ie-install-gate-lead">アプリのように使うため、ホーム画面への追加が必要です。</p>
+      <div class="ie-install-gate-step">
+        <p class="ie-install-gate-step-label">手順</p>
+        <p class="ie-install-gate-step-text">${stepText}</p>
+      </div>
+      <p class="ie-install-gate-note">追加後は、ブラウザのタブではなく<strong>ホーム画面のアイコン</strong>から開いてください。</p>
+    </div>
+  </div>`;
+}
+
 export function render() {
   bootDebugLog('render start', { role: state.role, familyCode: state.familyCode, view: state.view });
   try {
@@ -137,6 +169,15 @@ export function render() {
     bootDebugLog('markBootReady', { reason });
     if (typeof window.__ieMarkBootReady === 'function') window.__ieMarkBootReady(reason);
   };
+  const installGate = getInstallGateKind();
+  if (installGate) {
+    bottomNav.classList.add('hidden');
+    appDiv.innerHTML = renderInstallGate(installGate);
+    bootDebugLog('render branch', { branch: 'install-gate', kind: installGate });
+    markReady('install-gate');
+    bootDebugLog('render done');
+    return;
+  }
   if (state.resetPasswordCode || state.setupMode === 'password_reset_form') {
     bottomNav.classList.add('hidden');
     appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderPasswordResetForm()}</div>`;
