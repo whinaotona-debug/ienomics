@@ -1,4 +1,4 @@
-import { state } from './state.js?v=244';
+import { state } from './state.js?v=245';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -402,6 +402,39 @@ export function isLineInAppBrowser() {
   return /\bLine\//i.test(navigator.userAgent || '');
 }
 
+const INSTALL_OK_KEY = 'ienomics_install_ok';
+const INSTALL_BROWSER_HELP_KEY = 'ienomics_install_browser_help';
+
+/** ホーム画面から開いたと確認済みか */
+export function isInstallConfirmed() {
+  try {
+    return localStorage.getItem(INSTALL_OK_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function confirmInstallFromHome() {
+  try {
+    localStorage.setItem(INSTALL_OK_KEY, '1');
+    localStorage.removeItem(INSTALL_BROWSER_HELP_KEY);
+  } catch { /* ignore */ }
+}
+
+export function showInstallBrowserHelp() {
+  try {
+    localStorage.setItem(INSTALL_BROWSER_HELP_KEY, '1');
+  } catch { /* ignore */ }
+}
+
+export function isInstallBrowserHelpShown() {
+  try {
+    return localStorage.getItem(INSTALL_BROWSER_HELP_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 /** ホーム画面に追加して開いているか（PWA スタンドアロン） */
 export function isStandalonePwa() {
   if (typeof window === 'undefined') return false;
@@ -422,12 +455,17 @@ export function isMobileInstallTarget() {
   return (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
 }
 
-/** 'line' | 'browser' | null — ゲート表示の種類 */
+/** 'line' | 'ask' | 'browser' | null — ゲート表示の種類 */
 export function getInstallGateKind() {
   if (!isMobileInstallTarget()) return null;
-  if (isStandalonePwa()) return null;
+  if (isInstallConfirmed()) return null;
+  if (isStandalonePwa()) {
+    confirmInstallFromHome();
+    return null;
+  }
   if (isLineInAppBrowser()) return 'line';
-  return 'browser';
+  if (isInstallBrowserHelpShown()) return 'browser';
+  return 'ask';
 }
 
 export function isIosBrowser() {

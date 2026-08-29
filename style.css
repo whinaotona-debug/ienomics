@@ -1344,6 +1344,25 @@ textarea:focus-visible,
   line-height: 1.6;
 }
 .ie-install-gate-note strong { color: var(--ie-ink); }
+.ie-install-gate-question {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ie-ink);
+  line-height: 1.6;
+  margin: 4px 0 18px;
+}
+.ie-install-gate-question strong { color: var(--ie-accent); }
+.ie-install-gate-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ie-install-gate-secondary {
+  background: #fff !important;
+  color: var(--ie-ink) !important;
+  border: 1px solid var(--ie-line) !important;
+  box-shadow: none !important;
+}
 
 /* ===== 設定の「使い方ガイド」ボタン ===== */
 .ie-guide-btn {

@@ -1,7 +1,7 @@
-import { state } from './state.js?v=244';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=244';
-import { refreshTutorial } from './tutorial.js?v=244';
-import { auth } from './firebase.js?v=244';
+import { state } from './state.js?v=245';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=245';
+import { refreshTutorial } from './tutorial.js?v=245';
+import { auth } from './firebase.js?v=245';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -144,20 +144,35 @@ function renderInstallGate(kind) {
       </div>
     </div>`;
   }
+  if (kind === 'ask') {
+    return `<div class="ie-install-gate fade-in">
+      <div class="ie-install-gate-card">
+        <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
+        <h1 class="ie-install-gate-title">開き方の確認</h1>
+        <p class="ie-install-gate-lead">イエノミクスはホーム画面に追加して使います。</p>
+        <p class="ie-install-gate-question">今、<strong>ブラウザ</strong>で開いていますか？</p>
+        <div class="ie-install-gate-actions">
+          <button type="button" onclick="installGateAnswer(true)" class="solid-btn w-full py-4 font-bold text-sm">はい（ブラウザで開いている）</button>
+          <button type="button" onclick="installGateAnswer(false)" class="solid-btn w-full py-4 font-bold text-sm ie-install-gate-secondary">いいえ（ホーム画面のアイコンから）</button>
+        </div>
+      </div>
+    </div>`;
+  }
   const ios = isIosBrowser();
   const stepText = ios
-    ? '画面下の<strong>共有</strong>ボタン（□に↑）から「<strong>ホーム画面に追加</strong>」を選び、追加されたアイコンから開いてください'
-    : 'メニュー（⋮）から「<strong>ホーム画面に追加</strong>」または「<strong>アプリをインストール</strong>」を選び、追加されたアイコンから開いてください';
+    ? '画面下の<strong>共有</strong>ボタン（□に↑）から「<strong>ホーム画面に追加</strong>」を選んでください'
+    : 'メニュー（⋮）から「<strong>ホーム画面に追加</strong>」または「<strong>アプリをインストール</strong>」を選んでください';
   return `<div class="ie-install-gate fade-in">
     <div class="ie-install-gate-card">
       <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
       <h1 class="ie-install-gate-title">${rb('ホーム画面に追加してください','ほーむがめんについかしてください')}</h1>
-      <p class="ie-install-gate-lead">アプリのように使うため、ホーム画面への追加が必要です。</p>
+      <p class="ie-install-gate-lead">ブラウザのままでは通知などが使えません。ホーム画面に追加してから使いましょう。</p>
       <div class="ie-install-gate-step">
         <p class="ie-install-gate-step-label">手順</p>
         <p class="ie-install-gate-step-text">${stepText}</p>
       </div>
-      <p class="ie-install-gate-note">追加後は、ブラウザのタブではなく<strong>ホーム画面のアイコン</strong>から開いてください。</p>
+      <p class="ie-install-gate-note">追加したら、<strong>ホーム画面のアイコン</strong>から開き直して「いいえ（ホーム画面のアイコンから）」を選んでください。</p>
+      <button type="button" onclick="installGateContinue()" class="solid-btn primary-btn w-full py-4 font-bold text-sm mt-4">追加して続行</button>
     </div>
   </div>`;
 }
