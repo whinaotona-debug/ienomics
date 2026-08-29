@@ -1,7 +1,7 @@
-import { state } from './state.js?v=240';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=240';
-import { refreshTutorial } from './tutorial.js?v=240';
-import { auth } from './firebase.js?v=240';
+import { state } from './state.js?v=241';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened } from './utils.js?v=241';
+import { refreshTutorial } from './tutorial.js?v=241';
+import { auth } from './firebase.js?v=241';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -640,7 +640,7 @@ function renderHome() {
   let bankTotal = 0;
   (state.banks || []).forEach(b => {
     const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30);
-    bankTotal += b.amount + Math.floor(b.amount * (0.001 * months));
+    bankTotal += b.amount + Math.floor(b.amount * (0.005 * months));
   });
   const rates = getCurrentMarketRates();
   const investTotal = getInvestmentPortfolioValue(
@@ -1181,7 +1181,7 @@ window.setRepeatType = (type) => {
   document.getElementById('btn-rep-monthly')?.classList.toggle('on', !isWeekly);
 };
 
-function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.001 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-wide">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">円</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}円 (月0.1%)</p></div>${state.role === 'child' ? `<div class="ie-field-row mb-4"><input type="number" id="bank-amount" inputmode="numeric" placeholder="金額を入力" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-5 font-bold text-sm shrink-0">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
+function renderBank() { let totalDeposit = 0, totalInterest = 0; state.banks.forEach(b => { const months = (Date.now() - b.createdAt) / (1000 * 60 * 60 * 24 * 30); const interest = Math.floor(b.amount * (0.005 * months)); totalDeposit += b.amount; totalInterest += interest; }); const currentTotal = totalDeposit + totalInterest; return `<h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2"><div class="w-4 h-4 text-emerald-500">${getIcon('bank')}</div>${rb('家庭内銀行','かていないぎんこう')}</h2><div class="p-6 bg-slate-50 rounded-2xl text-center mb-6"><p class="text-[10px] font-bold text-slate-500 mb-1 tracking-wide">${rb('預金残高','よきんざんだか')}</p><p class="text-4xl font-black text-slate-800 tracking-tight">${currentTotal.toLocaleString()} <span class="text-sm font-bold text-slate-400">円</span></p><p class="text-[9px] font-bold text-emerald-600 mt-3 inline-block px-3 py-1 rounded-full border border-emerald-100 bg-white">${rb('利息','りそく')}: +${totalInterest}円 (月0.5%)</p></div>${state.role === 'child' ? `<div class="ie-field-row mb-4"><input type="number" id="bank-amount" inputmode="numeric" placeholder="金額を入力" class="p-3 bg-white border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 transition" /><button onclick="depositBank()" class="solid-btn primary-btn px-5 font-bold text-sm shrink-0">預ける</button></div>${currentTotal > 0 ? `<button onclick="withdrawBank()" class="solid-btn w-full py-4 text-sm font-bold hover:bg-slate-50">全額引き出す</button>` : ''}` : `<p class="text-[10px] text-center font-bold text-slate-400">子供の預金資産です</p>`} `; }
 
 function renderPayments() {
   const active = (state.scheduledPayments || []).filter(p => p.status === 'active');
