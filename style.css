@@ -1364,6 +1364,63 @@ textarea:focus-visible,
   box-shadow: none !important;
 }
 
+/* LINE 内ブラウザ：右下メニュー（⋮）の図解 */
+.ie-line-menu-demo {
+  margin: 0 auto 18px;
+  width: 100%;
+  max-width: 220px;
+}
+.ie-line-menu-phone {
+  position: relative;
+  height: 132px;
+  border-radius: 18px;
+  border: 2px solid #d5e3df;
+  background: linear-gradient(180deg, #f8fcfb 0%, #eef5f3 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+.ie-line-menu-hint {
+  position: absolute;
+  right: 54px;
+  bottom: 18px;
+  font-size: 10px;
+  font-weight: 900;
+  color: var(--ie-accent);
+  letter-spacing: 0.04em;
+}
+.ie-line-menu-hint::after {
+  content: '→';
+  margin-left: 4px;
+  font-weight: 900;
+}
+.ie-line-menu-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 2px solid var(--ie-accent);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(47, 143, 130, 0.22);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  animation: ie-line-menu-pulse 1.6s ease-in-out infinite;
+}
+.ie-line-menu-btn span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ie-accent);
+}
+@keyframes ie-line-menu-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 4px 14px rgba(47, 143, 130, 0.22); }
+  50% { transform: scale(1.06); box-shadow: 0 6px 18px rgba(47, 143, 130, 0.34); }
+}
+
 /* ===== 設定の「使い方ガイド」ボタン ===== */
 .ie-guide-btn {
   display: flex;

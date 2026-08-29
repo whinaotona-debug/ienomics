@@ -1,7 +1,7 @@
-import { state } from './state.js?v=245';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=245';
-import { refreshTutorial } from './tutorial.js?v=245';
-import { auth } from './firebase.js?v=245';
+import { state } from './state.js?v=246';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getInstallGateKind, isIosBrowser } from './utils.js?v=246';
+import { refreshTutorial } from './tutorial.js?v=246';
+import { auth } from './firebase.js?v=246';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -137,9 +137,17 @@ function renderInstallGate(kind) {
         <div class="ie-install-gate-logo" aria-hidden="true">${getIcon('home')}</div>
         <h1 class="ie-install-gate-title">${rb('ブラウザで開いてください','ぶらうざでひらいてください')}</h1>
         <p class="ie-install-gate-lead">イエノミクスを使うには、まず通常のブラウザで開く必要があります。</p>
+        <div class="ie-line-menu-demo" aria-hidden="true">
+          <div class="ie-line-menu-phone">
+            <span class="ie-line-menu-hint">右下</span>
+            <span class="ie-line-menu-btn" title="メニュー">
+              <span></span><span></span><span></span>
+            </span>
+          </div>
+        </div>
         <div class="ie-install-gate-step">
           <p class="ie-install-gate-step-label">手順</p>
-          <p class="ie-install-gate-step-text">画面<strong>右下</strong>の「<strong>ブラウザで開く</strong>」を押してください</p>
+          <p class="ie-install-gate-step-text">画面<strong>右下</strong>の<strong>縦に3つ並んだ点</strong>（⋮）を押して、「<strong>ブラウザで開く</strong>」を選んでください</p>
         </div>
       </div>
     </div>`;
