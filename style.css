@@ -665,6 +665,12 @@ body.furigana-on .nav-tab span {
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+.ie-news-body {
+  margin-top: 8px;
+}
+.ie-news-body .ie-news-section-body + .ie-news-section-body {
+  margin-top: 10px;
+}
 /* 左右ラベルを同じ行高に揃えて、残高と同期IDの位置がズレないようにする */
 .ie-hero-label {
   height: 1.2em;

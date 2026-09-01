@@ -1,7 +1,7 @@
-import { state } from './state.js?v=258';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=258';
-import { refreshTutorial } from './tutorial.js?v=258';
-import { auth } from './firebase.js?v=258';
+import { state } from './state.js?v=259';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=259';
+import { refreshTutorial } from './tutorial.js?v=259';
+import { auth } from './firebase.js?v=259';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1723,23 +1723,31 @@ function renderNews() {
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}のニュース`;
-        // 平日の what は表から補完（news.json の固定％は使わない）
-        const what = useWeekend
-          ? (n.what || '')
-          : getNewsWhatHappened(g.about);
-        const structured = n.why || n.life || n.stocks || what;
+        const what = useWeekend ? (n.what || '') : getNewsWhatHappened(g.about);
+        const hasLegacySections = !!(n.why || n.life || n.stocks);
         const topics = Array.isArray(n.topics) ? n.topics.filter(Boolean).slice(0, 5) : [];
-        const topicHtml = !structured && topics.length
-          ? `<ul class="ie-news-topics">${topics.map(t => `<li class="ie-news-topic">${esc(t)}</li>`).join('')}</ul>`
+        const topicHtml = topics.length
+          ? `<div class="ie-news-section">
+               <p class="ie-news-section-label">ポイント</p>
+               <ul class="ie-news-topics">${topics.map(t => `<li class="ie-news-topic">${esc(t)}</li>`).join('')}</ul>
+             </div>`
           : '';
-        const detail = structured
-          ? `${newsSection('何が起きている？', what)}
-             ${newsSection('なぜ？', n.why)}
+        const bodyHtml = n.body
+          ? `<div class="ie-news-body">${String(n.body).split(/\n\n+/).filter(Boolean).map(p =>
+              `<p class="ie-news-section-body">${esc(p)}</p>`
+            ).join('')}</div>`
+          : '';
+        const legacyHtml = hasLegacySections
+          ? `${newsSection('なぜ？', n.why)}
              ${newsSection('くらしには？', n.life)}
              ${n.stocks ? newsSection('株には？', n.stocks) : ''}`
-          : (n.body
-            ? `<p class="text-[12px] font-bold text-slate-600 mt-3 leading-relaxed whitespace-pre-wrap ie-wrap-text">${esc(n.body)}</p>`
-            : '');
+          : '';
+        const detail = [
+          what ? newsSection('何が起きている？', what) : '',
+          legacyHtml,
+          topicHtml,
+          bodyHtml
+        ].join('');
         return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100">
           <p class="ie-news-kicker">${esc(g.about)}・学習用</p>
           <p class="text-[14px] font-black text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>

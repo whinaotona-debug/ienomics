@@ -1,10 +1,10 @@
-import { state } from './state.js?v=258';
-import { render, drawInvestChart } from './ui.js?v=258';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=258';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=258';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=258';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=258';
-import { db, auth } from './firebase.js?v=258';
+import { state } from './state.js?v=259';
+import { render, drawInvestChart } from './ui.js?v=259';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=259';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=259';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=259';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=259';
+import { db, auth } from './firebase.js?v=259';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -2995,6 +2995,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=258').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=259').catch(err => console.warn('SW登録失敗:', err));
   });
 }
