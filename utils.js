@@ -1,4 +1,4 @@
-import { state } from './state.js?v=260';
+import { state } from './state.js?v=261';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -374,19 +374,22 @@ export function nextJapanMonthKey(key) {
   return `${y}-${m + 1}`;
 }
 
-/** 家庭内銀行の月利（0.5%）。毎月1日に前月分を残高へ加算 */
+/** 家庭内銀行の月利（0.5%）。日利は amount × この値 ÷ 30 */
 export const BANK_MONTHLY_RATE = 0.005;
 
 export function bankDepositPrincipal(b) {
   return Math.round(Number(b?.principal ?? b?.amount) || 0);
 }
 
+/** 表示用残高（内部 amount の小数は切り捨て。accruedInterest は含めない） */
 export function bankDepositBalance(b) {
-  return Math.round(Number(b?.amount) || 0);
+  return Math.floor(Number(b?.amount) || 0);
 }
 
 export function bankDepositInterestEarned(b) {
-  return Math.max(0, bankDepositBalance(b) - bankDepositPrincipal(b));
+  const amount = Number(b?.amount) || 0;
+  const principal = Number(b?.principal ?? amount) || 0;
+  return Math.max(0, Math.floor(amount - principal));
 }
 
 export function bankTotalBalance(banks) {

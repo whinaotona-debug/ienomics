@@ -57,26 +57,6 @@ function japanTodayKey(date = new Date()) {
   return `${j.year}-${j.month}-${j.day}`;
 }
 
-function japanMonthKey(date = new Date()) {
-  const j = japanParts(date);
-  return `${j.year}-${j.month}`;
-}
-
-function monthKeyNum(key) {
-  const [y, m] = String(key || '').split('-').map(Number);
-  if (!y || !m) return 0;
-  return y * 12 + m;
-}
-
-function nextJapanMonthKey(key) {
-  const [y, m] = String(key || '').split('-').map(Number);
-  if (!y || !m) return japanMonthKey();
-  if (m >= 12) return `${y + 1}-1`;
-  return `${y}-${m + 1}`;
-}
-
-const BANK_MONTHLY_RATE = 0.005;
-
 function japanDeadlineMs(hours, minutes, date = new Date()) {
   const j = japanParts(date);
   const h = Number.isFinite(hours) ? hours : 19;
@@ -581,11 +561,58 @@ async function runSnapshotInvestmentEod() {
 }
 
 /**
- * 銀行利息（フェーズA: 旧一括エンジン停止中。フェーズBで日次エンジンに置換する）
- * 旧の amount += floor(amount * 0.005) は二重付与防止のため無効化。
+ * 銀行利息（日次累積・前月分を amount へ入金）。旧一括エンジンは削除済み。
+ * Client の bankInterest.js と同一アルゴリズム（functions/bankInterest.js）。
  */
+const {
+  computeBankInterestState,
+  bankInterestStateChanged,
+  bankInterestWritePayload,
+  selfTestBankInterestLogic
+} = require('./bankInterest');
+
+try {
+  selfTestBankInterestLogic();
+} catch (e) {
+  console.error('[bankInterest] selfTest failed at load', e?.message || e);
+}
+
 async function runApplyBankMonthlyInterest() {
-  return;
+  let snap;
+  try {
+    snap = await db.collection('banks').get();
+  } catch (e) {
+    console.warn('[bankInterest]', e?.message || e);
+    return;
+  }
+  if (snap.empty) return;
+
+  let updated = 0;
+  for (const d of snap.docs) {
+    try {
+      await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(d.ref);
+        if (!fresh.exists) return;
+        const data = fresh.data();
+        const next = computeBankInterestState(data, Date.now());
+        const before = {
+          amount: data.amount,
+          principal: data.principal,
+          accruedInterest: data.accruedInterest,
+          lastAccruedDate: data.lastAccruedDate,
+          lastSettledMonth: data.lastSettledMonth,
+          interestEngineVersion: data.interestEngineVersion,
+          lastInterestKey: data.lastInterestKey
+        };
+        if (!bankInterestStateChanged(before, next)) return;
+        tx.update(d.ref, bankInterestWritePayload(next));
+        updated += 1;
+      });
+    } catch (e) {
+      console.warn('[bankInterest]', d.id, e?.message || e);
+    }
+  }
+  if (updated) console.log(`[bankInterest] ${updated}件 updated`);
 }
 
 // 0:00ちょうど（日本時間）。アプリを落としていなくても、サーバー側で今日分が出る。

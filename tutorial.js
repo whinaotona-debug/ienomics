@@ -1,6 +1,6 @@
 // 使い方ガイド。ホーム画面の要素を1つずつスポットライトで示しながら説明する。
 // 対象は ui.js 側の data-tour 属性で指定する。
-import { esc } from './utils.js?v=260';
+import { esc } from './utils.js?v=261';
 
 const SEEN_KEY = 'ienomics_tutorial_seen';
 
@@ -41,7 +41,7 @@ const PARENT_STEPS = [
   {
     target: 'bank',
     title: '家庭内銀行',
-    body: 'お子さまが円を預けると、月0.1%の利息がつきます。貯める習慣を体験してもらう仕組みです。'
+    body: 'お子さまが円を預けると、月0.5%の利息がつきます。貯める習慣を体験してもらう仕組みです。'
   },
   {
     target: 'invest',
