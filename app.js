@@ -1,10 +1,10 @@
-import { state } from './state.js?v=259';
-import { render, drawInvestChart } from './ui.js?v=259';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, BANK_MONTHLY_RATE, bankDepositPrincipal, bankDepositBalance, bankTotalBalance, bankTotalInterest, monthKeyNum, nextJapanMonthKey, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=259';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=259';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=259';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=259';
-import { db, auth } from './firebase.js?v=259';
+import { state } from './state.js?v=260';
+import { render, drawInvestChart } from './ui.js?v=260';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanMonthKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind } from './utils.js?v=260';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy } from './dialog.js?v=260';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=260';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=260';
+import { db, auth } from './firebase.js?v=260';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
@@ -2162,36 +2162,13 @@ window.rejectExchange = async (id) => {
   await guard(`rejectExchange:${id}`, () => updateDoc(doc(db, "exchanges", id), { status: 'rejected' }));
 };
 
-/** 毎月1日に、前月分の月利（0.5%）を預金残高へ加算 */
+/**
+ * 銀行利息（フェーズA: 旧一括エンジン停止中。フェーズBで日次エンジンに置換する）
+ * 旧の amount += floor(amount * 0.005) は二重付与防止のため無効化。
+ */
 let bankInterestBusy = false;
 async function applyBankMonthlyInterest() {
-  if (!state.familyCode || bankInterestBusy || !state.banks?.length) return;
-  bankInterestBusy = true;
-  try {
-    const thisMonth = japanMonthKey();
-    const updates = [];
-    for (const b of state.banks) {
-      let last = b.lastInterestKey || japanMonthKey(new Date(Number(b.createdAt) || Date.now()));
-      let amount = bankDepositBalance(b);
-      const principal = Math.round(Number(b.principal ?? amount));
-      let cur = last;
-      let steps = 0;
-      while (monthKeyNum(cur) < monthKeyNum(thisMonth)) {
-        cur = nextJapanMonthKey(cur);
-        amount += Math.floor(amount * BANK_MONTHLY_RATE);
-        steps += 1;
-      }
-      if (!steps) continue;
-      updates.push(updateDoc(doc(db, 'banks', b.id), {
-        amount,
-        principal,
-        lastInterestKey: cur
-      }));
-    }
-    if (updates.length) await Promise.all(updates);
-  } finally {
-    bankInterestBusy = false;
-  }
+  return;
 }
 
 window.depositBank = async () => {
@@ -2995,6 +2972,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=259').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=260').catch(err => console.warn('SW登録失敗:', err));
   });
 }
