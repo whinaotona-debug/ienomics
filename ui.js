@@ -1,7 +1,7 @@
-import { state } from './state.js?v=267';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, getNewsWhatHappened, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=267';
-import { refreshTutorial } from './tutorial.js?v=267';
-import { auth } from './firebase.js?v=267';
+import { state } from './state.js?v=268';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=268';
+import { refreshTutorial } from './tutorial.js?v=268';
+import { auth } from './firebase.js?v=268';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1723,7 +1723,6 @@ function renderNews() {
     ? groups.map(g => {
       const rows = g.items.map(n => {
         const label = n.title || `${n.about}のニュース`;
-        const what = useWeekend ? (n.what || '') : getNewsWhatHappened(g.about);
         const hasLegacySections = !!(n.why || n.life || n.stocks);
         const topics = Array.isArray(n.topics) ? n.topics.filter(Boolean).slice(0, 5) : [];
         const topicHtml = topics.length
@@ -1742,15 +1741,10 @@ function renderNews() {
              ${newsSection('くらしには？', n.life)}
              ${n.stocks ? newsSection('株には？', n.stocks) : ''}`
           : '';
-        const detail = [
-          what ? newsSection('何が起きている？', what) : '',
-          legacyHtml,
-          topicHtml,
-          bodyHtml
-        ].join('');
+        const detail = [legacyHtml, topicHtml, bodyHtml].filter(Boolean).join('');
         return `<article class="block p-3 rounded-xl bg-slate-50 border border-slate-100">
           <p class="ie-news-kicker">${esc(g.about)}・学習用</p>
-          <p class="text-[14px] font-black text-slate-800 leading-snug ie-wrap-text">${esc(label)}</p>
+          <p class="text-[14px] font-black text-slate-800 leading-snug ie-wrap-text${detail ? ' ie-news-title' : ''}">${esc(label)}</p>
           ${detail}
         </article>`;
       }).join('');

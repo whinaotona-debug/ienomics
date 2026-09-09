@@ -609,7 +609,7 @@ body.furigana-on .nav-tab span {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 .ie-news-topic {
   display: flex;
@@ -635,6 +635,13 @@ body.furigana-on .nav-tab span {
   letter-spacing: 0.04em;
   color: #7a8f88;
   margin-bottom: 4px;
+}
+.ie-news-title {
+  margin-bottom: 2px;
+}
+.ie-news-section:first-of-type,
+.ie-news-body:first-of-type {
+  margin-top: 8px;
 }
 .ie-news-disclaimer {
   font-size: 11px;
