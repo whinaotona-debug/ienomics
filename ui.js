@@ -1,7 +1,7 @@
-import { state } from './state.js?v=268';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone } from './utils.js?v=268';
-import { refreshTutorial } from './tutorial.js?v=268';
-import { auth } from './firebase.js?v=268';
+﻿import { state } from './state.js?v=269';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=269';
+import { refreshTutorial } from './tutorial.js?v=269';
+import { auth } from './firebase.js?v=269';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -595,6 +595,16 @@ function buildInboxItems() {
         action: null
       });
     });
+    (state.tickets || []).filter(t => t.status === 'pending_use').forEach(t => {
+      const who = t.useRequestedBy ? `${t.useRequestedBy} · ` : '';
+      items.push({
+        id: `ticket-req-${t.id}`,
+        tone: 'warm',
+        title: 'チケットの使用申請',
+        body: `${who}「${t.title || 'チケット'}」 ${Number(t.price) || 0}円`,
+        action: `setView('tickets')`
+      });
+    });
   } else {
     (state.balloons || []).filter(b => b.status !== 'received').forEach(b => {
       items.push({
@@ -631,6 +641,15 @@ function buildInboxItems() {
         title: 'やり直しの指示',
         body: `「${t.title}」`,
         action: null
+      });
+    });
+    (state.tickets || []).filter(t => t.status === 'approved').forEach(t => {
+      items.push({
+        id: `ticket-ok-${t.id}`,
+        tone: 'gift',
+        title: 'チケットの使用が承認されました',
+        body: `「${t.title || 'チケット'}」 ${Number(t.price) || 0}円 · タップして使う`,
+        action: `redeemTicket('${esc(t.id)}')`
       });
     });
   }
@@ -1835,37 +1854,76 @@ function renderWish() {
 }
 
 function renderTickets() {
-  const ts = state.tickets.filter(t => state.role === 'child' ? t.status === 'available' || t.status === 'bought' : true);
+  const ts = state.tickets.filter(t => state.role === 'child' ? isChildVisibleTicket(t.status) : true);
   const parentForm = state.role === 'parent' ? `
     <div class="ie-field-stack mb-6">
       <label>品名</label>
       <input id="t-title" placeholder="例: ゲーム1時間" class="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
       <label>ポイント</label>
       <div class="ie-field-row">
-        <input id="t-pts" type="number" inputmode="numeric" placeholder="必要な円" class="p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
+        <input id="t-pts" type="number" inputmode="numeric" placeholder="使うときに必要な円" class="p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:outline-none" />
         <span class="ie-unit">円</span>
       </div>
       <button onclick="addTicket2()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mt-1">追加する</button>
     </div>
   ` : '';
 
+  const statusBadge = (t) => {
+    if (t.status === 'pending_use') return `<span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md shrink-0">申請中</span>`;
+    if (t.status === 'approved') return `<span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-md shrink-0">承認済み</span>`;
+    if (t.status === 'redeeming') return `<span class="text-[10px] font-bold text-sky-700 bg-sky-50 px-3 py-1.5 rounded-md shrink-0">使用中…</span>`;
+    if (t.status === 'used') return `<span class="text-[10px] text-slate-400 font-bold shrink-0">旧・使用済</span>`;
+    if (isTicketIdleOwned(t.status)) return `<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md shrink-0">保有中</span>`;
+    return '';
+  };
+
   const list = ts.map(t => {
     const id = esc(t.id);
     const price = Number(t.price) || 0;
     let b = '';
     if (state.role === 'child') {
-      if (t.status === 'available') b = `<button onclick="buyTicket('${id}',${price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">購入</button>`;
-      else b = `<span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-md shrink-0">所持中</span>`;
+      if (t.status === 'available') {
+        b = `<button onclick="buyTicket('${id}',${price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">受け取る</button>`;
+      } else if (isTicketIdleOwned(t.status)) {
+        b = `<button onclick="requestTicketUse('${id}')" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">使用申請</button>`;
+      } else {
+        b = statusBadge(t);
+      }
     } else {
-      if (t.status === 'available') b = `<button onclick="deleteTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold transition shrink-0">削除</button>`;
-      else if (t.status === 'bought') b = `<button onclick="useTicket('${id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0">使用済にする</button>`;
-      else b = `<span class="text-[10px] text-slate-400 font-bold shrink-0">使用済</span>`;
+      if (t.status === 'available') {
+        b = `<button onclick="deleteTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold transition shrink-0">削除</button>`;
+      } else if (t.status === 'pending_use') {
+        const who = t.useRequestedBy ? esc(t.useRequestedBy) : 'お子さま';
+        b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
+          <span class="text-[10px] font-bold text-amber-700">${who} · 申請中</span>
+          <button onclick="approveTicketUse('${id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">承認</button>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+        </div>`;
+      } else if (t.status === 'approved') {
+        b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
+          <span class="text-[10px] font-bold text-emerald-700">子供の使用待ち</span>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+        </div>`;
+      } else if (t.status === 'redeeming') {
+        b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
+          <span class="text-[10px] font-bold text-sky-700">使用処理中</span>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+        </div>`;
+      } else if (isTicketIdleOwned(t.status) || t.status === 'used') {
+        b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
+          ${statusBadge(t)}
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+        </div>`;
+      } else {
+        b = statusBadge(t);
+      }
     }
+    const highlight = t.status === 'pending_use' || t.status === 'approved' || t.status === 'redeeming' || isTicketIdleOwned(t.status);
     return `
-      <div class="p-4 rounded-xl border ${t.status === 'bought' ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
+      <div class="p-4 rounded-xl border ${highlight ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
         <div class="min-w-0 flex-1">
           <p class="font-bold text-sm text-slate-700 ie-wrap-text">${esc(t.title)}</p>
-          <p class="text-[10px] font-bold mt-0.5 ${t.status === 'bought' ? 'text-slate-500' : 'text-rose-600'}">${price} 円</p>
+          <p class="text-[10px] font-bold mt-0.5 ${isTicketIdleOwned(t.status) || t.status === 'pending_use' || t.status === 'approved' || t.status === 'redeeming' ? 'text-slate-500' : 'text-rose-600'}">${price} 円${t.status === 'available' ? '（使用時）' : ''}</p>
         </div>
         ${b}
       </div>
@@ -1875,7 +1933,7 @@ function renderTickets() {
   return `
     <h2 class="text-lg font-bold mb-4 border-b border-slate-100 pb-3 text-slate-800 flex items-center gap-2">
       <div class="w-4 h-4 text-rose-500 shrink-0">${getIcon('ticket')}</div>
-      チケット${state.role === 'parent' ? '管理' : '購入'}
+      チケット${state.role === 'parent' ? '管理' : ''}
     </h2>
     ${parentForm}
     <div class="space-y-3 min-w-0">${list || `<p class="text-[11px] font-bold text-slate-500 text-center py-6">チケットはまだありません</p>`}</div>

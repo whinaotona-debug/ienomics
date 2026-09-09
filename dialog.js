@@ -1,6 +1,6 @@
-// 標準の alert / confirm / prompt を、アプリの見た目に合わせたダイアログに置き換える。
+﻿// 標準の alert / confirm / prompt を、アプリの見た目に合わせたダイアログに置き換える。
 // render() が #app を作り直しても消えないよう、専用のルート要素に描画する。
-import { esc } from './utils.js?v=268';
+import { esc } from './utils.js?v=269';
 
 let dialogRoot = null;
 let busyRoot = null;

@@ -305,6 +305,33 @@ exports.onExchangeUpdated = onDocumentUpdated('exchanges/{exchangeId}', async (e
   }
 });
 
+// ---- チケットの使用申請・承認 ----
+exports.onTicketUpdated = onDocumentUpdated('tickets/{ticketId}', async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!before || !after || before.status === after.status || !after.familyCode) return;
+  const title = after.title || 'チケット';
+  const yen = Number(after.price) || 0;
+
+  if (after.status === 'pending_use' && before.status !== 'pending_use') {
+    const name = after.useRequestedBy || (await getChildName(after.familyCode));
+    return notify(
+      after.familyCode, 'parent',
+      'チケットの使用申請',
+      `${name}さんが「${title}」の使用を申請しています（${yen}円）`,
+      'ticket-request'
+    );
+  }
+  if (after.status === 'approved' && before.status === 'pending_use') {
+    return notify(
+      after.familyCode, 'child',
+      'チケットの使用が承認されました',
+      `「${title}」をタップして使えます（${yen}円）`,
+      'ticket-approved'
+    );
+  }
+});
+
 // ---- 自動支払いが引き落とされたとき ----
 exports.onPaymentCharged = onDocumentCreated('paymentLogs/{logId}', async (event) => {
   const l = event.data?.data();

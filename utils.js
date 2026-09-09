@@ -1,4 +1,4 @@
-import { state } from './state.js?v=268';
+﻿import { state } from './state.js?v=269';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -763,7 +763,22 @@ export function groupPointActivityByDay({ tasks, tickets, exchanges, paymentLogs
   }
 
   for (const t of tickets || []) {
-    if (!['bought', 'used'].includes(t.status)) continue;
+    const logs = Array.isArray(t.useLogs) ? t.useLogs : [];
+    if (logs.length) {
+      for (const log of logs) {
+        const at = log?.at;
+        if (!at) continue;
+        rows.push({
+          kind: 'spend',
+          label: `チケット「${t.title || ''}」`,
+          points: -(Number(log.price) || Number(t.price) || 0),
+          at
+        });
+      }
+      continue;
+    }
+    // 旧仕様（購入時課金）の履歴互換
+    if (!['bought', 'used', 'pending_use', 'approved', 'redeeming'].includes(t.status)) continue;
     const at = t.boughtAt || t.usedAt || t.createdAt;
     if (!at) continue;
     rows.push({
@@ -1752,6 +1767,112 @@ export function selfTestInvestmentEodLogic() {
     replayInvestmentPosition(logs, 'テスト株', endOf('2026-08-25')).principal === 500
   ]);
 
+  const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
+  return { ok: failed.length === 0, failed, cases: cases.map(([name, ok]) => ({ name, ok })) };
+}
+
+/** チケット：子供が保有していて使用申請できる状態（旧 bought を含む） */
+export function isTicketIdleOwned(status) {
+  return status === 'bought' || status === 'owned';
+}
+
+/** 子供のチケット一覧に出すステータス */
+export function isChildVisibleTicket(status) {
+  return status === 'available'
+    || isTicketIdleOwned(status)
+    || status === 'pending_use'
+    || status === 'approved'
+    || status === 'redeeming';
+}
+
+/** 親が取り消せる（カタログ販売前の削除以外）保有チケット */
+export function isTicketRevocable(status) {
+  return isTicketIdleOwned(status)
+    || status === 'pending_use'
+    || status === 'approved'
+    || status === 'redeeming'
+    || status === 'used';
+}
+
+/**
+ * チケット使用の状態遷移が正しいか（二重使用防止の単体確認用）
+ * lock = アニメ開始前の占有、settle = アニメ後の課金確定
+ * @returns {{ ok: boolean, next?: string, error?: string }}
+ */
+export function ticketTransition(fromStatus, action) {
+  if (action === 'buy') {
+    if (fromStatus !== 'available') return { ok: false, error: 'already-sold' };
+    return { ok: true, next: 'bought' };
+  }
+  if (action === 'request') {
+    if (!isTicketIdleOwned(fromStatus)) return { ok: false, error: 'not-idle' };
+    return { ok: true, next: 'pending_use' };
+  }
+  if (action === 'approve') {
+    if (fromStatus !== 'pending_use') return { ok: false, error: 'not-pending' };
+    return { ok: true, next: 'approved' };
+  }
+  if (action === 'lock') {
+    if (fromStatus !== 'approved') return { ok: false, error: 'not-approved' };
+    return { ok: true, next: 'redeeming' };
+  }
+  if (action === 'settle' || action === 'redeem') {
+    if (fromStatus !== 'redeeming') return { ok: false, error: 'not-redeeming' };
+    return { ok: true, next: 'bought' };
+  }
+  if (action === 'unlock') {
+    if (fromStatus !== 'redeeming') return { ok: false, error: 'not-redeeming' };
+    return { ok: true, next: 'approved' };
+  }
+  if (action === 'revoke') {
+    if (fromStatus === 'available') return { ok: false, error: 'use-delete' };
+    if (!isTicketRevocable(fromStatus)) return { ok: false, error: 'not-revocable' };
+    return { ok: true, next: null };
+  }
+  return { ok: false, error: 'unknown-action' };
+}
+
+/**
+ * redeeming ロックの猶予時間。
+ * 半券アニメ約1.7秒＋settle通信を大きく上回るよう 90秒。
+ * この時間未満は正常処理中とみなし、自動復旧しない。
+ */
+export const TICKET_REDEEM_LOCK_TTL_MS = 90 * 1000;
+
+/**
+ * 孤児の redeeming ロックか（課金なしで approved に戻してよい状態）
+ * redeemStartedAt が無い古いデータは孤児扱い。
+ */
+export function isTicketRedeemLockOrphaned(ticketOrData, now = Date.now()) {
+  if (!ticketOrData || ticketOrData.status !== 'redeeming') return false;
+  const started = Number(ticketOrData.redeemStartedAt);
+  if (!Number.isFinite(started) || started <= 0) return true;
+  return now - started >= TICKET_REDEEM_LOCK_TTL_MS;
+}
+
+/** チケット状態マシンの自己テスト */
+export function selfTestTicketFlow() {
+  const cases = [];
+  cases.push(['buy', ticketTransition('available', 'buy').next === 'bought']);
+  cases.push(['buy twice', ticketTransition('bought', 'buy').ok === false]);
+  cases.push(['request', ticketTransition('bought', 'request').next === 'pending_use']);
+  cases.push(['request while pending', ticketTransition('pending_use', 'request').ok === false]);
+  cases.push(['approve', ticketTransition('pending_use', 'approve').next === 'approved']);
+  cases.push(['approve idle', ticketTransition('bought', 'approve').ok === false]);
+  cases.push(['lock', ticketTransition('approved', 'lock').next === 'redeeming']);
+  cases.push(['lock twice', ticketTransition('redeeming', 'lock').ok === false]);
+  cases.push(['settle', ticketTransition('redeeming', 'settle').next === 'bought']);
+  cases.push(['settle from approved', ticketTransition('approved', 'settle').ok === false]);
+  cases.push(['redeem alias', ticketTransition('redeeming', 'redeem').next === 'bought']);
+  cases.push(['redeem idle', ticketTransition('bought', 'redeem').ok === false]);
+  cases.push(['unlock', ticketTransition('redeeming', 'unlock').next === 'approved']);
+  cases.push(['revoke redeeming', ticketTransition('redeeming', 'revoke').ok === true]);
+  const fresh = { status: 'redeeming', redeemStartedAt: Date.now() };
+  cases.push(['fresh lock not orphan', isTicketRedeemLockOrphaned(fresh) === false]);
+  const old = { status: 'redeeming', redeemStartedAt: Date.now() - TICKET_REDEEM_LOCK_TTL_MS - 1 };
+  cases.push(['old lock is orphan', isTicketRedeemLockOrphaned(old) === true]);
+  cases.push(['missing startedAt orphan', isTicketRedeemLockOrphaned({ status: 'redeeming' }) === true]);
+  cases.push(['approved not orphan', isTicketRedeemLockOrphaned({ status: 'approved', redeemStartedAt: 1 }) === false]);
   const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
   return { ok: failed.length === 0, failed, cases: cases.map(([name, ok]) => ({ name, ok })) };
 }
