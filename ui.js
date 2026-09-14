@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=269';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=269';
-import { refreshTutorial } from './tutorial.js?v=269';
-import { auth } from './firebase.js?v=269';
+﻿import { state } from './state.js?v=270';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=270';
+import { refreshTutorial } from './tutorial.js?v=270';
+import { auth } from './firebase.js?v=270';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -908,8 +908,10 @@ function renderHome() {
               </div>
             </div>
           </div>
-          <div class="solid-box h-[90px] relative p-1 cursor-pointer transition hover:brightness-[0.99]" onclick="setView('invest')">
-            <canvas id="investChart"></canvas>
+          <div class="solid-box h-[90px] p-1 cursor-pointer transition hover:brightness-[0.99]" onclick="setView('invest')">
+            <div class="ie-chart-slot w-full h-full">
+              <canvas id="investChart"></canvas>
+            </div>
           </div>
         </div>
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
@@ -1006,7 +1008,7 @@ function renderInvest() {
         </div>
       </div>
     ` : ''}
-    <div class="w-full h-[180px] mb-3 relative p-1 min-w-0"><canvas id="investChart"></canvas></div>
+    <div class="w-full h-[180px] mb-3 p-1 min-w-0"><div class="ie-chart-slot w-full h-full"><canvas id="investChart"></canvas></div></div>
     <p class="text-[9px] font-bold text-center mb-4 text-[#7a8f88]">
       ${chartName === CHART_TOTAL
         ? '自分の運用資産の推移（評価額と元本・円）'

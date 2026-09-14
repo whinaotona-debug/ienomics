@@ -90,6 +90,19 @@ html, body {
   border: 1px solid var(--ie-line-soft);
 }
 
+/* canvas の初期サイズは 300×150。親からはみ出すと隣のボタンのタップを奪う */
+.ie-chart-slot {
+  position: relative;
+  overflow: hidden;
+}
+.ie-chart-slot canvas {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* —— Buttons —— */
 .solid-btn {
   background: var(--ie-surface);
