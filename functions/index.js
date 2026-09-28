@@ -953,60 +953,13 @@ exports.processScheduledPayments = onSchedule(
   runProcessScheduledPayments
 );
 
-/**
- * 第1段階: Resend 疎通確認用。ログイン済みユーザーのみ。
- * Auth 本番フローには未接続。API キーはレスポンスに含めない。
- *
- * 呼び出し例（data）: { to: 'you@example.com' }
- * 任意: subject, text
+/* ===== 削除した関数（本番からも削除が必要） =====
+ * sendTestEmail   … Resend の疎通確認用。匿名ログインでも任意の宛先・件名・本文を送れたため削除。
+ * sendSignInEmail … 旧方式（メールのURL）の新規登録。4桁の認証コード方式（requestSignupCode）に置き換え。
+ * 「firebase deploy --only functions:名前」では消えないので、
+ *   firebase functions:delete sendTestEmail sendSignInEmail --region asia-northeast1
+ * で削除する（README「公開のしかた」参照）。
  */
-exports.sendTestEmail = onCall(
-  {
-    region: 'asia-northeast1',
-    secrets: [resendApiKey]
-  },
-  async (request) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'ログインが必要です');
-    }
-
-    const to = String(request.data?.to || '').trim();
-    if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-      throw new HttpsError('invalid-argument', '有効な送信先メールアドレス (to) を指定してください');
-    }
-
-    const subject = String(request.data?.subject || 'イエノミクス テストメール').trim()
-      || 'イエノミクス テストメール';
-    const text = String(request.data?.text || '').trim()
-      || [
-        'これは Firebase Cloud Functions → Resend の疎通確認メールです。',
-        '',
-        `送信元: noreply@ienomics.com`,
-        `呼び出し UID: ${request.auth.uid}`,
-        `時刻: ${new Date().toISOString()}`
-      ].join('\n');
-
-    const resend = new Resend(resendApiKey.value());
-    const { data, error } = await resend.emails.send({
-      from: 'イエノミクス <noreply@ienomics.com>',
-      to: [to],
-      subject,
-      text
-    });
-
-    if (error) {
-      console.error('[sendTestEmail] Resend error', {
-        uid: request.auth.uid,
-        to,
-        message: error.message || error
-      });
-      throw new HttpsError('internal', 'メール送信に失敗しました');
-    }
-
-    console.log('[sendTestEmail] sent', { uid: request.auth.uid, to, id: data?.id || null });
-    return { ok: true, id: data?.id || null };
-  }
-);
 
 /* ===== 認証メール（Resend）第2段階: Functions のみ。Client 未接続 ===== */
 
@@ -1101,27 +1054,6 @@ async function sendResendAuthEmail({ to, subject, text, html, logTag }) {
   return data?.id || null;
 }
 
-function buildSignInEmailContent(link) {
-  const subject = '【イエノミクス】メールアドレスの確認';
-  const text = [
-    'イエノミクスのメールアドレス確認です。',
-    '',
-    '以下のリンクを開いて登録を続けてください。',
-    link,
-    '',
-    'このメールに心当たりがない場合は、無視してください。'
-  ].join('\n');
-  const safe = escapeHtml(link);
-  const html = [
-    '<p>イエノミクスのメールアドレス確認です。</p>',
-    '<p>以下のボタン（またはリンク）を開いて登録を続けてください。</p>',
-    `<p><a href="${safe}">メールアドレスを確認する</a></p>`,
-    `<p style="word-break:break-all;font-size:12px;color:#666">${safe}</p>`,
-    '<p>このメールに心当たりがない場合は、無視してください。</p>'
-  ].join('');
-  return { subject, text, html };
-}
-
 function buildPasswordResetEmailContent(link) {
   const subject = '【イエノミクス】パスワード再設定';
   const text = [
@@ -1142,60 +1074,6 @@ function buildPasswordResetEmailContent(link) {
   ].join('');
   return { subject, text, html };
 }
-
-/**
- * 新規登録用サインインリンクを Resend で送信（未ログイン可）。
- * data: { email }
- * レスポンスにリンクは含めない。
- */
-exports.sendSignInEmail = onCall(
-  {
-    region: 'asia-northeast1',
-    secrets: [resendApiKey]
-  },
-  async (request) => {
-    const email = normalizeAuthEmail(request.data?.email);
-    if (!email || !isValidAuthEmail(email)) {
-      throw new HttpsError('invalid-argument', '有効なメールアドレスを入力してください');
-    }
-
-    await checkAuthEmailRateLimit(email, { kind: 'signIn' });
-
-    try {
-      await adminAuth.getUserByEmail(email);
-      throw new HttpsError('already-exists', 'このメールアドレスはすでに登録されています', {
-        authCode: 'auth/email-already-in-use'
-      });
-    } catch (e) {
-      if (e instanceof HttpsError) throw e;
-      if (e?.code !== 'auth/user-not-found') {
-        console.error('[sendSignInEmail] getUserByEmail', e?.code || e?.message || e);
-        throw new HttpsError('internal', 'メール送信に失敗しました');
-      }
-    }
-
-    let link;
-    try {
-      link = await adminAuth.generateSignInWithEmailLink(email, AUTH_ACTION_CODE_SETTINGS);
-    } catch (e) {
-      console.error('[sendSignInEmail] generateSignInWithEmailLink', e?.code || e?.message || e);
-      throw new HttpsError('internal', 'メール送信に失敗しました');
-    }
-
-    const { subject, text, html } = buildSignInEmailContent(link);
-    const id = await sendResendAuthEmail({
-      to: email,
-      subject,
-      text,
-      html,
-      logTag: 'sendSignInEmail'
-    });
-
-    await recordAuthEmailRateLimit(email, { kind: 'signIn' });
-    console.log('[sendSignInEmail] sent', { to: maskAuthEmail(email), id });
-    return { ok: true };
-  }
-);
 
 /**
  * パスワード再設定リンクを Resend で送信（未ログイン可）。
@@ -1250,3 +1128,75 @@ exports.sendPasswordResetEmail = onCall(
     return { ok: true };
   }
 );
+
+/* ===== 新規登録（4桁の認証コード方式）と、登録途中アカウントの復旧 =====
+ * 仕組みと安全のための条件は signup.js の先頭に書いてある。
+ * 既存の親ログイン・パスワード再設定（sendPasswordResetEmail）には関係しない。
+ */
+const { createSignupHandlers } = require('./signup');
+
+/** エミュレータでのテスト時だけ、メールを送らずに Firestore の _emulatorOutbox に置く */
+const SIGNUP_EMAIL_DRY_RUN = process.env.FUNCTIONS_EMULATOR === 'true'
+  && process.env.SIGNUP_EMAIL_DRY_RUN === '1';
+
+const signupHandlers = createSignupHandlers({
+  db,
+  adminAuth,
+  FieldValue,
+  HttpsError,
+  maskEmail: maskAuthEmail,
+  sendEmail: async ({ to, subject, text, html, code, logTag }) => {
+    if (SIGNUP_EMAIL_DRY_RUN) {
+      await db.collection('_emulatorOutbox').add({ to, subject, code, at: Date.now() });
+      return 'dry-run';
+    }
+    return sendResendAuthEmail({ to, subject, text, html, logTag });
+  }
+});
+
+const SIGNUP_CALLABLE_OPTIONS = { region: 'asia-northeast1', secrets: [resendApiKey] };
+
+/**
+ * App Check（正規のアプリ画面からの呼び出しかの確認）の扱い。functions/.env の SIGNUP_APP_CHECK_MODE で切り替える。
+ *   off     … 何もしない
+ *   monitor … 既定。トークンの有無をログに出すだけで、呼び出しは止めない（強制前の確認用）
+ *   enforce … 有効なトークンが無い呼び出しを拒否する
+ * 正規のブラウザからの呼び出しに valid が付いていることをログで確かめてから enforce にする。
+ */
+const SIGNUP_APP_CHECK_MODE = ['off', 'monitor', 'enforce'].includes(process.env.SIGNUP_APP_CHECK_MODE)
+  ? process.env.SIGNUP_APP_CHECK_MODE
+  : 'monitor';
+
+function signupAppCheckGate(name, request) {
+  if (SIGNUP_APP_CHECK_MODE === 'off') return;
+  const status = request.app ? 'valid' : 'missing';
+  if (SIGNUP_APP_CHECK_MODE === 'monitor') {
+    console.log('[signup-appcheck]', { fn: name, status });
+    return;
+  }
+  if (status !== 'valid') {
+    console.warn('[signup-appcheck] rejected', { fn: name });
+    throw new HttpsError('failed-precondition', 'アプリの確認ができませんでした。ページを再読み込みしてからもう一度お試しください', { reason: 'app-check' });
+  }
+}
+
+/** 認証コードを送る（再送信も同じ）。60秒に1回まで。data: { email } */
+exports.requestSignupCode = onCall(SIGNUP_CALLABLE_OPTIONS, (request) => {
+  signupAppCheckGate('requestSignupCode', request);
+  return signupHandlers.requestSignupCode(request);
+});
+
+/** 認証コードを確かめる。data: { email, code } → { ticket, mode, hasPassword } */
+exports.verifySignupCode = onCall({ region: 'asia-northeast1' }, (request) => {
+  signupAppCheckGate('verifySignupCode', request);
+  return signupHandlers.verifySignupCode(request);
+});
+
+/** 登録を完了する（新規・復旧）。data: { email, ticket, password, childName } */
+exports.completeParentSignup = onCall({ region: 'asia-northeast1' }, (request) => {
+  signupAppCheckGate('completeParentSignup', request);
+  return signupHandlers.completeParentSignup(request);
+});
+
+/** ログイン済みで口座が無い親に、口座だけ作る。data: { childName } */
+exports.createParentFamily = onCall({ region: 'asia-northeast1' }, (request) => signupHandlers.createParentFamily(request));

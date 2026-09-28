@@ -14,6 +14,9 @@ export const state = {
   message: '',
   requirePasswordSetup: false,
   resetPasswordCode: null,
+  // 新規登録（4桁の認証コード方式）。進み具合は localStorage の ienomics_signup にも残し、離脱後に再開できる
+  signup: null, // { step: 'code'|'profile', email, expiresAt, resendAvailableAt, ticket, ticketExpiresAt, mode, hasPassword, attemptsLeft, notice }
+  parentNeedsFamily: false, // ログイン済みの親に口座が1つも無い（口座作成・復旧の画面を出す）
   setupLoadingMessage: '',
   editingTemplateId: null,
   editingPaymentId: null,

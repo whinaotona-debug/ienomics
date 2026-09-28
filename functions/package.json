@@ -8,7 +8,8 @@
   },
   "scripts": {
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "node --test test/signup.test.js"
   },
   "dependencies": {
     "firebase-admin": "^12.6.0",

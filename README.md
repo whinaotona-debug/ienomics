@@ -112,9 +112,48 @@ VAPIDキーが未設定、または通知が許可されていない場合は、
 
 ### 1. 親の端末
 
-1. アプリを開き「親として開始」を選ぶ
-2. メールアドレスを入力し、届いたリンクから戻る
-3. パスワードとお子さまの名前を設定すると **同期ID**（6文字）が発行される
+1. アプリを開き「親として開始」→「新しく始める」を選ぶ
+2. メールアドレスを入力し「認証コードを送信」を押す
+3. メールに届いた **4桁の認証コード** をアプリに入力する
+4. パスワードとお子さまの名前を設定すると **同期ID**（6文字）が発行される
+
+#### 認証コードのしくみ
+
+| 項目 | 内容 |
+| --- | --- |
+| 有効期限 | 10分 |
+| 入力回数 | 1つのコードにつき5回まで |
+| 失敗の累計 | 同じメールアドレスで累計5回まちがえると **1時間ロック**（コードを再発行しても失敗回数は減らない）。ロック中はコードの確認も再送信もできない |
+| ロックの解除 | 5回目の失敗から1時間で自動解除（失敗回数も0に戻る）。急ぐ場合は管理者が Firestore の `signupCodes/{sha256("signup:"+メールアドレス)}` を削除する |
+| 再送信 | 60秒に1回。待ち時間はサーバー側でも強制（ボタンに残り秒数を表示） |
+| 再送信したとき | 新しいコードを発行し、古いコードは使えなくなる |
+| 途中で閉じたとき | コード入力・パスワード設定の画面から再開できる（コード確認後30分まで） |
+
+コードの発行・確認・アカウント作成はすべて Cloud Functions（`functions/signup.js`）で行う。
+コード確認が済むまで Firebase Auth のユーザーは作らない。パスワードは Admin SDK で設定するので、
+以前のメールリンク方式で起きていた `auth/requires-recent-login`（ログイン後5分を過ぎると失敗）は起きない。
+
+以前のメールリンク方式で登録が途中で止まったアカウントも、同じ画面から認証コードで本人確認すれば
+パスワードとお子さまの口座を作って復旧できる。口座がすでにある正常なアカウントには、コードを送らず
+何も書き換えない（ログイン画面へ案内する）。ログインできたのに口座が無い親には、口座を作る画面が出る。
+
+ロックが止めるのは「そのメールアドレスでの新規登録・復旧」だけで、ログイン・パスワード再設定・子どもの同期・
+口座のある正常なアカウントには影響しない。第三者がわざと失敗させてロックさせることはできる（その間は登録が
+遅れる）が、それ以上の被害はなく、1時間で自動的に解除される。
+
+テスト: `cd functions && npm test`
+
+#### App Check（登録用の関数を、正規のアプリ画面以外から呼びにくくする）
+
+1. Google reCAPTCHA の管理画面で reCAPTCHA v3 のサイトキーを作り、ドメイン `whinaotona-debug.github.io` を登録する
+2. Firebase コンソール → App Check → ウェブアプリに reCAPTCHA v3 を登録し、シークレットキーを入れる
+3. `app.js` の `APP_CHECK_SITE_KEY` にサイトキーを入れて公開する（登録画面でサーバーを呼ぶときだけ読み込む）
+4. `functions/.env` の `SIGNUP_APP_CHECK_MODE` は最初は `monitor`（既定）。Functions のログで
+   `[signup-appcheck] ... status: 'valid'` が正規の登録で出ていることを確かめる
+5. 確認できたら `SIGNUP_APP_CHECK_MODE=enforce` にして Functions を再デプロイする（トークンが無い呼び出しを拒否）
+
+Firestore の App Check 強制はコンソールで有効にしないこと（通常の画面はトークンを付けていないため、全画面が止まる）。
+App Check は正規のブラウザを自動操作されると防げないので、60秒の待機と失敗ロックはそのまま必要。
 
 ### 2. 子どもの端末
 
@@ -166,6 +205,7 @@ sw.js                     Service Worker（オフライン対応＋通知の受�
 manifest.json             PWA の設定
 firestore.rules           Firestore のセキュリティルール
 functions/index.js        通知を送るサーバー処理（Cloud Functions）
+functions/signup.js       新規登録（4桁の認証コード）と登録途中アカウントの復旧
 ```
 
 ---
@@ -218,11 +258,32 @@ npx serve .
 
 ### 開発中の注意
 
-各ファイルの読み込みには `?v=140` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
+各ファイルの読み込みには `?v=272` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
 
 対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js`、`push.js` の冒頭にある import 文と、`sw.js` の `VERSION` です。`firebase.js` の import にも番号が必要です（ここを忘れると `firebaseApp` が見つからないというエラーになります）。
 
 ## 公開のしかた（GitHub Pages）
+
+### Functions を先に出す（登録方式の変更を含む場合）
+
+```bash
+cd functions && npm install && npm test && cd ..
+firebase deploy --only functions:requestSignupCode,functions:verifySignupCode,functions:completeParentSignup,functions:createParentFamily
+```
+
+コードから削除した関数は、上の「--only 名前」では本番から消えない。次で消す（本番に存在するかは `firebase functions:list` で確認）。
+
+```bash
+firebase functions:list
+firebase functions:delete sendTestEmail sendSignInEmail --region asia-northeast1
+```
+
+- `sendTestEmail` … 匿名ログインで任意のメールを送れてしまうため、すぐに消す
+- `sendSignInEmail` … 旧方式の登録。新しい画面を公開したあとに消す（古い画面を開いたままの人が一時的に送れなくなるだけ）
+
+`sendPasswordResetEmail`（パスワード再設定）は残す。
+
+### 画面を公開する
 
 `main` ブランチに push すると `.github/workflows/pages.yml` が動き、ファイルがそのまま公開されます。
 

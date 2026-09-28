@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=270';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=270';
-import { refreshTutorial } from './tutorial.js?v=270';
-import { auth } from './firebase.js?v=270';
+﻿import { state } from './state.js?v=272';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=272';
+import { refreshTutorial } from './tutorial.js?v=272';
+import { auth } from './firebase.js?v=272';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -205,6 +205,14 @@ export function render() {
     bootDebugLog('render done');
     return;
   }
+  if (state.role === 'parent' && state.parentNeedsFamily && auth.currentUser && !auth.currentUser.isAnonymous) {
+    bottomNav.classList.add('hidden');
+    appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderFamilySetup()}</div>`;
+    bootDebugLog('render branch', { branch: 'family-setup' });
+    markReady('family-setup');
+    bootDebugLog('render done');
+    return;
+  }
   if (!state.role || !state.familyCode) {
     bottomNav.classList.add('hidden');
     // メールリンク認証中も「よみこみ中」のままにせず、必ず何か描画する
@@ -214,6 +222,7 @@ export function render() {
     } else {
       appDiv.innerHTML = `<div class="h-full flex flex-col min-h-0 fade-in relative">${renderSetup()}</div>`;
       bootDebugLog('render branch', { branch: 'setup', setupPrompt: getSetupBrowserPromptKind() });
+      if (typeof window.__ieAfterSetupRender === 'function') window.__ieAfterSetupRender();
     }
     markReady('setup');
     bootDebugLog('render done');
@@ -2284,6 +2293,95 @@ function renderWaitingChild() {
   `;
 }
 
+/* ===== 新規登録（4桁の認証コード方式） ===== */
+const SIGNUP_CARD = 'w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10';
+const SIGNUP_INPUT = 'w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition';
+
+function renderSignupNotice(text, tone = 'info') {
+  if (!text) return '';
+  const cls = tone === 'error'
+    ? 'bg-rose-50 border-rose-100 text-rose-700'
+    : 'bg-emerald-50 border-emerald-100 text-emerald-700';
+  return `<p class="text-[11px] font-bold leading-relaxed p-3 rounded-lg border mb-4 ${cls}" role="status" aria-live="polite">${esc(text)}</p>`;
+}
+
+function renderSignup() {
+  const s = state.signup || { step: 'email' };
+  if (s.step === 'code') {
+    const left = typeof s.attemptsLeft === 'number' ? s.attemptsLeft : 5;
+    const expired = s.expiresAt && s.expiresAt <= Date.now();
+    const locked = Number(s.lockedUntil) > Date.now();
+    const noticeTone = /違います|上限|期限|見つかりません|使えなく|停止して/.test(s.notice || '') ? 'error' : 'info';
+    const canVerify = left > 0 && !expired && !locked;
+    const unlockAt = locked
+      ? new Date(Number(s.lockedUntil)).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    return `<div class="${SIGNUP_CARD}">
+      <h3 class="font-black text-slate-800 mb-2 text-center text-lg">認証コードを入力</h3>
+      <p class="text-[11px] font-bold text-slate-500 text-center mb-5 leading-relaxed">「${esc(s.email)}」に<br>4桁の認証コードを送りました。<br><span class="text-slate-400">コードの有効期限は10分です。</span></p>
+      ${locked ? renderSignupNotice(`認証の失敗が5回に達したため、このメールアドレスでの登録を一時停止しています。${unlockAt}ごろに解除されます。解除後に「コードを再送信」から新しいコードを受け取ってください。`, 'error') : renderSignupNotice(s.notice, noticeTone)}
+      ${!locked && expired && !s.notice ? renderSignupNotice('コードの有効期限（10分）が切れました。「コードを再送信」から新しいコードを受け取ってください。', 'error') : ''}
+      <input id="signup-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="4"
+        aria-label="4桁の認証コード" placeholder="0000" ${canVerify ? '' : 'disabled'}
+        oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)"
+        onkeydown="if(event.key==='Enter'){verifySignupCode()}"
+        class="ie-signup-code w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-3 font-mono font-black text-3xl text-center tracking-[0.6em] focus:outline-none focus:border-slate-400 focus:bg-white transition" />
+      <p class="text-[10px] font-bold text-slate-400 text-center mb-5">${locked ? `${esc(unlockAt)}ごろまで一時停止中` : (canVerify ? `入力できるのは、あと${left}回です（5回まちがえると1時間停止）` : '新しいコードを受け取ってください')}</p>
+      <button type="button" onclick="verifySignupCode()" ${canVerify ? '' : 'disabled'} class="solid-btn primary-btn w-full py-4 font-bold shadow-md mb-3">確認する</button>
+      <button type="button" id="signup-resend-btn" onclick="resendSignupCode()" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50 mb-4">コードを再送信</button>
+      <button type="button" onclick="signupChangeEmail()" class="block mx-auto text-[11px] text-slate-400 hover:text-slate-600 font-bold underline">メールアドレスを変更する</button>
+    </div>`;
+  }
+  if (s.step === 'profile') {
+    const recover = s.mode === 'recover';
+    const hasPw = s.hasPassword === 'yes';
+    const lead = recover
+      ? (hasPw
+        ? 'このメールアドレスで登録途中のアカウントが見つかりました。<br>今のパスワードでログインして続けるか、新しいパスワードを設定して続けてください。'
+        : 'このメールアドレスで登録途中のアカウントが見つかりました。<br>パスワードとお子さまの名前を設定して、登録を完了してください。')
+      : 'メールアドレスを確認できました。<br>パスワードとお子さまの名前を設定してください。';
+    return `<div class="${SIGNUP_CARD}">
+      <h3 class="font-black text-slate-800 mb-2 text-center text-lg">${recover ? '登録の続き' : 'パスワードの設定'}</h3>
+      <p class="text-[11px] font-bold text-slate-500 text-center mb-5 leading-relaxed">${lead}</p>
+      ${renderSignupNotice(s.notice, 'error')}
+      ${recover && hasPw ? `<button type="button" onclick="signupUseExistingPassword()" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50 mb-4">今のパスワードでログインする</button>
+        <p class="text-[10px] font-bold text-slate-400 text-center mb-4">または、新しいパスワードを設定する</p>` : ''}
+      <div class="password-wrapper">
+        <input type="password" id="signup-password" autocomplete="new-password" placeholder="パスワード（6文字以上）" class="${SIGNUP_INPUT}" />
+        <div id="eye-signup-pw" class="password-eye" onclick="togglePassword('signup-password', 'eye-signup-pw')">${getIcon('eye')}</div>
+      </div>
+      <div class="password-wrapper">
+        <input type="password" id="signup-password-confirm" autocomplete="new-password" placeholder="もう一度入力（確認用）" class="${SIGNUP_INPUT}" />
+        <div id="eye-signup-pw2" class="password-eye" onclick="togglePassword('signup-password-confirm', 'eye-signup-pw2')">${getIcon('eye')}</div>
+      </div>
+      <input type="text" id="signup-child-name" maxlength="20" autocomplete="off" placeholder="お子さまの名前（例: はなこ）" class="${SIGNUP_INPUT} mb-6" />
+      <button type="button" onclick="completeParentSignup()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md mb-4">登録を完了する</button>
+      <button type="button" onclick="signupChangeEmail()" class="block mx-auto text-[11px] text-slate-400 hover:text-slate-600 font-bold underline">最初からやり直す</button>
+    </div>`;
+  }
+  return `<div class="${SIGNUP_CARD}">
+    <button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button>
+    <h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">新規登録（親）</h3>
+    <p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">入力したアドレスに4桁の認証コードを送ります。<br>パスワードはコードの確認後に設定します。</p>
+    ${renderSignupNotice(s.notice, 'info')}
+    <input type="email" id="setup-email" autocomplete="email" value="${esc(s.email || '')}" placeholder="メールアドレス" class="${SIGNUP_INPUT} mb-6" onkeydown="if(event.key==='Enter'){sendRealEmailLink()}" />
+    <button onclick="sendRealEmailLink()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">認証コードを送信</button>
+  </div>`;
+}
+
+/** ログイン済みなのに口座が無い親（登録途中で止まったアカウントなど）の口座作成画面 */
+function renderFamilySetup() {
+  return `<div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden">
+    <div class="${SIGNUP_CARD}">
+      <h3 class="font-black text-slate-800 mb-2 text-center text-lg">口座を作成しましょう</h3>
+      <p class="text-[11px] font-bold text-slate-500 text-center mb-6 leading-relaxed">このアカウントには、まだお子さまの口座がありません。<br>お子さまの名前を入れて、口座を作成してください。</p>
+      <input type="text" id="family-setup-child-name" maxlength="20" autocomplete="off" placeholder="お子さまの名前（例: はなこ）" class="${SIGNUP_INPUT} mb-6" />
+      <button type="button" onclick="createParentFamilyFromSetup()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md mb-4">口座を作成する</button>
+      <button type="button" onclick="logoutAccount()" class="block mx-auto text-[11px] text-slate-400 hover:text-slate-600 font-bold underline">ログアウト</button>
+    </div>
+  </div>`;
+}
+
 function renderSetupInstallPrompt(kind) {
   if (!kind) return '';
   return `<div class="w-full max-w-sm relative z-10 mb-6">${renderInstallGate(kind)}</div>`;
@@ -2296,8 +2394,7 @@ function renderSetup() {
   if (state.isSending) { content = `<div class="w-full max-w-sm ie-setup-card p-12 text-center relative z-10"><div class="w-10 h-10 border-4 border-[#dff3ef] border-t-[#2f8f82] rounded-full animate-spin mx-auto mb-4"></div><p class="text-[10px] font-bold text-[#7a8f88]">通信中...</p></div>`; } 
   else if (!state.setupMode) { content = `<div class="w-full max-w-sm ie-setup-card p-8 mb-6 relative z-10 text-center"><p class="text-sm font-bold text-[#2f8f82] mb-4 leading-relaxed">はじめに、おうちの人が設定してください</p><ol class="ie-setup-first-steps text-left text-[11px] font-bold text-[#5f7970] leading-relaxed mb-6"><li>① おうちの人が「親として開始」</li><li>② 初期設定をする</li><li>③ 設定が終わったら、子どもが自分の端末で始める</li></ol><h3 class="font-black text-[#1c2b27] mb-6 text-lg">どちらで始めますか？</h3><button onclick="setSetupMode('parent_select')" class="solid-btn primary-btn w-full py-4 font-bold mb-3">親として開始</button><button onclick="setSetupMode('child')" class="solid-btn w-full py-4 font-bold text-[#3d524c]">子供として開始</button></div>`; } 
   else if (state.setupMode === 'parent_select') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">親のアカウント設定</h3><button onclick="setSetupMode('parent_register')" class="solid-btn primary-btn w-full py-4 font-bold mb-3 shadow-md">新しく始める（メール認証）</button><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-4 font-bold text-slate-600 hover:bg-slate-50">既存のアカウントにログイン</button></div>`; } 
-  else if (state.setupMode === 'parent_register' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${esc(state.message || '')}」宛に<br>登録用URLを送信しました。<br><br>メールアプリを開き、<br>リンクをクリックしてください。</p><p class="text-[10px] text-slate-400 mb-5">※メールを確認したあと、またこのアプリを開いてください</p><button type="button" onclick="cancelSetup()" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50">ホームへ戻る</button></div>`; } 
-  else if (state.setupMode === 'parent_register') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">新規登録（親）</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">入力したアドレスに認証リンクを送信します。<br>パスワードは認証後に設定します。</p><input type="email" id="setup-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendRealEmailLink()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">認証メールを送信する</button></div>`; } 
+  else if (state.setupMode === 'parent_register') { content = renderSignup(); }
   else if (state.setupMode === 'parent_login') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_select')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-6 text-center text-lg mt-4">ログイン（親）</h3><input type="email" id="login-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-3 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div class="password-wrapper"><input type="password" id="login-password" placeholder="パスワード" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><div id="eye-login" class="password-eye" onclick="togglePassword('login-password', 'eye-login')">${getIcon('eye')}</div></div><button onclick="loginParent()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md mb-4">ログイン</button><button type="button" onclick="setSetupMode('parent_forgot')" class="w-full text-center text-[11px] font-bold text-slate-500 hover:text-slate-800 underline underline-offset-2 transition">パスワードを忘れた方はこちら</button></div>`; } 
   else if (state.setupMode === 'parent_forgot' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>パスワード再設定用のリンクを送信しました。<br><br>メールアプリを開き、<br>リンクをタップしてください。</p><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50">ログイン画面へ戻る</button></div>`; }
   else if (state.setupMode === 'parent_forgot') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_login')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">パスワード再設定</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">登録しているメールアドレスを入力してください。<br>再設定用のリンクを送信します。</p><input type="email" id="reset-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendPasswordReset()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">再設定メールを送信</button></div>`; }

@@ -1,4 +1,4 @@
-﻿import { state } from './state.js?v=270';
+﻿import { state } from './state.js?v=272';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1875,4 +1875,16 @@ export function selfTestTicketFlow() {
   cases.push(['approved not orphan', isTicketRedeemLockOrphaned({ status: 'approved', redeemStartedAt: 1 }) === false]);
   const failed = cases.filter(([, ok]) => !ok).map(([name]) => name);
   return { ok: failed.length === 0, failed, cases: cases.map(([name, ok]) => ({ name, ok })) };
+}
+
+/**
+ * 親の口座一覧（families の購読）の結果をどう扱うか。
+ *   wait   … キャッシュ由来の空データ。サーバーの結果を待つ（口座がある親に「口座作成」画面を出さないため）
+ *   skip   … 中身が変わらない通知（キャッシュ→サーバー確定など）。一度扱ったあとは無視する
+ *   handle … 通常どおり扱う
+ */
+export function childrenSnapshotAction({ size, fromCache, changeCount, handledOnce }) {
+  if (size === 0 && fromCache) return 'wait';
+  if (handledOnce && changeCount === 0) return 'skip';
+  return 'handle';
 }

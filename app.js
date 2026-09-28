@@ -1,17 +1,17 @@
-﻿import { state } from './state.js?v=270';
-import { render, drawInvestChart } from './ui.js?v=270';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS } from './utils.js?v=270';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=270';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=270';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=270';
-import { db, auth, firebaseApp } from './firebase.js?v=270';
+﻿import { state } from './state.js?v=272';
+import { render, drawInvestChart } from './ui.js?v=272';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS, childrenSnapshotAction } from './utils.js?v=272';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=272';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=272';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=272';
+import { db, auth, firebaseApp } from './firebase.js?v=272';
 import {
   computeBankInterestState,
   bankInterestStateChanged,
   bankInterestWritePayload,
   initialBankDepositFields,
   selfTestBankInterestLogic
-} from './bankInterest.js?v=270';
+} from './bankInterest.js?v=272';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, isSignInWithEmailLink, signInWithEmailLink, updatePassword, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
@@ -751,6 +751,15 @@ let authListenerAttached = false;
  * __ieBootReady による15秒保険の完了判定は維持する。
  */
 async function boot() {
+  // 新規登録の途中（コード入力・パスワード設定）で閉じた場合は、その画面から再開する
+  if (!state.role && !state.signup) {
+    const saved = loadSignupProgress();
+    if (saved) {
+      state.signup = saved;
+      state.setupMode = 'parent_register';
+      saveSignupProgress();
+    }
+  }
   render();
   if (getLineInstallGateKind() || window.__ieInstallGateLine) {
     markBootReady('install-gate');
@@ -817,8 +826,14 @@ async function boot() {
       const userDoc = await withTimeout(getDoc(doc(db, "users", uid)), BOOT_AWAIT_MS, 'ユーザー情報の取得');
       
       if (!userDoc.exists()) {
-        state.requirePasswordSetup = true;
+        // 旧方式（メールのURL）の登録リンク。登録は4桁コード方式に変わったので、
+        // ここではパスワードを設定せず（requires-recent-login で止まるため）、コード方式の入口へ案内する。
+        // このアカウントは「登録途中」として、コード方式で本人確認すれば復旧できる。
         window.history.replaceState(null, null, window.location.pathname);
+        try { await signOut(auth); } catch (e) { /* 続行 */ }
+        state.signup = { step: 'email', email: String(email).trim().toLowerCase(), notice: '登録の方法が変わりました。「認証コードを送信」を押して、メールに届く4桁のコードで登録を続けてください。' };
+        state.setupMode = 'parent_register';
+        saveSignupProgress();
         render();
       } else {
         localStorage.setItem('ienomics_role', 'parent');
@@ -968,12 +983,26 @@ function loadParentChildren(parentUid) {
   const q = query(collection(db, "families"), where("parentUid", "==", parentUid));
   if (window.unsubChildren) window.unsubChildren();
   bootDebugLog('parent children listener attached');
-  window.unsubChildren = onSnapshot(q, (snapshot) => {
+  let childrenHandledOnce = false;
+  // includeMetadataChanges: 「キャッシュ由来の空」を無視したあと、サーバーで空と確定したときにも通知を受けるため
+  window.unsubChildren = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    const action = childrenSnapshotAction({
+      size: snapshot.size,
+      fromCache: snapshot.metadata.fromCache,
+      changeCount: snapshot.docChanges().length,
+      handledOnce: childrenHandledOnce
+    });
+    if (action !== 'handle') {
+      bootDebugLog('parent children snapshot ignored', { size: snapshot.size, fromCache: snapshot.metadata.fromCache, action });
+      return;
+    }
+    childrenHandledOnce = true;
     bootLog('children snapshot', { size: snapshot.size });
     bootDebugLog('parent children snapshot', { size: snapshot.size });
     const list = [];
     snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
     state.children = list.sort((a, b) => a.createdAt - b.createdAt);
+    state.parentNeedsFamily = list.length === 0;
     if (list.length > 0) {
       const prevCode = state.familyCode;
       if (!list.some(c => c.id === state.familyCode)) state.familyCode = list[0].id;
@@ -2976,6 +3005,7 @@ window.logoutAccount = async () => {
   state.childLinked = false;
   state.view = 'home';
   state.requirePasswordSetup = false;
+  state.parentNeedsFamily = false;
   render();
 };
 
@@ -2987,7 +3017,7 @@ window.unlinkAccount = async () => {
   try { await signOut(auth); } catch (e) {}
   localStorage.removeItem('ienomics_role');
   localStorage.removeItem('ienomics_familyCode');
-  state.role = null; state.familyCode = null; state.children = [];
+  state.role = null; state.familyCode = null; state.children = []; state.parentNeedsFamily = false;
   if (window.unsubChildren) window.unsubChildren();
   unsubscribes.forEach(unsub => unsub());
   unsubscribes = [];
@@ -3211,33 +3241,392 @@ window.joinFamily = async () => {
   }
 };
 
+/* ===== 新規登録（4桁の認証コード方式） =====
+ * 1. メールアドレス → requestSignupCode（60秒に1回。サーバーで強制）
+ * 2. 4桁コード → verifySignupCode（10分有効・5回まで）→ 登録チケット（30分）
+ * 3. パスワード＋お子さまの名前 → completeParentSignup（Auth・users・口座をサーバーでそろえる）
+ * 4. signInWithEmailAndPassword で通常のログインへ合流
+ * 進み具合は localStorage に残し、途中で閉じても再開できる。
+ */
+const SIGNUP_STORAGE_KEY = 'ienomics_signup';
+let signupTimer = null;
+
+function saveSignupProgress() {
+  try {
+    if (state.signup) localStorage.setItem(SIGNUP_STORAGE_KEY, JSON.stringify(state.signup));
+    else localStorage.removeItem(SIGNUP_STORAGE_KEY);
+  } catch { /* 保存できなくても続行 */ }
+}
+
+function clearSignupProgress() {
+  state.signup = null;
+  saveSignupProgress();
+  stopSignupTimer();
+}
+
+/** 保存済みの進み具合を読み、期限切れなら捨てる */
+function loadSignupProgress() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SIGNUP_STORAGE_KEY) || 'null'); } catch { s = null; }
+  if (!s || typeof s !== 'object' || !s.email) return null;
+  const now = Date.now();
+  if (s.step === 'profile') {
+    if (!s.ticket || !(s.ticketExpiresAt > now)) {
+      return { step: 'email', email: s.email, notice: '登録の有効時間（30分）が切れました。もう一度認証コードを受け取ってください。' };
+    }
+    return s;
+  }
+  if (s.step === 'code') {
+    // コードの期限切れでも、再送信できるようにコード画面のまま戻す
+    return s;
+  }
+  return { step: 'email', email: s.email };
+}
+
+function signupResendRemainingSec() {
+  const at = Number(state.signup?.resendAvailableAt) || 0;
+  return Math.max(0, Math.ceil((at - Date.now()) / 1000));
+}
+
+/** 再送信ボタンの残り秒数だけを書き換える（全画面 render はしない） */
+function signupLockRemainingSec() {
+  const at = Number(state.signup?.lockedUntil) || 0;
+  return Math.max(0, Math.ceil((at - Date.now()) / 1000));
+}
+
+function formatWait(sec) {
+  if (sec <= 60) return `${sec}秒`; // 再送信の待機（60秒）は秒で出す
+  const m = Math.floor(sec / 60);
+  const r = sec % 60;
+  return r ? `${m}分${r}秒` : `${m}分`;
+}
+
+function updateSignupResendButton() {
+  // ロックの時間が過ぎたら、解除の案内を出して画面を描き直す
+  if (state.signup?.lockedUntil && signupLockRemainingSec() === 0) {
+    state.signup.lockedUntil = 0;
+    state.signup.notice = '一時停止が解除されました。「コードを再送信」から新しいコードを受け取ってください。';
+    saveSignupProgress();
+    render();
+    return;
+  }
+  const btn = document.getElementById('signup-resend-btn');
+  if (!btn) return;
+  const sec = Math.max(signupResendRemainingSec(), signupLockRemainingSec());
+  btn.disabled = sec > 0 || state.isSending;
+  btn.textContent = sec > 0 ? `コードを再送信（あと${formatWait(sec)}）` : 'コードを再送信';
+  btn.setAttribute('aria-disabled', btn.disabled ? 'true' : 'false');
+}
+
+function startSignupTimer() {
+  if (signupTimer) return;
+  signupTimer = setInterval(() => {
+    if (state.signup?.step !== 'code') { stopSignupTimer(); return; }
+    updateSignupResendButton();
+  }, 500);
+}
+
+function stopSignupTimer() {
+  if (signupTimer) clearInterval(signupTimer);
+  signupTimer = null;
+}
+
+window.__ieAfterSetupRender = () => {
+  if (state.signup?.step === 'code') {
+    updateSignupResendButton();
+    startSignupTimer();
+  }
+};
+
+/**
+ * App Check（reCAPTCHA v3）。登録画面でサーバーを呼ぶときだけ読み込む（通常の起動は重くしない）。
+ * サイトキーを入れるまでは無効。入れたら functions/.env の SIGNUP_APP_CHECK_MODE=monitor のまま
+ * ログで valid を確かめ、確認できてから enforce にする（README「App Check」参照）。
+ * 注意: Firestore の App Check 強制はコンソールで有効にしない（通常画面はトークンを付けないため）。
+ */
+const APP_CHECK_SITE_KEY = '';
+let appCheckReady = null;
+function ensureAppCheck() {
+  if (!APP_CHECK_SITE_KEY) return Promise.resolve(false);
+  if (!appCheckReady) {
+    appCheckReady = import('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-check.js')
+      .then(({ initializeAppCheck, ReCaptchaV3Provider }) => {
+        // 手元の確認用。localhost ではデバッグトークンを使う（コンソールに表示されるトークンを登録する）
+        if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+        initializeAppCheck(firebaseApp, { provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY), isTokenAutoRefreshEnabled: true });
+        return true;
+      })
+      .catch((e) => { console.warn('[appcheck] 初期化できませんでした', e); return false; });
+  }
+  return appCheckReady;
+}
+
+function signupCallable(name) {
+  const fn = httpsCallable(functionsAsia, name);
+  return async (data) => {
+    await ensureAppCheck();
+    return fn(data);
+  };
+}
+
+/** Callable のエラーから、画面に出す文を作る */
+function signupErrorMessage(error) {
+  const code = String(error?.code || '');
+  if (code.endsWith('/unavailable') || code === 'functions/internal' && /network|fetch/i.test(String(error?.message))) {
+    return 'ネットワークにつながりませんでした。通信状況を確認してもう一度お試しください。';
+  }
+  const msg = String(error?.message || '').trim();
+  return msg || 'うまくいきませんでした。もう一度お試しください。';
+}
+
+async function sendSignupCode(email) {
+  const res = await signupCallable('requestSignupCode')({ email });
+  const d = res?.data || {};
+  const skew = Date.now() - (Number(d.serverNow) || Date.now());
+  state.signup = {
+    step: 'code',
+    email,
+    expiresAt: (Number(d.expiresAt) || Date.now() + 10 * 60 * 1000) + skew,
+    resendAvailableAt: (Number(d.resendAvailableAt) || Date.now() + 60 * 1000) + skew,
+    attemptsLeft: typeof d.attemptsLeft === 'number' ? d.attemptsLeft : 5,
+    notice: ''
+  };
+  saveSignupProgress();
+}
+
+/** 失敗5回で1時間ロックされたとき（サーバーの判定）。コード画面にロック表示を出す */
+function applyEmailLock(error, email) {
+  const d = error?.details || {};
+  if (d.reason !== 'email-locked') return false;
+  const retry = Number(d.retryAfterSec) || 3600;
+  state.signup = {
+    ...(state.signup || {}),
+    step: 'code',
+    email: email || state.signup?.email,
+    lockedUntil: Date.now() + retry * 1000,
+    attemptsLeft: 0,
+    notice: String(error?.message || '')
+  };
+  saveSignupProgress();
+  return true;
+}
+
+/** サーバーが「まだ待って」と返したときに、残り秒数を画面に反映する */
+function applyResendWait(error) {
+  const retry = Number(error?.details?.retryAfterSec);
+  if (retry > 0 && state.signup) {
+    state.signup.resendAvailableAt = Date.now() + retry * 1000;
+    saveSignupProgress();
+  }
+  return retry > 0;
+}
+
 window.sendRealEmailLink = async () => {
   const emailInput = document.getElementById('setup-email');
   if (!emailInput) return;
-  const email = emailInput.value.trim();
+  const email = emailInput.value.trim().toLowerCase();
   if (!email) return showAlert("メールアドレスを入力してください");
   try {
     state.isSending = true; render();
-    const sendSignInEmail = httpsCallable(functionsAsia, 'sendSignInEmail');
-    await sendSignInEmail({ email });
-    window.localStorage.setItem('emailForSignIn', email);
-    state.message = email;
-    state.setupStep = 2;
+    await sendSignupCode(email);
   } catch (error) {
-    const mapped = mapAuthEmailCallableError(error);
-    const code = mapped?.code || '';
-    if (code === 'auth/email-already-in-use') {
+    const code = String(error?.code || '');
+    if (code.endsWith('/already-exists')) {
       const goLogin = await showConfirm(
         'このメールアドレスはすでに登録されています。\nログインしてください。',
         { title: '登録済みのメールアドレスです', okLabel: 'ログインへ', cancelLabel: '閉じる' }
       );
-      if (goLogin) state.setupMode = 'parent_login';
+      if (goLogin) { clearSignupProgress(); state.setupMode = 'parent_login'; }
+    } else if (applyEmailLock(error, email)) {
+      // ロック中。コード画面で解除時刻を表示する
+    } else if (code.endsWith('/resource-exhausted')) {
+      // 60秒以内の再送信。前に送ったコードは生きているので、コード入力画面へ進める
+      state.signup = { step: 'code', email, expiresAt: Date.now() + 10 * 60 * 1000, attemptsLeft: 5, notice: '先ほど送ったコードを入力してください。' };
+      applyResendWait(error);
+      saveSignupProgress();
     } else {
-      await showAlert(friendlyError(mapped), { title: 'メールを送れませんでした' });
+      await showAlert(signupErrorMessage(error), { title: 'コードを送れませんでした' });
     }
   } finally {
     state.isSending = false; render();
   }
+};
+
+window.resendSignupCode = async () => {
+  const email = state.signup?.email;
+  if (!email) return;
+  if (signupResendRemainingSec() > 0 || signupLockRemainingSec() > 0) return updateSignupResendButton();
+  try {
+    state.isSending = true; render();
+    await sendSignupCode(email);
+    state.signup.notice = '新しいコードを送りました。前のコードは使えません。';
+    saveSignupProgress();
+  } catch (error) {
+    const code = String(error?.code || '');
+    if (applyEmailLock(error, email)) {
+      // ロック中
+    } else if (code.endsWith('/resource-exhausted') && applyResendWait(error)) {
+      // 残り時間はボタンに出る
+    } else if (code.endsWith('/already-exists')) {
+      clearSignupProgress();
+      state.setupMode = 'parent_login';
+      await showAlert('このメールアドレスはすでに登録されています。ログインしてください。', { title: '登録済みのメールアドレスです' });
+    } else {
+      await showAlert(signupErrorMessage(error), { title: 'コードを送れませんでした' });
+    }
+  } finally {
+    state.isSending = false; render();
+  }
+};
+
+window.verifySignupCode = async () => {
+  const input = document.getElementById('signup-code');
+  const s = state.signup;
+  if (!input || !s?.email) return;
+  const code = input.value.replace(/\D/g, '');
+  if (code.length !== 4) return showAlert('4桁の数字を入力してください');
+  try {
+    state.isSending = true; render();
+    const res = await signupCallable('verifySignupCode')({ email: s.email, code });
+    const d = res?.data || {};
+    state.signup = {
+      step: 'profile',
+      email: s.email,
+      ticket: d.ticket,
+      ticketExpiresAt: Number(d.ticketExpiresAt) || Date.now() + 30 * 60 * 1000,
+      mode: d.mode === 'recover' ? 'recover' : 'new',
+      hasPassword: d.hasPassword || 'none'
+    };
+    saveSignupProgress();
+    stopSignupTimer();
+  } catch (error) {
+    const code = String(error?.code || '');
+    const details = error?.details || {};
+    if (code.endsWith('/already-exists')) {
+      clearSignupProgress();
+      state.setupMode = 'parent_login';
+      await showAlert('このメールアドレスはすでに登録されています。ログインしてください。', { title: '登録済みのメールアドレスです' });
+    } else if (applyEmailLock(error)) {
+      // 5回目の失敗でロックされた
+    } else {
+      if (typeof details.attemptsLeft === 'number') state.signup.attemptsLeft = details.attemptsLeft;
+      if (details.reason === 'expired' || details.reason === 'locked' || details.reason === 'used' || details.reason === 'missing') {
+        state.signup.attemptsLeft = 0;
+      }
+      state.signup.notice = signupErrorMessage(error);
+      saveSignupProgress();
+    }
+  } finally {
+    state.isSending = false; render();
+  }
+};
+
+window.signupChangeEmail = () => {
+  const email = state.signup?.email || '';
+  clearSignupProgress();
+  state.signup = { step: 'email', email };
+  state.setupMode = 'parent_register';
+  render();
+};
+
+/** 復旧で「今のパスワードでログインする」を選んだとき。ログイン後に口座作成の画面が出る */
+window.signupUseExistingPassword = () => {
+  const email = state.signup?.email || '';
+  clearSignupProgress();
+  state.setupMode = 'parent_login';
+  render();
+  const el = document.getElementById('login-email');
+  if (el && email) el.value = email;
+};
+
+window.completeParentSignup = async () => {
+  const s = state.signup;
+  if (!s?.ticket || state.isSending) return; // 二重押しで同じ登録を2回送らない
+  const pass = document.getElementById('signup-password')?.value || '';
+  const passConf = document.getElementById('signup-password-confirm')?.value || '';
+  const childName = (document.getElementById('signup-child-name')?.value || '').trim();
+  if (pass.length < 6) return showAlert('パスワードは6文字以上にしてください。');
+  if (pass !== passConf) return showAlert('パスワードが一致しません。');
+  if (!childName) return showAlert('お子さまの名前を入力してください。');
+  if (!(s.ticketExpiresAt > Date.now())) {
+    state.signup = { step: 'email', email: s.email, notice: '登録の有効時間（30分）が切れました。もう一度認証コードを受け取ってください。' };
+    saveSignupProgress();
+    return render();
+  }
+
+  state.isSending = true;
+  state.setupLoadingMessage = 'アカウントと口座を作成しています...';
+  render();
+  let done = false;
+  let completed = null;
+  try {
+    const res = await signupCallable('completeParentSignup')({ email: s.email, ticket: s.ticket, password: pass, childName });
+    completed = res?.data || {};
+    done = true;
+  } catch (error) {
+    const code = String(error?.code || '');
+    const reason = error?.details?.reason;
+    if (code.endsWith('/already-exists') || reason === 'ticket-used') {
+      // 二重送信などで、同じ登録が先に完了していた。入力したパスワードでログインを試し、
+      // 失敗したときだけ「ログインしてください」の案内にする（下の処理で共通）
+      done = true;
+      completed = { familyCode: null, created: false };
+    } else {
+      if (reason === 'ticket-expired' || code.endsWith('/permission-denied')) {
+        state.signup = { step: 'email', email: s.email, notice: signupErrorMessage(error) };
+        saveSignupProgress();
+      }
+      state.isSending = false; state.setupLoadingMessage = ''; render();
+      await showAlert(signupErrorMessage(error), { title: '登録できませんでした' });
+      return;
+    }
+  }
+
+  // ここからは通常のログインと同じ道に合流する
+  try {
+    state.setupLoadingMessage = 'ログインしています...';
+    render();
+    const result = await signInWithEmailAndPassword(auth, s.email, pass);
+    clearSignupProgress();
+    state.setupMode = null;
+    state.setupStep = 1;
+    state.role = 'parent';
+    state.view = 'home';
+    localStorage.setItem('ienomics_role', 'parent');
+    applyFuriganaState();
+    if (completed?.familyCode) {
+      state.familyCode = completed.familyCode;
+      localStorage.setItem('ienomics_familyCode', completed.familyCode);
+    }
+    state.isSending = false;
+    state.setupLoadingMessage = '';
+    // 従来の登録と同じく、同期IDの案内を出してから通常画面へ
+    if (completed?.created && completed?.familyCode) await showParentSetupComplete(completed.familyCode);
+    await runMigrationAndLoadChildren(result.user.uid);
+    if (!hasSeenTutorial()) {
+      setTimeout(() => startTutorial('parent', { onFinish: onboardingTutorialFinish }), 700);
+    }
+  } catch (error) {
+    if (done) {
+      clearSignupProgress();
+      state.setupMode = 'parent_login';
+      await showAlert('登録は完了しました。メールアドレスとパスワードでログインしてください。', { title: 'ログインしてください' });
+    }
+  } finally {
+    state.isSending = false;
+    state.setupLoadingMessage = '';
+    render();
+  }
+};
+
+/** ログイン済みで口座が無い親（旧方式の途中終了など）に、口座だけ作る */
+window.createParentFamilyFromSetup = async () => {
+  const childName = (document.getElementById('family-setup-child-name')?.value || '').trim();
+  if (!childName) return showAlert('お子さまの名前を入力してください。');
+  await guard('createParentFamily', async () => {
+    await signupCallable('createParentFamily')({ childName });
+    // 口座一覧の購読（loadParentChildren）が新しい口座を受け取って通常画面に切り替わる
+  }, { busyLabel: '口座を作成しています...' });
 };
 
 window.sendPasswordReset = async () => {
@@ -3314,6 +3703,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=270').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=272').catch(err => console.warn('SW登録失敗:', err));
   });
 }
