@@ -188,6 +188,8 @@ App Check は正規のブラウザを自動操作されると防げないので�
 
 フレームワークもビルドツールも使わず、ブラウザがそのまま解釈できるコードだけで作っています。ファイルを置けば動くため、仕組みを最初から最後まで自分で追いかけられることを重視しました。
 
+ニュース（`news.json`）と相場（`market.csv`）は、公開のたび・毎日の定期実行で GitHub Actions が作り直す（`tools/update-news.mjs`・`tools/update-market.mjs`）。ニュースは `tools/groq-sort.mjs`・`tools/tane-sort.mjs` も使うので、この2つを消さないこと。
+
 ### ファイル構成
 
 ```
@@ -258,7 +260,7 @@ npx serve .
 
 ### 開発中の注意
 
-各ファイルの読み込みには `?v=272` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
+各ファイルの読み込みには `?v=273` のようなバージョン番号を付けています。**JavaScript や CSS を編集したら、この番号をすべてのファイルで揃えて上げてください。** 番号がずれると、古いキャッシュが残ったり、同じファイルが二重に読み込まれて状態が共有されなくなります。
 
 対象は `index.html`、`app.js`、`ui.js`、`utils.js`、`dialog.js`、`tutorial.js`、`push.js` の冒頭にある import 文と、`sw.js` の `VERSION` です。`firebase.js` の import にも番号が必要です（ここを忘れると `firebaseApp` が見つからないというエラーになります）。
 
@@ -266,16 +268,19 @@ npx serve .
 
 ### Functions を先に出す（登録方式の変更を含む場合）
 
+> **Windows の注意:** このフォルダには `firebase.js`（アプリの設定ファイル）があるため、コマンドプロンプトで
+> `firebase` と打つとそのファイルが開いてしまい、何も実行されない。このフォルダでは **`firebase.cmd`** と打つ。
+
 ```bash
 cd functions && npm install && npm test && cd ..
-firebase deploy --only functions:requestSignupCode,functions:verifySignupCode,functions:completeParentSignup,functions:createParentFamily
+firebase.cmd deploy --only functions:requestSignupCode,functions:verifySignupCode,functions:completeParentSignup,functions:createParentFamily
 ```
 
 コードから削除した関数は、上の「--only 名前」では本番から消えない。次で消す（本番に存在するかは `firebase functions:list` で確認）。
 
 ```bash
-firebase functions:list
-firebase functions:delete sendTestEmail sendSignInEmail --region asia-northeast1
+firebase.cmd functions:list
+firebase.cmd functions:delete sendTestEmail sendSignInEmail --region asia-northeast1
 ```
 
 - `sendTestEmail` … 匿名ログインで任意のメールを送れてしまうため、すぐに消す

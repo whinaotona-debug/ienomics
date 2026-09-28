@@ -1,17 +1,17 @@
-﻿import { state } from './state.js?v=272';
-import { render, drawInvestChart } from './ui.js?v=272';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS, childrenSnapshotAction } from './utils.js?v=272';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=272';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=272';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=272';
-import { db, auth, firebaseApp } from './firebase.js?v=272';
+﻿import { state } from './state.js?v=273';
+import { render, drawInvestChart } from './ui.js?v=273';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS, childrenSnapshotAction } from './utils.js?v=273';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=273';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=273';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=273';
+import { db, auth, firebaseApp } from './firebase.js?v=273';
 import {
   computeBankInterestState,
   bankInterestStateChanged,
   bankInterestWritePayload,
   initialBankDepositFields,
   selfTestBankInterestLogic
-} from './bankInterest.js?v=272';
+} from './bankInterest.js?v=273';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, isSignInWithEmailLink, signInWithEmailLink, updatePassword, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
@@ -35,6 +35,7 @@ function taskGeneratedKey(t) {
   return t?.generatedKey || t?.generatedKey || '';
 } 
 let unsubscribes = [];
+let dataReadyFallbackTimer = null;
 
 /**
  * Firestore の複数 onSnapshot が同じタイミングで来ても、
@@ -111,6 +112,7 @@ function scheduleBootAwareRender() {
   }
   if (bootFamiliesSnapReady && bootTasksSnapReady) {
     bootFirstRenderDone = true;
+    state.dataReady = true;
     bootDebugLog('boot first render gate open');
     scheduleRender();
     registerSetupListenersPhase2();
@@ -280,6 +282,43 @@ function localNotify(title, body) {
   if (isPushActive()) return;
   sendPushNotification(title, body);
 }
+
+/* ===== ホーム画面に追加（Android の Chrome など） =====
+ * 追加できる状態になるとブラウザが beforeinstallprompt を出す。それを取っておき、
+ * ログイン画面の案内にある「ホーム画面に追加する」ボタンから表示する。
+ * 入力中のフォームを消さないよう、全画面 render ではなくボタンの場所だけ書き換える。
+ */
+function updateInstallButton() {
+  const box = document.getElementById('ie-install-native');
+  if (!box) return;
+  box.innerHTML = window.__ieInstallPrompt
+    ? '<button type="button" onclick="promptInstallApp()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-3">ホーム画面に追加する</button>'
+    : '';
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  window.__ieInstallPrompt = event;
+  updateInstallButton();
+});
+
+window.addEventListener('appinstalled', () => {
+  window.__ieInstallPrompt = null;
+  updateInstallButton();
+});
+
+window.promptInstallApp = async () => {
+  const ev = window.__ieInstallPrompt;
+  if (!ev) return;
+  try {
+    ev.prompt();
+    await ev.userChoice;
+  } catch (e) {
+    console.warn('[install] prompt failed', e);
+  }
+  window.__ieInstallPrompt = null; // 1回しか使えない
+  updateInstallButton();
+};
 
 window.installGateContinue = async () => {
   if (isStandalonePwa()) {
@@ -880,6 +919,12 @@ async function boot() {
       if (state.role === 'parent') {
         bootDebugLog('parent start');
         if (user && !user.isAnonymous) {
+          // 前回の同期IDが分かっていれば、口座一覧の到着を待たずに中身の購読を始める（起動を1往復短縮）。
+          // 一覧が届いて別の口座だった場合は、loadParentChildren が切り替える。
+          if (state.familyCode && unsubscribes.length === 0) {
+            restoreCachedChildName();
+            setupListeners();
+          }
           await runMigrationAndLoadChildren(user.uid);
         } else {
           localStorage.removeItem('ienomics_role'); localStorage.removeItem('ienomics_familyCode');
@@ -939,27 +984,52 @@ if (document.readyState === 'complete') {
   window.addEventListener('load', queueBoot, { once: true });
 }
 
+/**
+ * 親の口座一覧の購読を始める。
+ * 以前は users の読み込み（旧データの移行チェック）を待ってから購読していたため、起動が1往復ぶん遅かった。
+ * いまは購読をすぐ始め、移行チェックは「口座が0件」とサーバーで確定したときだけ行う
+ * （旧データの親だけが対象で、通常の親はこの読み込み自体が不要）。
+ */
 async function runMigrationAndLoadChildren(uid) {
   setBootPhase('migrate-load-children');
+  loadParentChildren(uid);
+}
+
+/** 旧データ（users.familyCode だけで口座を指していた親）に parentUid を付ける。付けたら true */
+async function migrateLegacyFamily(uid) {
   bootDebugLog('migration start');
   try {
-    bootDebugLog('user getDoc start');
     const userDoc = await withTimeout(getDoc(doc(db, "users", uid)), BOOT_AWAIT_MS, 'ユーザー情報の取得');
     bootDebugLog('user getDoc done', { exists: userDoc.exists() });
     if (userDoc.exists() && userDoc.data().familyCode) {
       const oldCode = userDoc.data().familyCode;
-      bootDebugLog('family migration getDoc start');
       const familyDoc = await withTimeout(getDoc(doc(db, "families", oldCode)), BOOT_AWAIT_MS, '家族データの取得');
       bootDebugLog('family migration getDoc done', { exists: familyDoc.exists() });
       if (familyDoc.exists() && !familyDoc.data().parentUid) {
         await updateDoc(doc(db, "families", oldCode), { parentUid: uid, childName: "メイン口座" });
+        return true;
       }
     }
   } catch (error) {
     bootLog('migration getDoc failed', error);
-    // 一覧購読は続けて試し、完全停止は避ける
   }
-  loadParentChildren(uid);
+  return false;
+}
+
+/** 前回の口座名を覚えておき、次の起動でデータが届く前から名前を出す */
+const CHILD_NAME_CACHE_KEY = 'ienomics_childName_cache';
+function cacheActiveChildName() {
+  try {
+    if (state.role === 'parent' && state.familyCode && state.childName) {
+      localStorage.setItem(CHILD_NAME_CACHE_KEY, JSON.stringify({ code: state.familyCode, name: state.childName }));
+    }
+  } catch { /* 続行 */ }
+}
+function restoreCachedChildName() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CHILD_NAME_CACHE_KEY) || 'null');
+    if (c && c.code === state.familyCode && !state.childName) state.childName = String(c.name || '');
+  } catch { /* 続行 */ }
 }
 
 /**
@@ -977,6 +1047,21 @@ function applyActiveChild() {
   return true;
 }
 
+/** 口座が1つも無い親。前回の同期IDで先に始めた購読を止め、口座作成の画面に切り替える */
+function applyNoChildren() {
+  state.children = [];
+  state.parentNeedsFamily = true;
+  if (unsubscribes.length) {
+    unsubscribes.forEach(unsub => unsub());
+    unsubscribes = [];
+    stopDeadlineWatcher();
+  }
+  state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false;
+  state.dataReady = true;
+  try { localStorage.removeItem('ienomics_familyCode'); } catch { /* 続行 */ }
+  scheduleRender();
+}
+
 function loadParentChildren(parentUid) {
   setBootPhase('parent-children-snap');
   bootDebugLog('loadParentChildren start');
@@ -984,6 +1069,7 @@ function loadParentChildren(parentUid) {
   if (window.unsubChildren) window.unsubChildren();
   bootDebugLog('parent children listener attached');
   let childrenHandledOnce = false;
+  let legacyChecked = false;
   // includeMetadataChanges: 「キャッシュ由来の空」を無視したあと、サーバーで空と確定したときにも通知を受けるため
   window.unsubChildren = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
     const action = childrenSnapshotAction({
@@ -1001,6 +1087,14 @@ function loadParentChildren(parentUid) {
     bootDebugLog('parent children snapshot', { size: snapshot.size });
     const list = [];
     snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+    if (list.length === 0 && !legacyChecked) {
+      // 0件のときだけ旧データの移行を確かめる。移行したら、この購読に口座が届く
+      legacyChecked = true;
+      migrateLegacyFamily(parentUid).then((migrated) => {
+        if (!migrated && (state.children || []).length === 0) applyNoChildren();
+      });
+      return;
+    }
     state.children = list.sort((a, b) => a.createdAt - b.createdAt);
     state.parentNeedsFamily = list.length === 0;
     if (list.length > 0) {
@@ -1008,6 +1102,7 @@ function loadParentChildren(parentUid) {
       if (!list.some(c => c.id === state.familyCode)) state.familyCode = list[0].id;
       localStorage.setItem('ienomics_familyCode', state.familyCode);
       applyActiveChild();
+      cacheActiveChildName();
       // ポイント更新のたびにここが走る。毎回 setupListeners すると
       // 定期発注の判定が途中でキャンセルされて、仕事が出てこないことがある。
       if (state.familyCode !== prevCode || unsubscribes.length === 0) {
@@ -1017,7 +1112,7 @@ function loadParentChildren(parentUid) {
         scheduleRender();
       }
     } else {
-      state.familyCode = null; state.childName = ''; state.points = 0; state.stockCap = null; state.childLinked = false; scheduleRender();
+      applyNoChildren();
     }
   }, (err) => {
     console.error('[boot] children onSnapshot error', err);
@@ -1333,6 +1428,12 @@ function setupListeners() {
   state.tasksReady = false;
   state.isInitialLoad = true;
   startDeadlineWatcher();
+  // 初回だけ「読み込み中」を出す。何かの理由でデータが揃わなくても、8秒で従来どおり画面を出す
+  if (!state.dataReady && !dataReadyFallbackTimer) {
+    dataReadyFallbackTimer = setTimeout(() => {
+      if (!state.dataReady) { state.dataReady = true; scheduleRender(); }
+    }, 8000);
+  }
 
   const unsubFamily = onSnapshot(doc(db, "families", state.familyCode), (d) => {
     if (!listenerSnapLogged.families) {
@@ -2994,6 +3095,7 @@ window.logoutAccount = async () => {
   try { await signOut(auth); } catch (e) {}
   localStorage.removeItem('ienomics_role');
   localStorage.removeItem('ienomics_familyCode');
+  localStorage.removeItem(CHILD_NAME_CACHE_KEY);
   state.role = null;
   state.familyCode = null;
   state.setupMode = null;
@@ -3017,6 +3119,7 @@ window.unlinkAccount = async () => {
   try { await signOut(auth); } catch (e) {}
   localStorage.removeItem('ienomics_role');
   localStorage.removeItem('ienomics_familyCode');
+  localStorage.removeItem(CHILD_NAME_CACHE_KEY);
   state.role = null; state.familyCode = null; state.children = []; state.parentNeedsFamily = false;
   if (window.unsubChildren) window.unsubChildren();
   unsubscribes.forEach(unsub => unsub());
@@ -3703,6 +3806,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=272').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=273').catch(err => console.warn('SW登録失敗:', err));
   });
 }

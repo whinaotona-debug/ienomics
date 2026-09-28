@@ -17,6 +17,7 @@ export const state = {
   // 新規登録（4桁の認証コード方式）。進み具合は localStorage の ienomics_signup にも残し、離脱後に再開できる
   signup: null, // { step: 'code'|'profile', email, expiresAt, resendAvailableAt, ticket, ticketExpiresAt, mode, hasPassword, attemptsLeft, notice }
   parentNeedsFamily: false, // ログイン済みの親に口座が1つも無い（口座作成・復旧の画面を出す）
+  dataReady: false, // 起動後、最初の口座・仕事データが届いたら true（それまでは「読み込み中」を表示）
   setupLoadingMessage: '',
   editingTemplateId: null,
   editingPaymentId: null,

@@ -44,7 +44,7 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
-const VERSION = 'v272';
+const VERSION = 'v273';
 const SHELL_CACHE = `ienomics-shell-${VERSION}`;
 const RUNTIME_CACHE = `ienomics-runtime-${VERSION}`;
 
@@ -61,7 +61,9 @@ const SHELL_ASSETS = [
   './push.js',
   './firebase.js',
   './manifest.json',
-  './logo.png'
+  './logo.png',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // ??????????????????????????????

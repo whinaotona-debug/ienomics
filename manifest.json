@@ -10,25 +10,30 @@
   "orientation": "portrait",
   "background_color": "#f4f8f6",
   "theme_color": "#1c2b27",
-  "categories": ["education", "finance", "lifestyle"],
+  "categories": [
+    "education",
+    "finance",
+    "lifestyle"
+  ],
   "icons": [
     {
-      "src": "logo.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "logo.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "logo.png",
+      "src": "icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "id": "./index.html"
 }

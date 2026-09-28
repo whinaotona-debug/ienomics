@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=272';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=272';
-import { refreshTutorial } from './tutorial.js?v=272';
-import { auth } from './firebase.js?v=272';
+﻿import { state } from './state.js?v=273';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=273';
+import { refreshTutorial } from './tutorial.js?v=273';
+import { auth } from './firebase.js?v=273';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -226,6 +226,17 @@ export function render() {
     }
     markReady('setup');
     bootDebugLog('render done');
+    return;
+  }
+  // 起動直後、口座と仕事のデータが届くまでは「読み込み中」を出す（残高0円の空のホームを見せない）。
+  // markReady はしない（届かないときは起動の見張りが案内を出す。8秒で従来の画面に切り替わる）
+  if (!state.dataReady) {
+    bottomNav.classList.add('hidden');
+    appDiv.innerHTML = `<div class="h-full flex flex-col items-center justify-center gap-3 font-bold text-[#5f7970]" role="status" aria-live="polite">
+      <div class="ie-boot-spinner" aria-hidden="true"></div>
+      <p>${state.childName ? `${esc(state.childName)} の口座を読み込み中...` : 'よみこみ中...'}</p>
+    </div>`;
+    bootDebugLog('render branch', { branch: 'data-loading' });
     return;
   }
   if (state.role === 'parent' && !state.childLinked) {
@@ -2382,6 +2393,36 @@ function renderFamilySetup() {
   </div>`;
 }
 
+/**
+ * スマホのブラウザで開いたときの「ホーム画面に追加」の案内。
+ * ログイン・登録の邪魔をしないよう、フォームの下に折りたたみで出す（以前は画面ごと差し替えていた）。
+ * Android の Chrome などで追加できる状態なら、ボタン1つでインストール画面を出す（app.js の promptInstallApp）。
+ */
+function renderInstallHint() {
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua);
+  let steps;
+  if (ios) {
+    steps = '画面下の<strong>共有ボタン</strong>（四角から上向きの矢印）を押し、少し下にスクロールして「<strong>ホーム画面に追加</strong>」を選び、右上の「<strong>追加</strong>」を押してください。';
+  } else if (android) {
+    steps = '画面右上の<strong>「⋮」</strong>（縦に3つの点）を押し、「<strong>ホーム画面に追加</strong>」または「<strong>アプリをインストール</strong>」を選んで、「<strong>インストール</strong>」を押してください。<br><span class="ie-install-hint-sub">アドレスバーを画面の下にしている場合、「⋮」は右下にあります。</span>';
+  } else {
+    steps = 'ブラウザのメニューから「<strong>ホーム画面に追加</strong>」を選んでください。';
+  }
+  const nativeBtn = window.__ieInstallPrompt
+    ? '<button type="button" onclick="promptInstallApp()" class="solid-btn primary-btn w-full py-3 font-bold text-sm mb-3">ホーム画面に追加する</button>'
+    : '';
+  return `<details class="ie-install-hint w-full max-w-sm relative z-10 mt-5">
+    <summary class="ie-install-hint-summary">ホーム画面に追加すると通知が届きます<span class="ie-install-hint-open">手順を見る</span></summary>
+    <div class="ie-install-hint-body">
+      <div id="ie-install-native">${nativeBtn}</div>
+      <p class="ie-install-hint-steps">${steps}</p>
+      <p class="ie-install-hint-note">追加したあとは、ホーム画面の<strong>イエノミクスのアイコン</strong>から開いてください。登録やログインは、このままブラウザでもできます。</p>
+    </div>
+  </details>`;
+}
+
 function renderSetupInstallPrompt(kind) {
   if (!kind) return '';
   return `<div class="w-full max-w-sm relative z-10 mb-6">${renderInstallGate(kind)}</div>`;
@@ -2399,5 +2440,5 @@ function renderSetup() {
   else if (state.setupMode === 'parent_forgot' && state.setupStep === 2) { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10 text-center"><div class="w-16 h-16 text-emerald-500 mx-auto mb-4"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div><h3 class="font-black text-slate-800 mb-4 text-lg">メールを送信しました</h3><p class="text-[10px] font-bold text-slate-500 mb-6 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">「${state.message}」宛に<br>パスワード再設定用のリンクを送信しました。<br><br>メールアプリを開き、<br>リンクをタップしてください。</p><button onclick="setSetupMode('parent_login')" class="solid-btn w-full py-3 font-bold text-sm text-slate-600 hover:bg-slate-50">ログイン画面へ戻る</button></div>`; }
   else if (state.setupMode === 'parent_forgot') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="setSetupMode('parent_login')" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">パスワード再設定</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">登録しているメールアドレスを入力してください。<br>再設定用のリンクを送信します。</p><input type="email" id="reset-email" placeholder="メールアドレス" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 font-bold text-sm focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="sendPasswordReset()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">再設定メールを送信</button></div>`; }
   else if (state.setupMode === 'child') { content = `<div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100 relative z-10"><button onclick="cancelSetup()" class="absolute top-4 left-4 text-slate-400 hover:text-slate-600 font-bold text-sm">◀ 戻る</button><h3 class="font-black text-slate-800 mb-2 text-center text-lg mt-4">親の同期IDを入力</h3><p class="text-[10px] font-medium text-slate-400 text-center mb-6 leading-relaxed">親のアプリの設定画面にある<br>「同期ID」を入力して連携します。</p><input id="setup-family-code" placeholder="IDを入力" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-center font-mono font-black text-2xl uppercase tracking-widest focus:outline-none focus:border-slate-400 focus:bg-white transition" /><button onclick="joinFamily()" class="solid-btn primary-btn w-full py-4 font-bold shadow-md">同期してスタート</button></div>`; }
-  return `<div class="h-full flex flex-col items-center justify-center p-6 ie-setup-shell relative overflow-hidden"><div class="w-24 h-24 mb-8 rounded-[28px] overflow-hidden bg-white shadow-[0_12px_32px_rgba(47,143,130,0.18)] flex items-center justify-center relative z-10 border border-[#eaf1ee]"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-[#1c2b27] mb-6 tracking-tight relative z-10">イエノミクス</h1>${renderSetupInstallPrompt(browserPrompt)}${browserPrompt ? '' : content}</div>`;
+  return `<div class="h-full overflow-y-auto ie-setup-shell relative"><div class="min-h-full flex flex-col items-center justify-center p-6"><div class="w-24 h-24 mb-8 rounded-[28px] overflow-hidden bg-white shadow-[0_12px_32px_rgba(47,143,130,0.18)] flex items-center justify-center relative z-10 border border-[#eaf1ee]"><img src="logo.png" class="w-full h-full object-cover" onerror="this.style.display='none'" /></div><h1 class="text-3xl font-black text-[#1c2b27] mb-6 tracking-tight relative z-10">イエノミクス</h1>${content}${browserPrompt ? renderInstallHint() : ''}</div></div>`;
 }
