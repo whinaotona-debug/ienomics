@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=276';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket, pickWeekendNewsItems, isFreshWeekendNews, WEEKEND_NEWS_ABOUTS } from './utils.js?v=276';
-import { refreshTutorial } from './tutorial.js?v=276';
-import { auth } from './firebase.js?v=276';
+﻿import { state } from './state.js?v=277';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket, pickWeekendNewsItems, isFreshWeekendNews, WEEKEND_NEWS_ABOUTS } from './utils.js?v=277';
+import { refreshTutorial } from './tutorial.js?v=277';
+import { auth } from './firebase.js?v=277';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1915,9 +1915,7 @@ function renderTickets() {
     const price = Number(t.price) || 0;
     let b = '';
     if (state.role === 'child') {
-      if (t.status === 'available') {
-        b = `<button onclick="buyTicket('${id}',${price})" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">受け取る</button>`;
-      } else if (isTicketIdleOwned(t.status)) {
+      if (t.status === 'available' || isTicketIdleOwned(t.status)) {
         b = `<button onclick="requestTicketUse('${id}')" class="solid-btn primary-btn px-4 py-2 rounded-lg text-[10px] font-bold shrink-0">使用申請</button>`;
       } else {
         b = statusBadge(t);
@@ -1954,12 +1952,12 @@ function renderTickets() {
         b = statusBadge(t);
       }
     }
-    const highlight = t.status === 'pending_use' || t.status === 'approved' || t.status === 'redeeming' || isTicketIdleOwned(t.status);
+    const highlight = t.status === 'available' || t.status === 'pending_use' || t.status === 'approved' || t.status === 'redeeming' || isTicketIdleOwned(t.status);
     return `
       <div class="p-4 rounded-xl border ${highlight ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-100'} flex justify-between items-start gap-2 min-w-0">
         <div class="min-w-0 flex-1">
           <p class="font-bold text-sm text-slate-700 ie-wrap-text">${esc(t.title)}</p>
-          <p class="text-[10px] font-bold mt-0.5 ${isTicketIdleOwned(t.status) || t.status === 'pending_use' || t.status === 'approved' || t.status === 'redeeming' ? 'text-slate-500' : 'text-rose-600'}">${price} 円${t.status === 'available' ? '（使用時）' : ''}</p>
+          <p class="text-[10px] font-bold mt-0.5 text-slate-500">${price} 円（使用時）</p>
         </div>
         ${b}
       </div>

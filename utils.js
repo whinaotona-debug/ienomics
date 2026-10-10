@@ -1,4 +1,4 @@
-﻿import { state } from './state.js?v=276';
+﻿import { state } from './state.js?v=277';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -2039,7 +2039,10 @@ export function ticketTransition(fromStatus, action) {
     return { ok: true, next: 'bought' };
   }
   if (action === 'request') {
-    if (!isTicketIdleOwned(fromStatus)) return { ok: false, error: 'not-idle' };
+    // 受け取り工程なし：出品中（available）からも直接使用申請できる
+    if (fromStatus !== 'available' && !isTicketIdleOwned(fromStatus)) {
+      return { ok: false, error: 'not-idle' };
+    }
     return { ok: true, next: 'pending_use' };
   }
   if (action === 'approve') {
@@ -2095,6 +2098,7 @@ export function selfTestTicketFlow() {
   cases.push(['buy', ticketTransition('available', 'buy').next === 'bought']);
   cases.push(['buy twice', ticketTransition('bought', 'buy').ok === false]);
   cases.push(['request', ticketTransition('bought', 'request').next === 'pending_use']);
+  cases.push(['request from available', ticketTransition('available', 'request').next === 'pending_use']);
   cases.push(['request while pending', ticketTransition('pending_use', 'request').ok === false]);
   cases.push(['approve', ticketTransition('pending_use', 'approve').next === 'approved']);
   cases.push(['approve idle', ticketTransition('bought', 'approve').ok === false]);
