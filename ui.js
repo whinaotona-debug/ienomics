@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=275';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket, pickWeekendNewsItems, isFreshWeekendNews, WEEKEND_NEWS_ABOUTS } from './utils.js?v=275';
-import { refreshTutorial } from './tutorial.js?v=275';
-import { auth } from './firebase.js?v=275';
+﻿import { state } from './state.js?v=276';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket, pickWeekendNewsItems, isFreshWeekendNews, WEEKEND_NEWS_ABOUTS } from './utils.js?v=276';
+import { refreshTutorial } from './tutorial.js?v=276';
+import { auth } from './firebase.js?v=276';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -936,17 +936,19 @@ function renderHome() {
         </div>
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
-            <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center gap-2 bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
-              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide min-w-0"><div class="w-3 h-3 text-[#2f8f82] shrink-0">${getIcon('task')}</div><span class="ie-ruby-pair">${rb('お仕事','おしごと')}リスト</span></h2>
-              <div class="flex items-center gap-1.5 shrink-0">
-                ${state.role === 'parent' && activeTasks.some(t => t.status === 'completed')
-                  ? `<button type="button" onclick="approveAllCompletedTasks()" class="solid-btn primary-btn px-2 py-1 text-[9px] font-bold shadow-sm whitespace-nowrap">まとめて付与</button>`
-                  : ''}
+            <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
+              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div><span class="ie-ruby-pair">${rb('お仕事','おしごと')}リスト</span></h2>
+              <div class="flex items-center gap-2">
                 ${repeatBadge}
                 ${swipeHint}
                 <button onclick="setView('calendar')" class="w-4 h-4 text-[#5f7970] hover:text-[#2f8f82] transition" aria-label="月間予定を見る">${getIcon('calendar')}</button>
               </div>
             </div>
+            ${state.role === 'parent' && activeTasks.some(t => t.status === 'completed')
+              ? `<div class="flex-none px-2 pt-2 bg-[#fbfefd]">
+                  <button type="button" onclick="approveAllCompletedTasks()" class="w-full solid-btn primary-btn py-2 text-[10px] font-bold shadow-sm">確認待ちをまとめて付与</button>
+                </div>`
+              : ''}
             <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1.5 bg-[#fbfefd]">
               ${taskHtml}
             </div>
