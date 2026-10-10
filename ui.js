@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=274';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=274';
-import { refreshTutorial } from './tutorial.js?v=274';
-import { auth } from './firebase.js?v=274';
+﻿import { state } from './state.js?v=275';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket, pickWeekendNewsItems, isFreshWeekendNews, WEEKEND_NEWS_ABOUTS } from './utils.js?v=275';
+import { refreshTutorial } from './tutorial.js?v=275';
+import { auth } from './firebase.js?v=275';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -1734,21 +1734,22 @@ function renderExchange() {
 }
 function renderNews() {
   const marketAbout = new Set(['日経平均', 'S&P500', '金', '原油']);
-  const weekendAbout = ['宇宙', '自然', 'くらし', 'お金'];
-  const weekendNow = [0, 6].includes(japanParts().weekday);
+  const weekendAbout = WEEKEND_NEWS_ABOUTS;
+  const now = new Date();
+  const weekendNow = [0, 6].includes(japanParts(now).weekday);
   const all = (state.marketNews || []).filter(n => n && (n.title || n.about));
   const weekendItems = all.filter(n => weekendAbout.includes(n.about) || (n.about && !marketAbout.has(n.about)));
   const useWeekend = weekendNow || state.marketNewsKind === 'weekend' || weekendItems.length >= 2;
-  const fallback = [
-    { about: '宇宙', title: '昼間でも星はある。見えにくいだけ', what: '昼間の空でも星は出ていますが、見えにくくなっています。', why: 'よくある説明：太陽の光が空気に散らばって空が明るくなり、星の光がまけてしまうからです。', life: '暗い場所へ行くと、同じ目でも星の数がぐっと増えて見えます。', body: '宇宙飛行士が地球の外で見る空は、昼側でも星が見えることがあります。まぶしい太陽を隠せば、背景はほぼ真っ黒だからです。', url: 'https://www.nao.ac.jp/faq/' },
-    { about: '自然', title: '台風の「目」は、なぜ静かなのか', what: '台風のまんなか（目）では、一時的に穏やかになることがあります。', why: 'よくある説明：目では空気が下に降りて雲が消えやすい一方、目のすぐ外側が一番風が強いからです。', life: '少し晴れただけで安心はできません。目が通り過ぎると、反対側から再び強い風が吹くことがあります。', body: '台風は巨大な空気の渦です。外側では雨風が強いのに、まんなかの「目」では比較的穏やかになることがあります。', url: 'https://www.jma.go.jp/jma/kishou/know/typhoon/1-1.html' },
-    { about: 'くらし', title: 'プラスチックは石油からできることが多い', what: 'ペットボトルやレジ袋のもとをたどると、原油の一部からできていることが多いです。', why: 'よくある説明：原油を分けた材料の分子をつなげると、細長いプラスチックの鎖になるからです。', life: '便利さの裏側で、自然には分解しにくいという課題があります。', body: '原油を加熱して分けると、ガソリンなど性質の違う液体になります。その一部がプラスチックの材料になります。', url: 'https://www.env.go.jp/recycle/plastic/' },
-    { about: 'お金', title: '銀行は預かったお金を全部しまっていない', what: '銀行に預けたお金は、金庫に全額眠っているわけではありません。', why: 'よくある説明：一部は引き出しに備え、残りは企業や家への貸し出しに回る仕組みだからです。', life: '貸し出した先が利息を払い、その一部が預金者の利息になる、と説明されることが多いです。土日は株の取引所が休みなので、お金の置き場所を考える練習日にもできます。', body: '銀行は預かったお金の一部を貸し出しに回します。これが経済の血液のように働く、という見方があります。', url: 'https://www.boj.or.jp/about/education/index.htm' }
-  ];
+  // 土日は日付で回る内蔵トピック。news.json が同じ週末に更新されていればそれを優先
+  const freshWeekendFile = useWeekend
+    && state.marketNewsKind === 'weekend'
+    && isFreshWeekendNews(state.marketNewsUpdatedAt, now)
+    && weekendItems.length >= 2;
+  const rotatingWeekend = pickWeekendNewsItems(now);
 
   const order = useWeekend ? weekendAbout : ['日経平均', 'S&P500', '金', '原油'];
   const pool = useWeekend
-    ? (weekendItems.length ? weekendItems : fallback)
+    ? (freshWeekendFile ? weekendItems : rotatingWeekend)
     : all.filter(n => marketAbout.has(n.about));
   const groups = order.map(about => ({
     about,
@@ -1797,13 +1798,18 @@ function renderNews() {
     : `<p class="text-[11px] font-bold text-slate-500 text-center py-10">まだニュースがありません。あとで開き直してください。</p>`;
 
   let updatedLine = '';
-  const at = Date.parse(state.marketNewsUpdatedAt || '');
-  if (Number.isFinite(at)) {
-    const j = japanParts(new Date(at));
-    updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
+  if (useWeekend && !freshWeekendFile) {
+    const j = japanParts(now);
+    updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日のトピックス</p>`;
+  } else {
+    const at = Date.parse(state.marketNewsUpdatedAt || '');
+    if (Number.isFinite(at)) {
+      const j = japanParts(new Date(at));
+      updatedLine = `<p class="text-[11px] font-bold text-slate-400 mb-3">${j.month}月${j.day}日 ${j.hour}時${rb('更新','こうしん')}</p>`;
+    }
   }
   const learnHint = useWeekend
-    ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、小中学生向けのトピックスをまとめています。</p>`
+    ? `<p class="text-[11px] font-bold text-slate-500 mb-3 leading-relaxed">土日は取引所が休みです。値動きの代わりに、日替わりのトピックスをまとめています。</p>`
     : `<p class="ie-news-disclaimer mb-3">${esc(state.marketNewsDisclaimer || '※これは実際の速報ではなく、経済を学ぶための解説です。')}</p>`;
 
   return `
