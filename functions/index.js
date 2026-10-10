@@ -330,6 +330,15 @@ exports.onTicketUpdated = onDocumentUpdated('tickets/{ticketId}', async (event) 
       'ticket-approved'
     );
   }
+  // 使用申請却下（チケットは保有のまま）
+  if (after.status === 'bought' && before.status === 'pending_use') {
+    return notify(
+      after.familyCode, 'child',
+      'チケットの使用申請が却下されました',
+      `「${title}」の使用はできませんでした。また申請できます`,
+      'ticket-rejected'
+    );
+  }
 });
 
 // ---- 自動支払いが引き落とされたとき ----

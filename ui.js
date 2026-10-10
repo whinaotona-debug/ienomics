@@ -1,7 +1,7 @@
-﻿import { state } from './state.js?v=273';
-import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=273';
-import { refreshTutorial } from './tutorial.js?v=273';
-import { auth } from './firebase.js?v=273';
+﻿import { state } from './state.js?v=274';
+import { getIcon, rb, rbPair, esc, jobTitleHtml, formatTimeLeft, getCurrentMarketRates, getTemplateIdFromTask, formatRepeatLabel, formatPaymentSchedule, formatPaymentAmountLabel, scheduledPaymentAmount, getUpcomingPayments, getHelpStampData, groupPointActivityByDay, formatJapanClock, japanParts, japanDeadlineMs, japanDayStartMs, MARKET_ORDER, MARKET_META, CHART_TOTAL, getInvestmentPortfolioValue, getInvestmentValues, getTradeableMarkets, getMarketSheetInfo, getPortfolioHistory, getHeldMarketNames, getActiveInvestments, shouldSweepExpiredTask, getMarketFlashLine, getMarketMovePct, bankTotalBalance, bankTotalInterest, bankDepositPrincipal, getLineInstallGateKind, getSetupBrowserPromptKind, markInstallPromptDoneIfStandalone, isTicketIdleOwned, isChildVisibleTicket } from './utils.js?v=274';
+import { refreshTutorial } from './tutorial.js?v=274';
+import { auth } from './firebase.js?v=274';
 import { isSignInWithEmailLink } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 const appDiv = document.getElementById('app');
@@ -936,9 +936,12 @@ function renderHome() {
         </div>
         <div class="flex flex-col gap-3 min-h-0 min-w-0">
           <div class="solid-box flex flex-col min-h-0 flex-1 relative overflow-hidden" data-tour="tasklist">
-            <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
-              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide"><div class="w-3 h-3 text-[#2f8f82]">${getIcon('task')}</div><span class="ie-ruby-pair">${rb('お仕事','おしごと')}リスト</span></h2>
-              <div class="flex items-center gap-2">
+            <div class="flex-none p-3 border-b border-[#eaf1ee] flex justify-between items-center gap-2 bg-gradient-to-r from-[#f7fbf9] to-white rounded-t-[20px]">
+              <h2 class="text-xs font-black text-[#1c2b27] flex items-center gap-1.5 tracking-wide min-w-0"><div class="w-3 h-3 text-[#2f8f82] shrink-0">${getIcon('task')}</div><span class="ie-ruby-pair">${rb('お仕事','おしごと')}リスト</span></h2>
+              <div class="flex items-center gap-1.5 shrink-0">
+                ${state.role === 'parent' && activeTasks.some(t => t.status === 'completed')
+                  ? `<button type="button" onclick="approveAllCompletedTasks()" class="solid-btn primary-btn px-2 py-1 text-[9px] font-bold shadow-sm whitespace-nowrap">まとめて付与</button>`
+                  : ''}
                 ${repeatBadge}
                 ${swipeHint}
                 <button onclick="setView('calendar')" class="w-4 h-4 text-[#5f7970] hover:text-[#2f8f82] transition" aria-label="月間予定を見る">${getIcon('calendar')}</button>
@@ -1918,23 +1921,26 @@ function renderTickets() {
         const who = t.useRequestedBy ? esc(t.useRequestedBy) : 'お子さま';
         b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
           <span class="text-[10px] font-bold text-amber-700">${who} · 申請中</span>
-          <button onclick="approveTicketUse('${id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">承認</button>
-          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+          <div class="flex gap-1.5">
+            <button onclick="rejectTicketUse('${id}')" class="solid-btn px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-rose-500 border-rose-200 bg-rose-50 hover:bg-rose-100">却下</button>
+            <button onclick="approveTicketUse('${id}')" class="solid-btn primary-btn px-3 py-1.5 rounded-lg text-[10px] font-bold">承認</button>
+          </div>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">チケット削除</button>
         </div>`;
       } else if (t.status === 'approved') {
         b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
           <span class="text-[10px] font-bold text-emerald-700">子供の使用待ち</span>
-          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">チケット削除</button>
         </div>`;
       } else if (t.status === 'redeeming') {
         b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
           <span class="text-[10px] font-bold text-sky-700">使用処理中</span>
-          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">チケット削除</button>
         </div>`;
       } else if (isTicketIdleOwned(t.status) || t.status === 'used') {
         b = `<div class="flex flex-col items-end gap-1.5 shrink-0">
           ${statusBadge(t)}
-          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">取り消す</button>
+          <button onclick="revokeTicket('${id}')" class="text-slate-500 hover:text-red-500 text-[10px] font-bold">チケット削除</button>
         </div>`;
       } else {
         b = statusBadge(t);

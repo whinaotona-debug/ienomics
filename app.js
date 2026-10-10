@@ -1,17 +1,17 @@
-﻿import { state } from './state.js?v=273';
-import { render, drawInvestChart } from './ui.js?v=273';
-import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS, childrenSnapshotAction } from './utils.js?v=273';
-import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=273';
-import { startTutorial, hasSeenTutorial } from './tutorial.js?v=273';
-import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=273';
-import { db, auth, firebaseApp } from './firebase.js?v=273';
+﻿import { state } from './state.js?v=274';
+import { render, drawInvestChart } from './ui.js?v=274';
+import { applyFuriganaState, requestPushPermission, sendPushNotification, getTemplateIdFromTask, dateKeyToValue, getCurrentMarketRates, japanTodayKey, japanYesterdayKey, japanParts, japanDeadlineMs, msUntilJapanMidnight, marketNameFromId, MARKET_META, MARKET_ORDER, getInvestmentPortfolioValue, getHoldingValue, getHoldingShares, getInvestmentValues, getActiveInvestments, buildInvestmentEodRows, analyzeInvestmentEodMigration, INVESTMENT_EOD_MIGRATION_KEY, selfTestInvestmentEodLogic, normalizeSheetUrl, parseMarketSheetCsv, setMarketSheetSeries, scheduledPaymentAmount, shouldSweepExpiredTask, isScheduledPaymentDue, lastScheduledPaymentDueKey, bankDepositBalance, clearInstallBrowserHelp, isStandalonePwa, getLineInstallGateKind, isTicketIdleOwned, ticketTransition, selfTestTicketFlow, isTicketRedeemLockOrphaned, TICKET_REDEEM_LOCK_TTL_MS, childrenSnapshotAction } from './utils.js?v=274';
+import { showAlert, showConfirm, showPrompt, showToast, setBusy, showParentSetupComplete, shareFamilySyncLink } from './dialog.js?v=274';
+import { startTutorial, hasSeenTutorial } from './tutorial.js?v=274';
+import { initPush, isPushActive, isPushSupported, requestPushPermission as askPushPermission, unregisterPush, getPushError } from './push.js?v=274';
+import { db, auth, firebaseApp } from './firebase.js?v=274';
 import {
   computeBankInterestState,
   bankInterestStateChanged,
   bankInterestWritePayload,
   initialBankDepositFields,
   selfTestBankInterestLogic
-} from './bankInterest.js?v=273';
+} from './bankInterest.js?v=274';
 import { collection, addDoc, onSnapshot, query, where, updateDoc, doc, setDoc, getDoc, getDocs, increment, deleteDoc, writeBatch, runTransaction, arrayUnion, deleteField } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { signInWithEmailAndPassword, signInAnonymously, signOut, isSignInWithEmailLink, signInWithEmailLink, updatePassword, verifyPasswordResetCode, confirmPasswordReset } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-functions.js";
@@ -1734,7 +1734,9 @@ window.approveTask = async (id, p) => {
     await runTransaction(db, async (tx) => {
       const taskSnap = await tx.get(taskRef);
       if (!taskSnap.exists()) throw new Error('この仕事は見つかりませんでした');
-      if (taskSnap.data().status === 'approved') return; // 二重付与を防ぐ
+      const data = taskSnap.data() || {};
+      if (data.status === 'approved') return; // 二重付与を防ぐ
+      if (data.status !== 'completed') throw new Error('いまは付与できません');
 
       const famSnap = await tx.get(famRef);
       if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
@@ -1747,6 +1749,52 @@ window.approveTask = async (id, p) => {
 
     showToast(granted > 0 ? `${granted}円 を付与しました` : '承認しました');
   }, { busyLabel: '付与しています...' });
+};
+
+/** 親：確認待ちのお手伝いをまとめて付与 */
+window.approveAllCompletedTasks = async () => {
+  const pending = (state.tasks || []).filter(t => t.status === 'completed');
+  if (!pending.length) return showAlert('いま付与できるお手伝いはありません');
+  const total = pending.reduce((sum, t) => sum + (Math.max(0, Number(t.points) || 0)), 0);
+  const ok = await showConfirm(
+    `${pending.length}件のお手伝いをまとめて承認し、合計 ${total.toLocaleString()}円 を付与します。`,
+    { title: 'まとめて付与しますか？', okLabel: 'まとめて付与' }
+  );
+  if (!ok) return;
+
+  await guard('approveAllCompletedTasks', async () => {
+    const famRef = doc(db, 'families', state.familyCode);
+    let granted = 0;
+    let count = 0;
+
+    await runTransaction(db, async (tx) => {
+      const famSnap = await tx.get(famRef);
+      if (!famSnap.exists()) throw new Error('口座が見つかりませんでした');
+
+      const snaps = await Promise.all(pending.map(t => tx.get(doc(db, 'tasks', t.id))));
+      let add = 0;
+      const now = Date.now();
+      snaps.forEach((snap, i) => {
+        if (!snap.exists()) return;
+        const data = snap.data() || {};
+        if (data.status !== 'completed') return;
+        const pts = Math.max(0, Number(data.points != null ? data.points : pending[i].points) || 0);
+        add += pts;
+        count += 1;
+        tx.update(snap.ref, { status: 'approved', approvedAt: now });
+      });
+      if (!count) throw new Error('いま付与できるお手伝いはありません');
+      const pts = famSnap.data().points || 0;
+      granted = add;
+      if (add > 0) tx.update(famRef, { points: pts + add });
+    });
+
+    showToast(
+      granted > 0
+        ? `${count}件まとめて付与しました（+${granted.toLocaleString()}円）`
+        : `${count}件まとめて承認しました`
+    );
+  }, { busyLabel: 'まとめて付与しています...' });
 };
 
 window.rejectTask = async (id) => {
@@ -1993,6 +2041,36 @@ window.approveTicketUse = async (id) => {
   }, { busyLabel: '承認しています...' });
 };
 
+/** 親：使用申請だけ却下（チケットは保有のまま残す） */
+window.rejectTicketUse = async (id) => {
+  const ticket = (state.tickets || []).find(t => t.id === id);
+  if (!ticket) return showAlert('チケットが見つかりません');
+  const title = ticket.title || 'チケット';
+  const ok = await showConfirm(
+    `「${title}」の使用申請を却下します。チケット自体は残り、あとからまた申請できます。`,
+    { title: '使用申請を却下しますか？', okLabel: '却下する' }
+  );
+  if (!ok) return;
+
+  await guard(`rejectTicketUse:${id}`, async () => {
+    const ticketRef = doc(db, 'tickets', id);
+    await runTransaction(db, async (tx) => {
+      const tSnap = await tx.get(ticketRef);
+      if (!tSnap.exists()) throw new Error('チケットが見つかりません');
+      const tr = ticketTransition(tSnap.data().status, 'reject_use');
+      if (!tr.ok) throw new Error('この申請はすでに処理されています');
+      tx.update(ticketRef, {
+        status: 'bought',
+        useRequestedAt: deleteField(),
+        useApprovedAt: deleteField(),
+        useRequestedBy: deleteField(),
+        redeemStartedAt: deleteField()
+      });
+    });
+    showToast('使用申請を却下しました');
+  }, { busyLabel: '却下しています...' });
+};
+
 /**
  * 子供：お知らせタップ → 半券アニメ → 終了後にだけ課金確定。
  * アニメ前に redeeming へロックし、二重タップ・二重課金を防ぐ。
@@ -2157,17 +2235,20 @@ function playTicketTearAnimation(title, price) {
   });
 }
 
-/** 親：保有チケットの取り消し（申請中・承認済みも含め以後使用不可） */
+/**
+ * 親：チケット自体を削除（以後使用不可）。
+ * 使用申請だけやめたいときは rejectTicketUse を使う。
+ */
 window.revokeTicket = async (id) => {
   const ticket = (state.tickets || []).find(t => t.id === id);
   if (!ticket) return showAlert('チケットが見つかりません');
   const ok = await showConfirm(
-    '取り消すと子供はこのチケットを使えなくなります。申請中・承認済みでも使用できません。',
-    { title: 'このチケットを取り消しますか？', okLabel: '取り消す', tone: 'danger' }
+    '削除すると子供はこのチケットを使えなくなります。使用申請の却下だけなら「却下」を使ってください。',
+    { title: 'このチケットを削除しますか？', okLabel: '削除する', tone: 'danger' }
   );
   if (!ok) return;
   await guard(`revokeTicket:${id}`, () => deleteDoc(doc(db, 'tickets', id)));
-  showToast('チケットを取り消しました');
+  showToast('チケットを削除しました');
 };
 
 window.deleteTicket = async (id) => {
@@ -3806,6 +3887,6 @@ window.loginParent = async () => {
 // PWA: オフラインでも開けるようにサービスワーカーを登録する
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=273').catch(err => console.warn('SW登録失敗:', err));
+    navigator.serviceWorker.register('sw.js?v=274').catch(err => console.warn('SW登録失敗:', err));
   });
 }

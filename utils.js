@@ -1,4 +1,4 @@
-﻿import { state } from './state.js?v=273';
+﻿import { state } from './state.js?v=274';
 
 /**
  * UI用フリガナ。親には出さない。子供でONのときだけ自前マークアップ。
@@ -1812,6 +1812,11 @@ export function ticketTransition(fromStatus, action) {
     if (fromStatus !== 'pending_use') return { ok: false, error: 'not-pending' };
     return { ok: true, next: 'approved' };
   }
+  // 使用申請だけ却下（チケット自体は残して保有に戻す）
+  if (action === 'reject_use') {
+    if (fromStatus !== 'pending_use') return { ok: false, error: 'not-pending' };
+    return { ok: true, next: 'bought' };
+  }
   if (action === 'lock') {
     if (fromStatus !== 'approved') return { ok: false, error: 'not-approved' };
     return { ok: true, next: 'redeeming' };
@@ -1859,6 +1864,8 @@ export function selfTestTicketFlow() {
   cases.push(['request while pending', ticketTransition('pending_use', 'request').ok === false]);
   cases.push(['approve', ticketTransition('pending_use', 'approve').next === 'approved']);
   cases.push(['approve idle', ticketTransition('bought', 'approve').ok === false]);
+  cases.push(['reject_use', ticketTransition('pending_use', 'reject_use').next === 'bought']);
+  cases.push(['reject_use idle', ticketTransition('bought', 'reject_use').ok === false]);
   cases.push(['lock', ticketTransition('approved', 'lock').next === 'redeeming']);
   cases.push(['lock twice', ticketTransition('redeeming', 'lock').ok === false]);
   cases.push(['settle', ticketTransition('redeeming', 'settle').next === 'bought']);
