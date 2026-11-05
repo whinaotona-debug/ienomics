@@ -58,7 +58,13 @@ service cloud.firestore {
     }
 
     match /tasks/{docId} {
-      allow read: if canReadDoc();
+      // 未作成ドキュメントの get も許可する（定期仕事を作る前の有無確認用。paymentLogs と同じ）。
+      // 無いと resource.data 参照で permission-denied になり、アプリ側で定期仕事を作れない。
+      allow get: if signedIn() && (
+        !exists(/databases/$(database)/documents/tasks/$(docId))
+        || canUseFamily(resource.data.familyCode)
+      );
+      allow list: if canReadDoc();
       allow create: if canCreateDoc();
       allow update: if canModifyDoc();
       allow delete: if canUseFamily(resource.data.familyCode);
